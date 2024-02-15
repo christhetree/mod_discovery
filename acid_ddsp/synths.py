@@ -1,11 +1,11 @@
 import logging
 import os
 from typing import Optional
-
+import torch as tr
 from torch import Tensor as T
-from torchsynth.torchsynth.config import SynthConfig
-from torchsynth.torchsynth.module import ControlRateUpsample, VCA, SquareSawVCO
-from torchsynth.torchsynth.synth import AbstractSynth
+from torchsynth.config import SynthConfig
+from torchsynth.module import ControlRateUpsample, VCA, SquareSawVCO
+from torchsynth.synth import AbstractSynth
 
 from synth_modules import CustomADSR
 
@@ -27,7 +27,9 @@ class CustomSynth(AbstractSynth):
             ]
         )
         if vco_shape is not None:
-            self.vco.shape.fill_(vco_shape)
+            self.vco.set_parameter("tuning", tr.zeros((self.batch_size,)))
+            self.vco.set_parameter("mod_depth", tr.zeros((self.batch_size,)))
+            self.vco.set_parameter("shape", tr.full((self.batch_size,), vco_shape))
         self.freeze_parameters([
             ("vco", "tuning"),
             ("vco", "mod_depth"),
@@ -38,5 +40,5 @@ class CustomSynth(AbstractSynth):
         envelope = self.adsr(note_on_duration)
         envelope = self.upsample(envelope)
         audio = self.vco(midi_f0)
-        audio = self.vca(audio, envelope)
+        # audio = self.vca(audio, envelope)
         return audio, envelope

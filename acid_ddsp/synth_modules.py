@@ -5,9 +5,9 @@ from typing import Optional, Dict
 
 import torch as tr
 from torch import Tensor as T
-from torchsynth.torchsynth.config import SynthConfig
-from torchsynth.torchsynth.module import SquareSawVCO, LFO, ADSR
-from torchsynth.torchsynth.signal import Signal
+from torchsynth.config import SynthConfig
+from torchsynth.module import SquareSawVCO, LFO, ADSR
+from torchsynth.signal import Signal
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -22,16 +22,16 @@ class CustomADSR(ADSR):
         for dr in self.default_parameter_ranges:
             if dr.name == "attack":
                 dr.minimum = 0.0
-                dr.maximum = 0.5 * dur
+                dr.maximum = min(1.0, dur)
             if dr.name == "decay":
                 dr.minimum = 0.0
-                dr.maximum = 0.5 * dur
+                dr.maximum = min(1.0, dur)
             if dr.name == "sustain":
-                dr.minimum = 0.25
+                dr.minimum = 0.5
                 dr.maximum = 1.0
             if dr.name == "release":
-                dr.minimum = dur
-                dr.maximum = 1.25 * dur
+                dr.minimum = 1.0
+                dr.maximum = 1.0
             if dr.name == "alpha":
                 dr.minimum = 0.1
                 dr.maximum = 2.0
