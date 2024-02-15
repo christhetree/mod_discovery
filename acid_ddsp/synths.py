@@ -2,13 +2,12 @@ import logging
 import os
 from typing import Optional
 
-import torch as tr
 from torch import Tensor as T
-from torchsynth.config import SynthConfig
-from torchsynth.module import ControlRateUpsample, MonophonicKeyboard, VCA
-from torchsynth.synth import AbstractSynth
+from torchsynth.torchsynth.config import SynthConfig
+from torchsynth.torchsynth.module import ControlRateUpsample, VCA, SquareSawVCO
+from torchsynth.torchsynth.synth import AbstractSynth
 
-from synth_modules import CustomLFO, CustomSquareSawVCO, CustomADSR
+from synth_modules import CustomADSR
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -16,47 +15,28 @@ log.setLevel(level=os.environ.get('LOGLEVEL', 'INFO'))
 
 
 class CustomSynth(AbstractSynth):
-    def __init__(self, synthconfig: Optional[SynthConfig] = None):
+    def __init__(self, synthconfig: SynthConfig, vco_shape: Optional[float] = 1.0):
         super().__init__(synthconfig=synthconfig)
+        self.vco_shape = vco_shape
         self.add_synth_modules(
             [
-                ("keyboard", MonophonicKeyboard, {"midi_f0": tr.full((self.batch_size,), 57)}),
+                ("vco", SquareSawVCO),
                 ("adsr", CustomADSR),
-                ("lfo", CustomLFO, {"lfo_type": "sin"}),
                 ("upsample", ControlRateUpsample),
-                ("vco", CustomSquareSawVCO),
                 ("vca", VCA),
             ]
         )
+        if vco_shape is not None:
+            self.vco.shape.fill_(vco_shape)
         self.freeze_parameters([
-            # ("keyboard", "midi_f0"),
-            ("lfo", "sin"),
-            ("lfo", "tri"),
-            ("lfo", "saw"),
-            ("lfo", "rsaw"),
-            ("lfo", "sqr"),
             ("vco", "tuning"),
             ("vco", "mod_depth"),
+            ("vco", "shape"),
         ])
-        for p in self.parameters():
-            p.requires_grad = False
 
-    def output(self) -> (T, T):
-        with tr.no_grad():
-            midi_f0, note_on_duration = self.keyboard()
-            mod_sig = self.lfo()
-            mod_sig_upsampled = self.upsample(mod_sig)
-
-            # envelope = self.adsr(note_on_duration)
-            # from matplotlib import pyplot as plt
-            # plt.plot(envelope[0].detach().numpy())
-            # plt.show()
-            # envelope = self.upsample(envelope)
-
-            mult = (tr.rand((self.synthconfig.batch_size, 1)).to(self.device) * 0.8) + 0.2
-            mod_sig_new = mult * mod_sig_upsampled
-            # mod_sig_upsampled += ((1 - mult) / 2.0)
-            mod_sig_new += ((1 - mult) * tr.rand((self.synthconfig.batch_size, 1)).to(self.device))
-            out = self.vco(midi_f0, mod_sig_new)
-            # out = self.vca(out, envelope)
-            return out, mod_sig_upsampled
+    def output(self, midi_f0: T, note_on_duration: T) -> (T, T):
+        envelope = self.adsr(note_on_duration)
+        envelope = self.upsample(envelope)
+        audio = self.vco(midi_f0)
+        audio = self.vca(audio, envelope)
+        return audio, envelope

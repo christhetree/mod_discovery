@@ -5,9 +5,9 @@ from typing import Optional, Dict
 
 import torch as tr
 from torch import Tensor as T
-from torchsynth.config import SynthConfig
-from torchsynth.module import SquareSawVCO, LFO, ADSR
-from torchsynth.signal import Signal
+from torchsynth.torchsynth.config import SynthConfig
+from torchsynth.torchsynth.module import SquareSawVCO, LFO, ADSR
+from torchsynth.torchsynth.signal import Signal
 
 logging.basicConfig()
 log = logging.getLogger(__name__)

@@ -1,0 +1,6 @@
+[submodule "torchsynth"]
+	path = torchsynth
+	url = git@github.com:christhetree/torchsynth.git
+[submodule "torchlpc"]
+	path = torchlpc
+	url = git@github.com:christhetree/torchlpc.git
