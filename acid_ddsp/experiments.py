@@ -14,7 +14,7 @@ log.setLevel(level=os.environ.get('LOGLEVEL', 'INFO'))
 
 if __name__ == "__main__":
     batch_size = 3
-    sr = 44100
+    sr = 24000
     buffer_size_seconds = 3.0
     control_rate = sr // 100
     vco_shape = 1.0
