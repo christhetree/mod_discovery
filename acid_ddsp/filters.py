@@ -3,10 +3,9 @@ import os
 from typing import Optional
 
 import torch as tr
-from matplotlib import pyplot as plt
+import torch.nn.functional as F
 from torch import Tensor as T
 from torch import nn
-import torch.nn.functional as F
 
 from torchlpc import sample_wise_lpc
 
@@ -38,6 +37,7 @@ class TimeVaryingBiquad(nn.Module):
         max_w: float = tr.pi,
         min_q: float = 0.7071,
         max_q: float = 4.0,
+        stability_eps: float = 1e-3,
     ):
         super().__init__()
         assert 0.0 < min_w
@@ -48,20 +48,27 @@ class TimeVaryingBiquad(nn.Module):
         self.max_q = tr.tensor(max_q)
         self.log_min_w = tr.log(self.min_w)
         self.log_max_w = tr.log(self.max_w)
-        self.min_q_db = 20 * tr.log10(self.min_q)
-        self.max_q_db = 20 * tr.log10(self.max_q)
-        self.tv_fir = TimeVaryingFIR(order=3)
+        self.log_min_q = tr.log(self.min_q)
+        self.log_max_q = tr.log(self.max_q)
+        self.stability_eps = stability_eps
 
     def _calc_coeffs(self, mod_sig_w: T, mod_sig_q: T) -> (T, T):
         log_w = self.log_min_w + (self.log_max_w - self.log_min_w) * mod_sig_w
         w = tr.exp(log_w)
-        q_db = self.min_q_db + (self.max_q_db - self.min_q_db) * mod_sig_q
         # TODO(cm): check which q to use
-        alpha_q = tr.sin(w) / (2 * q_db)
+        log_q = self.log_min_q + (self.log_max_q - self.log_min_q) * mod_sig_q
+        q = tr.exp(log_q)
+        alpha_q = tr.sin(w) / (2 * q)
 
         a0 = 1.0 + alpha_q
         a1 = -2.0 * tr.cos(w)
+        a1 = (1.0 - self.stability_eps) * a1
+        assert (a1.abs() < 2.0).all()
         a2 = 1.0 - alpha_q
+        a2 = (1.0 - self.stability_eps) * a2
+        assert (a2 < 1.0).all()
+        assert ((a1.abs() - 1.0) < a2).all()
+
         a = tr.stack([a0, a1, a2], dim=2)
 
         b0 = (1.0 - tr.cos(w)) / 2.0
@@ -92,51 +99,72 @@ class TimeVaryingBiquad(nn.Module):
         assert resonance_mod_sig.min() >= 0.0
         assert resonance_mod_sig.max() <= 1.0
         a_coeffs, b_coeffs = self._calc_coeffs(cutoff_mod_sig, resonance_mod_sig)
-        # y_a = sample_wise_lpc(x, a_coeffs)
-        # y_ab = self.tv_fir(y_a, b_coeffs)
-        y_ab = self.tv_fir(x, b_coeffs)
-        return y_ab
+        y_a = sample_wise_lpc(x, a_coeffs)
+        assert not tr.isfinite(y_a).any()
+        assert not tr.isnan(y_a).any()
+        # y_ab = time_varying_fir(x, b_coeffs)
+        # return y_ab
+        return y_a
 
 
 if __name__ == "__main__":
-    tr.manual_seed(42)
-    sr = 2000
-    bs = 1
-    # min_f = 100.0
-    # max_f = 4000.0
+    q = 0.7071
+    for w in tr.linspace(0.0, tr.pi, 100):
+        alpha_q = tr.sin(w) / (2 * q)
+        a1 = -2.0 * tr.cos(w)
+        a2 = 1.0 - alpha_q
+        a1p2 = a1.abs() + a2
+        print(f"w: {w:.3f}, alpha_q: {alpha_q:.3f}, a1: {a1:.3f}, a2: {a2:.3f}, a1p2: {a1p2:.3f}")
+    exit()
 
-    # min_w = 2 * tr.pi * min_f / sr
-    # max_w = 2 * tr.pi * max_f / sr
-    # tvb = TimeVaryingBiquad(min_w, max_w)
-    # lfo = tr.linspace(0.0, 1.0, sr).unsqueeze(0).repeat(bs, 1)
+    tr.manual_seed(42)
+    sr = 24000
+    bs = 1
+    min_f = 500.0
+    max_f = 500.0
+    min_q = 1.2
+    max_q = 1.2
+
+    min_w = 2 * tr.pi * min_f / sr
+    max_w = 2 * tr.pi * max_f / sr
+    tvb = TimeVaryingBiquad(min_w, max_w, min_q, max_q)
+    lfo = tr.linspace(0.0, 1.0, sr).unsqueeze(0).repeat(bs, 1)
 
     n_samples = sr
     white_noise = tr.randn((bs, n_samples))
 
-    # x = white_noise
-    # log.info("start")
-    # y = tvb(x, cutoff_mod_sig=lfo)
-    # log.info(f"y.shape: {y.shape}")
+    x = white_noise
+    log.info("start")
+    y = tvb(x, cutoff_mod_sig=lfo)
+    log.info(f"y.shape: {y.shape}")
 
-    b_coeff_raw = [
-        -0.15301418463641955,
-        0.09979048504546387,
-        0.35259515472734737,
-        0.4839024312338306,
-        0.35259515472734737,
-        0.09979048504546387,
-        -0.15301418463641955,
-    ]
-    b_coeff = tr.tensor(b_coeff_raw).view(1, 1, -1).repeat(bs, n_samples, 1)
-    y = time_varying_fir(white_noise, b_coeff)
+    spec_transform = torchaudio.transforms.Spectrogram(n_fft=2048, hop_length=512)
+    spec = spec_transform(y)
+    log_spec = tr.log10(spec[0] + 1e-9)
 
-    mag_response = tr.fft.rfft(y[0]).abs()
-    # mag_response = tr.fft.fft(y[0]).abs() ** 2
-    mag_response = mag_response / mag_response.max()
-    mag_response_db = 20 * tr.log10(mag_response)
-
-    plt.plot(mag_response_db.detach().numpy())
+    plt.imshow(
+        log_spec,
+        aspect="auto",
+        origin="lower",
+        cmap="viridis",
+    )
     plt.show()
 
-    derp = 1
+    # mag_response = tr.fft.rfft(y[0]).abs()
+    # mag_response = mag_response / mag_response.max()
+    # mag_response_db = 20 * tr.log10(mag_response)
+    #
+    # plt.plot(mag_response_db.detach().numpy())
+    # plt.show()
 
+    # b_coeff_raw = [
+    #     -0.15301418463641955,
+    #     0.09979048504546387,
+    #     0.35259515472734737,
+    #     0.4839024312338306,
+    #     0.35259515472734737,
+    #     0.09979048504546387,
+    #     -0.15301418463641955,
+    # ]
+    # b_coeff = tr.tensor(b_coeff_raw).view(1, 1, -1).repeat(bs, n_samples, 1)
+    # y = time_varying_fir(white_noise, b_coeff)
