@@ -57,10 +57,9 @@ class TimeVaryingBiquad(nn.Module):
     def _calc_coeffs(self, mod_sig_w: T, mod_sig_q: T) -> (T, T):
         log_w = self.log_min_w + (self.log_max_w - self.log_min_w) * mod_sig_w
         w = tr.exp(log_w)
+        # w = self.min_w + (self.max_w - self.min_w) * mod_sig_w
         log_q = self.log_min_q + (self.log_max_q - self.log_min_q) * mod_sig_q
         q = tr.exp(log_q)
-        # q_db = 20 * tr.log10(q)
-        # q = q_db
 
         alpha_q = tr.sin(w) / (2 * q)
 
@@ -78,6 +77,7 @@ class TimeVaryingBiquad(nn.Module):
         # log.info(
         #     f"a0[0,0] = {a0[0, 0]:.4f}, a1[0, 0] = {a1[0, 0]:.4f}, a2[0, 0] = {a2[0, 0]:.4f}"
         # )
+        # log.info(f"\n{a0[0, 0]:.4f}\n{a1[0, 0]:.4f}\n{a2[0, 0]:.4f}")
         a = tr.stack([a1, a2], dim=2)
 
         b0 = (1.0 - tr.cos(w)) / 2.0
@@ -89,6 +89,7 @@ class TimeVaryingBiquad(nn.Module):
         # log.info(
         #     f"b0[0,0] = {b0[0, 0]:.4f}, b1[0, 0] = {b1[0, 0]:.4f}, b2[0, 0] = {b2[0, 0]:.4f}"
         # )
+        # log.info(f"\n{b0[0, 0]:.4f}\n{b1[0, 0]:.4f}\n{b2[0, 0]:.4f}")
         b = tr.stack([b0, b1, b2], dim=2)
 
         return a, b
@@ -117,43 +118,16 @@ class TimeVaryingBiquad(nn.Module):
         y_a = sample_wise_lpc(x, a_coeffs)
         assert not tr.isinf(y_a).any()
         assert not tr.isnan(y_a).any()
-        y_ab = time_varying_fir(x, b_coeffs)
+        y_ab = time_varying_fir(y_a, b_coeffs)
         return y_ab
 
 
 if __name__ == "__main__":
-    # q = 4.071
-    # for w in tr.linspace(1e-3, tr.pi - 1e-3, 100):
-    #     alpha_q = tr.sin(w) / (2 * q)
-    #     a0 = 1.0 + alpha_q
-    #     a1 = -2.0 * tr.cos(w)
-    #     a2 = 1.0 - alpha_q
-    #     a1 /= a0
-    #     a2 /= a0
-    #     # k = tr.tan(theta / 2)
-    #     # w = k**2
-    #     # alpha_q = 1.0 + (k / q) + w
-    #     # a0 = 1.0
-    #     # a1 = 2.0 * (w - 1.0) / alpha_q
-    #     # a2 = (1.0 - (k / q) + w) / alpha_q
-    #     a1p2 = a1.abs() + a2
-    #     # w = theta
-    #     print(
-    #         f"w: {w:.3f}, "
-    #         f"alpha_q: {alpha_q:.3f}, "
-    #         f"a1: {a1:.3f}, "
-    #         f"a2: {a2:.3f}, "
-    #         f"a1p2: {a1p2:.3f}, "
-    #         f"{a2 < 1.0}, "
-    #         f"{a1 < a2 + 1.0}, "
-    #         f"{a1 > -(a2 + 1.0)}"
-    #     )
-
     tr.manual_seed(42)
     sr = 16000
     bs = 1
-    min_f = 1000.0
-    max_f = 4000.0
+    min_f = 100.0
+    max_f = 500.0
     min_q = 4.7071
     max_q = 4.7071
 
@@ -161,8 +135,8 @@ if __name__ == "__main__":
     max_w = 2 * tr.pi * max_f / sr
     tvb = TimeVaryingBiquad(min_w, max_w, min_q, max_q)
 
-    n_samples = 2 * sr
-    white_noise = tr.rand((bs, n_samples))
+    n_samples = sr
+    white_noise = tr.rand((bs, n_samples)) * 2.0 - 1.0
     lfo = tr.linspace(0.0, 1.0, n_samples).unsqueeze(0).repeat(bs, 1)
     # lfo = tr.linspace(1.0, 0.0, n_samples).unsqueeze(0).repeat(bs, 1)
     # lfo = None
@@ -185,11 +159,13 @@ if __name__ == "__main__":
     )
     plt.show()
 
-    # mag_response = tr.fft.rfft(y[0]).abs()
-    # mag_response = mag_response / mag_response.max()
-    # mag_response_db = 20 * tr.log10(mag_response)
-    # plt.plot(mag_response_db.numpy())
-    # plt.show()
+    mag_response = tr.fft.rfft(y[0]).abs()
+    log.info(f"mag_response.mean() = {mag_response.mean()}")
+    log.info(f"mag_response.std() = {mag_response.std()}")
+    mag_response = mag_response / mag_response.max()
+    mag_response_db = 20 * tr.log10(mag_response)
+    plt.plot(mag_response_db.numpy())
+    plt.show()
 
     # b_coeff_raw = [
     #     -0.15301418463641955,
