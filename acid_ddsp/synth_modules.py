@@ -1,6 +1,7 @@
 import logging
 import os
 import random
+from dataclasses import dataclass
 from typing import Optional, Dict
 
 import torch as tr
@@ -14,27 +15,58 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get('LOGLEVEL', 'INFO'))
 
 
+@dataclass
+class ADSRValues:
+    attack: Optional[float] = None
+    decay: Optional[float] = None
+    sustain: Optional[float] = None
+    release: Optional[float] = None
+    alpha: Optional[float] = None
+
+
 class CustomADSR(ADSR):
+    # TODO(cm): refactor?
     def __init__(self,
                  synthconfig: SynthConfig,
+                 adsr_vals: Optional[ADSRValues] = None,
                  **kwargs: Dict[str, T]) -> None:
         dur = synthconfig.buffer_size_seconds
         for dr in self.default_parameter_ranges:
             if dr.name == "attack":
-                dr.minimum = 0.0
-                dr.maximum = min(1.0, dur)
+                if adsr_vals is not None and adsr_vals.attack is not None:
+                    dr.minimum = adsr_vals.attack
+                    dr.maximum = adsr_vals.attack
+                else:
+                    dr.minimum = 0.0
+                    dr.maximum = min(1.0, dur)
             if dr.name == "decay":
-                dr.minimum = 0.0
-                dr.maximum = min(1.0, dur)
+                if adsr_vals is not None and adsr_vals.decay is not None:
+                    dr.minimum = adsr_vals.decay
+                    dr.maximum = adsr_vals.decay
+                else:
+                    dr.minimum = 0.0
+                    dr.maximum = min(1.0, dur)
             if dr.name == "sustain":
-                dr.minimum = 0.5
-                dr.maximum = 1.0
+                if adsr_vals is not None and adsr_vals.sustain is not None:
+                    dr.minimum = adsr_vals.sustain
+                    dr.maximum = adsr_vals.sustain
+                else:
+                    dr.minimum = 0.5
+                    dr.maximum = 1.0
             if dr.name == "release":
-                dr.minimum = 1.0
-                dr.maximum = 1.0
+                if adsr_vals is not None and adsr_vals.release is not None:
+                    dr.minimum = adsr_vals.release
+                    dr.maximum = adsr_vals.release
+                else:
+                    dr.minimum = 1.0
+                    dr.maximum = 1.0
             if dr.name == "alpha":
-                dr.minimum = 0.1
-                dr.maximum = 2.0
+                if adsr_vals is not None and adsr_vals.alpha is not None:
+                    dr.minimum = adsr_vals.alpha
+                    dr.maximum = adsr_vals.alpha
+                else:
+                    dr.minimum = 0.1
+                    dr.maximum = 2.0
         super().__init__(synthconfig, **kwargs)
 
 

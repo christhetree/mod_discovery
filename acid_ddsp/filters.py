@@ -55,9 +55,10 @@ class TimeVaryingBiquad(nn.Module):
         self.stability_eps = stability_eps
 
     def _calc_coeffs(self, mod_sig_w: T, mod_sig_q: T) -> (T, T):
-        log_w = self.log_min_w + (self.log_max_w - self.log_min_w) * mod_sig_w
-        w = tr.exp(log_w)
-        # w = self.min_w + (self.max_w - self.min_w) * mod_sig_w
+        # TODO(cm): use log or not log?
+        # log_w = self.log_min_w + (self.log_max_w - self.log_min_w) * mod_sig_w
+        # w = tr.exp(log_w)
+        w = self.min_w + (self.max_w - self.min_w) * mod_sig_w
         log_q = self.log_min_q + (self.log_max_q - self.log_min_q) * mod_sig_q
         q = tr.exp(log_q)
 
