@@ -4,6 +4,8 @@ from typing import Optional
 
 import torch as tr
 import torch.nn.functional as F
+import torchaudio
+from matplotlib import pyplot as plt
 from torch import Tensor as T
 from torch import nn
 
@@ -55,19 +57,23 @@ class TimeVaryingBiquad(nn.Module):
     def _calc_coeffs(self, mod_sig_w: T, mod_sig_q: T) -> (T, T):
         log_w = self.log_min_w + (self.log_max_w - self.log_min_w) * mod_sig_w
         w = tr.exp(log_w)
-        # TODO(cm): check which q to use
         log_q = self.log_min_q + (self.log_max_q - self.log_min_q) * mod_sig_q
         q = tr.exp(log_q)
+
         alpha_q = tr.sin(w) / (2 * q)
 
         a0 = 1.0 + alpha_q
         a1 = -2.0 * tr.cos(w)
-        a1 = (1.0 - self.stability_eps) * a1
-        assert (a1.abs() < 2.0).all()
+        a1 /= a0
+        # a1 = (1.0 - self.stability_eps) * a1
         a2 = 1.0 - alpha_q
-        a2 = (1.0 - self.stability_eps) * a2
+        a2 /= a0
+        # a2 = (1.0 - self.stability_eps) * a2
+        a0.fill_(1.0)
+        assert (a1.abs() < 2.0).all()
         assert (a2 < 1.0).all()
-        assert ((a1.abs() - 1.0) < a2).all()
+        assert (a1 < a2 + 1.0).all()
+        assert (a1 > -(a2 + 1.0)).all()
 
         a = tr.stack([a0, a1, a2], dim=2)
 
@@ -100,7 +106,9 @@ class TimeVaryingBiquad(nn.Module):
         assert resonance_mod_sig.max() <= 1.0
         a_coeffs, b_coeffs = self._calc_coeffs(cutoff_mod_sig, resonance_mod_sig)
         y_a = sample_wise_lpc(x, a_coeffs)
-        assert not tr.isfinite(y_a).any()
+        n_inf = tr.isinf(y_a).sum()
+        log.info(f"n_inf: {n_inf}")
+        assert not tr.isinf(y_a).any()
         assert not tr.isnan(y_a).any()
         # y_ab = time_varying_fir(x, b_coeffs)
         # return y_ab
@@ -108,30 +116,48 @@ class TimeVaryingBiquad(nn.Module):
 
 
 if __name__ == "__main__":
-    q = 0.7071
-    for w in tr.linspace(0.0, tr.pi, 100):
-        alpha_q = tr.sin(w) / (2 * q)
-        a1 = -2.0 * tr.cos(w)
-        a2 = 1.0 - alpha_q
-        a1p2 = a1.abs() + a2
-        print(f"w: {w:.3f}, alpha_q: {alpha_q:.3f}, a1: {a1:.3f}, a2: {a2:.3f}, a1p2: {a1p2:.3f}")
-    exit()
+    # q = 4.071
+    # for w in tr.linspace(1e-3, tr.pi - 1e-3, 100):
+    #     alpha_q = tr.sin(w) / (2 * q)
+    #     a0 = 1.0 + alpha_q
+    #     a1 = -2.0 * tr.cos(w)
+    #     a2 = 1.0 - alpha_q
+    #     a1 /= a0
+    #     a2 /= a0
+    #     # k = tr.tan(theta / 2)
+    #     # w = k**2
+    #     # alpha_q = 1.0 + (k / q) + w
+    #     # a0 = 1.0
+    #     # a1 = 2.0 * (w - 1.0) / alpha_q
+    #     # a2 = (1.0 - (k / q) + w) / alpha_q
+    #     a1p2 = a1.abs() + a2
+    #     # w = theta
+    #     print(
+    #         f"w: {w:.3f}, "
+    #         f"alpha_q: {alpha_q:.3f}, "
+    #         f"a1: {a1:.3f}, "
+    #         f"a2: {a2:.3f}, "
+    #         f"a1p2: {a1p2:.3f}, "
+    #         f"{a2 < 1.0}, "
+    #         f"{a1 < a2 + 1.0}, "
+    #         f"{a1 > -(a2 + 1.0)}"
+    #     )
 
     tr.manual_seed(42)
-    sr = 24000
+    sr = 4000
     bs = 1
-    min_f = 500.0
-    max_f = 500.0
-    min_q = 1.2
-    max_q = 1.2
+    min_f = 1000.0
+    max_f = 1000.0
+    min_q = 0.7071
+    max_q = 0.7071
 
     min_w = 2 * tr.pi * min_f / sr
     max_w = 2 * tr.pi * max_f / sr
     tvb = TimeVaryingBiquad(min_w, max_w, min_q, max_q)
-    lfo = tr.linspace(0.0, 1.0, sr).unsqueeze(0).repeat(bs, 1)
+    lfo = tr.linspace(0.0, 1.0, sr).unsqueeze(0).repeat(bs, 1).double()
 
     n_samples = sr
-    white_noise = tr.randn((bs, n_samples))
+    white_noise = tr.randn((bs, n_samples)).double()
 
     x = white_noise
     log.info("start")
