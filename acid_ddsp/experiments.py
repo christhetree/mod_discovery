@@ -67,7 +67,7 @@ if __name__ == "__main__":
     envelope = tr.flatten(envelope, start_dim=0).unsqueeze(0)
 
     log.info(f"before filtering audio.abs().max() = {audio.abs().max()}")
-    audio = tvb(audio, cutoff_mod_sig=envelope, resonance_mod_sig=envelope)
+    audio = tvb(audio, cutoff_mod_sig=envelope)
     log.info(f"after filtering audio.abs().max() = {audio.abs().max()}")
     if dist_gain > 0:
         audio = tr.tanh(dist_gain * audio)

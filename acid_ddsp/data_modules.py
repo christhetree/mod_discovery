@@ -19,6 +19,7 @@ class AcidDDSPDataModule(pl.LightningDataModule):
         batch_size: int,
         min_midi_f0: int,
         max_midi_f0: int,
+        note_on_duration: float,
         mod_sig_gen: ModSignalGenerator,
         n_frames: int,
         train_n_per_epoch: int,
@@ -36,6 +37,7 @@ class AcidDDSPDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.min_midi_f0 = min_midi_f0
         self.max_midi_f0 = max_midi_f0
+        self.note_on_duration = note_on_duration
         self.mod_sig_gen = mod_sig_gen
         self.n_frames = n_frames
         self.train_n_per_epoch = train_n_per_epoch
@@ -44,13 +46,28 @@ class AcidDDSPDataModule(pl.LightningDataModule):
         self.num_workers = num_workers
 
         self.train_ds = MidiF0ModSignalDataset(
-            min_midi_f0, max_midi_f0, mod_sig_gen, n_frames, train_n_per_epoch
+            min_midi_f0,
+            max_midi_f0,
+            note_on_duration,
+            mod_sig_gen,
+            n_frames,
+            train_n_per_epoch,
         )
         self.val_ds = MidiF0ModSignalDataset(
-            min_midi_f0, max_midi_f0, mod_sig_gen, n_frames, val_n_per_epoch
+            min_midi_f0,
+            max_midi_f0,
+            note_on_duration,
+            mod_sig_gen,
+            n_frames,
+            val_n_per_epoch,
         )
         self.test_ds = MidiF0ModSignalDataset(
-            min_midi_f0, max_midi_f0, mod_sig_gen, n_frames, test_n_per_epoch
+            min_midi_f0,
+            max_midi_f0,
+            note_on_duration,
+            mod_sig_gen,
+            n_frames,
+            test_n_per_epoch,
         )
 
     def train_dataloader(self) -> DataLoader:
