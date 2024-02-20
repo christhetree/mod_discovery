@@ -35,7 +35,7 @@ def time_varying_fir(x: T, b: T) -> T:
 class TimeVaryingBiquad(nn.Module):
     def __init__(
         self,
-        min_w: float = 0.001,
+        min_w: float = 0.0,
         max_w: float = tr.pi,
         min_q: float = 0.7071,
         max_q: float = 4.0,

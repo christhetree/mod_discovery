@@ -19,3 +19,5 @@ additional_arguments:
 link_arguments:
   - src: custom.project_name
     dest: trainer.logger.init_args.name
+  - src: data.init_args.batch_size
+    dest: model.init_args.batch_size

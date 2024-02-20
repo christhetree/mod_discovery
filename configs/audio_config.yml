@@ -1,0 +1,17 @@
+class_path: acid_ddsp.data_modules.AudioConfig
+init_args:
+  sr: 48000
+  control_rate: 480
+  buffer_size_seconds: 0.125
+  note_on_duration: 0.100
+  attack: 0.001
+  decay: 0.099
+  sustain: 0.5
+  release: 0.025
+  min_midi_f0: 36
+  max_midi_f0: 36
+  min_w_hz: 100.0
+  max_w_hz: 8000.0
+  min_q: 6.0
+  max_q: 6.0
+  stability_eps: 0.001

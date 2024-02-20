@@ -8,6 +8,7 @@ from torch import Tensor as T
 from torch import nn
 
 import util
+from audio_config import AudioConfig
 from filters import TimeVaryingBiquad
 from synth_modules import ADSRValues
 from synths import CustomSynth
@@ -18,13 +19,12 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-class SCRAPLLightingModule(pl.LightningModule):
+class AcidDDSPLightingModule(pl.LightningModule):
     def __init__(
         self,
+        batch_size: int,
+        ac: AudioConfig,
         model: nn.Module,
-        sc: SynthConfig,
-        adsr_vals: ADSRValues,
-        tvb: TimeVaryingBiquad,
         loss_func: nn.Module,
         use_p_loss: bool = False,
     ):
@@ -32,18 +32,36 @@ class SCRAPLLightingModule(pl.LightningModule):
         self.save_hyperparameters(ignore=["loss_func", "model"])
         log.info(f"\n{self.hparams}")
 
+        self.batch_size = batch_size
+        self.ac = ac
         self.model = model
-        self.sc = sc
-        self.adsr_vals = adsr_vals
-        self.tvb = tvb
         self.loss_func = loss_func
         self.use_p_loss = use_p_loss
-
-        self.synth = CustomSynth(synthconfig=sc, adsr_vals=adsr_vals)
 
         self.loss_name = self.loss_func.__class__.__name__
         self.l1 = nn.L1Loss()
         self.global_n = 0
+
+        sc = SynthConfig(
+            batch_size=batch_size,
+            sample_rate=ac.sr,
+            buffer_size_seconds=ac.buffer_size_seconds,
+            control_rate=ac.control_rate,
+            reproducible=False,
+            no_grad=True,
+            debug=False,
+        )
+        adsr_vals = ADSRValues(
+            attack=ac.attack, decay=ac.decay, sustain=ac.sustain, release=ac.release
+        )
+        self.synth = CustomSynth(synthconfig=sc, adsr_vals=adsr_vals)
+
+        self.tvb = TimeVaryingBiquad(
+            min_w=ac.min_w,
+            max_w=ac.max_w,
+            min_q=ac.min_q,
+            max_q=ac.max_q,
+        )
 
     def on_train_start(self) -> None:
         self.global_n = 0
