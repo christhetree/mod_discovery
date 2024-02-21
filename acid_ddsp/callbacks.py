@@ -9,7 +9,7 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.loggers import WandbLogger
 from torch import Tensor as T
 
-from plotting import fig2img, plot_waveforms_stacked
+from acid_ddsp.plotting import fig2img, plot_waveforms_stacked
 
 logging.basicConfig()
 log = logging.getLogger(__name__)

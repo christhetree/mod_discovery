@@ -7,7 +7,7 @@ from torchsynth.config import SynthConfig
 from torchsynth.module import ControlRateUpsample, VCA, SquareSawVCO
 from torchsynth.synth import AbstractSynth
 
-from synth_modules import CustomADSR, ADSRValues
+from acid_ddsp.synth_modules import CustomADSR, ADSRValues
 
 logging.basicConfig()
 log = logging.getLogger(__name__)

@@ -6,7 +6,7 @@ import torchaudio
 
 from acid_ddsp.filters import TimeVaryingBiquad
 from acid_ddsp.synth_modules import ADSRValues
-from synths import CustomSynth
+from acid_ddsp.synths import CustomSynth
 from torchsynth.config import SynthConfig
 
 logging.basicConfig()

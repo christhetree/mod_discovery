@@ -10,7 +10,7 @@ from pytorch_lightning.cli import LightningCLI, LightningArgumentParser
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.strategies import DDPStrategy
 
-from paths import CONFIGS_DIR
+from acid_ddsp.paths import CONFIGS_DIR
 
 logging.basicConfig()
 log = logging.getLogger(__name__)

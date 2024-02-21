@@ -15,7 +15,7 @@ from torch import Tensor as T
 from torchaudio.transforms import Spectrogram, Fade
 from torchvision.transforms import ToTensor
 
-from paths import OUT_DIR
+from acid_ddsp.paths import OUT_DIR
 
 logging.basicConfig()
 log = logging.getLogger(__name__)

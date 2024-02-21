@@ -3,8 +3,8 @@ import os
 
 import torch
 
-from cli import CustomLightningCLI
-from paths import CONFIGS_DIR
+from acid_ddsp.cli import CustomLightningCLI
+from acid_ddsp.paths import CONFIGS_DIR
 
 logging.basicConfig()
 log = logging.getLogger(__name__)

@@ -7,11 +7,11 @@ import torch as tr
 from torch import Tensor as T
 from torch import nn
 
-import util
-from audio_config import AudioConfig
-from filters import TimeVaryingBiquad
-from synth_modules import ADSRValues
-from synths import CustomSynth
+import acid_ddsp.util as util
+from acid_ddsp.audio_config import AudioConfig
+from acid_ddsp.filters import TimeVaryingBiquad
+from acid_ddsp.synth_modules import ADSRValues
+from acid_ddsp.synths import CustomSynth
 from torchsynth.config import SynthConfig
 
 logging.basicConfig()

@@ -6,7 +6,7 @@ from torch import Tensor as T
 from torch.utils.data import Dataset
 
 from acid_ddsp.modulations import ModSignalGenerator
-from audio_config import AudioConfig
+from acid_ddsp.audio_config import AudioConfig
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
