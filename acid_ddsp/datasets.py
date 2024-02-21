@@ -33,5 +33,6 @@ class MidiF0ModSignalDataset(Dataset):
 
     def __getitem__(self, idx: int) -> (T, T, T):
         midi_f0 = tr.randint(self.ac.min_midi_f0, self.ac.max_midi_f0 + 1, (1,))
+        midi_f0 = midi_f0.squeeze(0)
         mod_sig = self.mod_sig_gen(self.n_frames)
         return midi_f0, self.note_on_duration, mod_sig

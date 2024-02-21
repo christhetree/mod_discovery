@@ -29,7 +29,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         use_p_loss: bool = False,
     ):
         super().__init__()
-        self.save_hyperparameters(ignore=["loss_func", "model"])
+        self.save_hyperparameters(ignore=["ac", "model", "loss_func"])
         log.info(f"\n{self.hparams}")
 
         self.batch_size = batch_size
@@ -84,7 +84,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             x = self.tvb(audio, cutoff_mod_sig=mod_sig)
 
         # Extract mod_sig_hat
-        mod_sig_hat = self.model(x)
+        model_in = tr.stack([audio, x], dim=1)
+        mod_sig_hat, latent = self.model(model_in)
+        mod_sig_hat = mod_sig_hat.squeeze(1)
 
         if mod_sig_hat.shape != mod_sig.shape:
             assert mod_sig_hat.ndim == mod_sig.ndim

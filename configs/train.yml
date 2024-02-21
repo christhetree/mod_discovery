@@ -2,7 +2,8 @@ seed_everything: 42
 
 custom:
   project_name: acid_ddsp
-  model_name: testing
+#  model_name: cnn_ploss
+  model_name: cnn_l1
   dataset_name: midi36_fixed_adsr
   cpu_batch_size: 3
   use_wandb_cpu: false
@@ -19,7 +20,7 @@ trainer:
 data:
   class_path: acid_ddsp.data_modules.AcidDDSPDataModule
   init_args:
-    batch_size: 16
+    batch_size: 128
     ac: ../configs/audio_config.yml
     mod_sig_gen: ../configs/mod_sig_gen.yml
     train_n_per_epoch: 8000
@@ -30,7 +31,11 @@ model:
   class_path: acid_ddsp.lightning.AcidDDSPLightingModule
   init_args:
     ac: ../configs/audio_config.yml
-#    model: null
-    loss_func: torch.nn.MSELoss
+    model: ../configs/spectral_2dcnn.yml
+    loss_func: torch.nn.L1Loss
+#    loss_func: torch.nn.MSELoss
 #    loss_func: auraloss.freq.MultiResolutionSTFTLoss
+#    use_p_loss: true
     use_p_loss: false
+
+optimizer: ../configs/adam_w.yml

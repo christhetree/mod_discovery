@@ -135,6 +135,7 @@ class CustomLightningCLI(LightningCLI):
             config.trainer.accelerator = "auto"
             config.trainer.devices = "auto"
             config.trainer.strategy = "auto"
+            config.model.init_args.batch_size = config.custom.cpu_batch_size
             config.data.init_args.batch_size = config.custom.cpu_batch_size
             config.data.init_args.num_workers = 0
 

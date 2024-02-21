@@ -43,15 +43,15 @@ class ModSignalGenerator(nn.Module):
     def forward(self, n_frames: int) -> T:
         assert n_frames > 2
         start_val = (
-            tr.rand() * (self.max_start_val - self.min_start_val) + self.min_start_val
+            tr.rand((1,)) * (self.max_start_val - self.min_start_val) + self.min_start_val
         )
         corner_val = (
-            tr.rand() * (self.max_corner_val - self.min_corner_val)
+            tr.rand((1,)) * (self.max_corner_val - self.min_corner_val)
             + self.min_corner_val
         )
-        end_val = tr.rand() * (self.max_end_val - self.min_end_val) + self.min_end_val
+        end_val = tr.rand((1,)) * (self.max_end_val - self.min_end_val) + self.min_end_val
         corner_frac = (
-            tr.rand() * (self.max_attack_frac - self.min_attack_frac)
+            tr.rand((1,)) * (self.max_attack_frac - self.min_attack_frac)
             + self.min_attack_frac
         )
         corner_idx = (n_frames * corner_frac).int().clamp(1, n_frames - 2)
@@ -64,6 +64,6 @@ class ModSignalGenerator(nn.Module):
             corner_val.item(), end_val.item(), n_frames - corner_idx.item()
         )
 
-        alpha = tr.rand() * (self.max_alpha - self.min_alpha) + self.min_alpha
+        alpha = tr.rand((1,)) * (self.max_alpha - self.min_alpha) + self.min_alpha
         mod_sig = mod_sig.pow(alpha)
         return mod_sig

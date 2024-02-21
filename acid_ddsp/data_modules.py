@@ -29,7 +29,7 @@ class AcidDDSPDataModule(pl.LightningDataModule):
         if test_n_per_epoch is None:
             test_n_per_epoch = val_n_per_epoch
         if n_frames is None:
-            n_frames = int(ac.sr * ac.note_on_duration)
+            n_frames = int(ac.sr * ac.buffer_size_seconds)
 
         super().__init__()
         self.save_hyperparameters()
