@@ -9,6 +9,8 @@ dependencies:
   - pytorch
   - torchaudio
   - torchvision
+  - lightning
+  - numba
   - cudatoolkit=11.8
   - pip:
     - auraloss
@@ -17,10 +19,8 @@ dependencies:
     - librosa
     - matplotlib
     - nnaudio
-    - numpy
+    - numpy=1.23.5
     - nvitop
     - pandas
-    - pytorch-lightning
     - tensorboard
-    - torchsynth
     - wandb

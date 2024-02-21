@@ -18,6 +18,7 @@ class AudioConfig:
                  decay: float,
                  sustain: float,
                  release: float,
+                 alpha: float,
                  min_midi_f0: int,
                  max_midi_f0: int,
                  min_w_hz: float,
@@ -33,6 +34,7 @@ class AudioConfig:
         self.decay = decay
         self.sustain = sustain
         self.release = release
+        self.alpha = alpha
         self.min_midi_f0 = min_midi_f0
         self.max_midi_f0 = max_midi_f0
         self.min_w_hz = min_w_hz

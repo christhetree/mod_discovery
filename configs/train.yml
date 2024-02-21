@@ -5,14 +5,14 @@ custom:
 #  model_name: cnn_ploss
   model_name: cnn_l1
   dataset_name: midi36_fixed_adsr
-  cpu_batch_size: 3
+  cpu_batch_size: 5
   use_wandb_cpu: false
   use_wandb_gpu: true
 
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [5]
+  devices: [6]
   max_epochs: 50
   num_sanity_val_steps: 0
   accumulate_grad_batches: 1

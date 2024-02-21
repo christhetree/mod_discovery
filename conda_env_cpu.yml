@@ -11,12 +11,12 @@ dependencies:
     - librosa
     - matplotlib
     - nnaudio
-    - numpy
+    - numba
+    - numpy=1.23.5
     - pandas
     - torch
     - pytorch-lightning
     - torchaudio
     - torchvision
     - tensorboard
-    - torchsynth
     - wandb

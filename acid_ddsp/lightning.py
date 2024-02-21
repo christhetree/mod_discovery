@@ -52,7 +52,11 @@ class AcidDDSPLightingModule(pl.LightningModule):
             debug=False,
         )
         adsr_vals = ADSRValues(
-            attack=ac.attack, decay=ac.decay, sustain=ac.sustain, release=ac.release
+            attack=ac.attack,
+            decay=ac.decay,
+            sustain=ac.sustain,
+            release=ac.release,
+            alpha=ac.alpha,
         )
         self.synth = CustomSynth(synthconfig=sc, adsr_vals=adsr_vals)
 
@@ -85,8 +89,29 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # Extract mod_sig_hat
         model_in = tr.stack([audio, x], dim=1)
-        mod_sig_hat, latent = self.model(model_in)
+        mod_sig_hat, latent, log_spec = self.model(model_in)
         mod_sig_hat = mod_sig_hat.squeeze(1)
+        log_spec_dry = log_spec[:, 0, :, :]
+        log_spec_wet = log_spec[:, 1, :, :]
+
+        # import torchaudio
+        # from matplotlib import pyplot as plt
+        # for idx in range(x.size(0)):
+        #     # torchaudio.save(
+        #     #     f"../out/audio_{idx}.wav", audio[idx].unsqueeze(0), self.ac.sr
+        #     # )
+        #     torchaudio.save(f"../out/x_{idx}.wav", x[idx].unsqueeze(0), self.ac.sr)
+        #     # plt.plot(envelope[idx].numpy())
+        #     plt.plot(mod_sig[idx].numpy())
+        #     plt.ylim(0, 1)
+        #     plt.show()
+        #     # plt.imshow(log_spec_dry[idx].numpy(), aspect="auto", origin="lower"
+        #     # plt.title("Dry")
+        #     # plt.show()
+        #     plt.imshow(log_spec_wet[idx].numpy(), aspect="auto", origin="lower")
+        #     plt.title("Wet")
+        #     plt.show()
+        # exit()
 
         if mod_sig_hat.shape != mod_sig.shape:
             assert mod_sig_hat.ndim == mod_sig.ndim
@@ -119,6 +144,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "x_hat": x_hat,
             "audio": audio,
             "envelope": envelope,
+            "log_spec_dry": log_spec_dry,
+            "log_spec_wet": log_spec_wet,
         }
         return out_dict
 

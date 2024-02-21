@@ -5,7 +5,8 @@ from typing import Optional, List, Tuple
 import torch as tr
 from torch import Tensor as T
 from torch import nn
-from torchaudio.transforms import MelSpectrogram, FrequencyMasking, TimeMasking
+from torchaudio.transforms import MelSpectrogram, FrequencyMasking, TimeMasking, \
+    Spectrogram
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -73,6 +74,12 @@ class Spectral2DCNN(nn.Module):
             n_mels=n_mels,
             center=True,
         )
+        # self.spectrogram = Spectrogram(
+        #     n_fft=n_fft,
+        #     hop_length=hop_len,
+        #     normalized=False,
+        #     center=True,
+        # )
         n_bins = n_mels
         n_frames = n_samples // hop_len + 1
         temporal_dims = [n_frames] * len(out_channels)
@@ -111,7 +118,7 @@ class Spectral2DCNN(nn.Module):
         # TODO(cm): change from regression to classification
         self.output = nn.Conv1d(out_channels[-1], self.latent_dim, kernel_size=(1,))
 
-    def forward(self, x: T) -> (T, T):
+    def forward(self, x: T) -> (T, T, T):
         assert x.ndim == 3
         x = self.spectrogram(x)
 
@@ -122,14 +129,15 @@ class Spectral2DCNN(nn.Module):
                 x = self.time_masking(x)
 
         x = tr.clip(x, min=self.eps)
-        x = tr.log(x)
-        x = self.cnn(x)
+        log_spec = tr.log(x)
+
+        x = self.cnn(log_spec)
         x = tr.mean(x, dim=-2)
         latent = x
 
         x = self.output(x)
         x = tr.sigmoid(x)
-        return x, latent
+        return x, latent, log_spec
 
 
 if __name__ == "__main__":

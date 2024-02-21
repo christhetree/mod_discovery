@@ -4,8 +4,6 @@ from typing import Optional
 
 import torch as tr
 import torch.nn.functional as F
-import torchaudio
-from matplotlib import pyplot as plt
 from torch import Tensor as T
 from torch import nn
 
@@ -40,6 +38,8 @@ class TimeVaryingBiquad(nn.Module):
         min_q: float = 0.7071,
         max_q: float = 4.0,
         stability_eps: float = 1e-3,
+        modulate_log_w: bool = True,
+        modulate_log_q: bool = True,
     ):
         super().__init__()
         assert 0.0 <= min_w <= max_w <= tr.pi
@@ -53,14 +53,23 @@ class TimeVaryingBiquad(nn.Module):
         self.log_min_q = tr.log(self.min_q)
         self.log_max_q = tr.log(self.max_q)
         self.stability_eps = stability_eps
+        self.modulate_log_w = modulate_log_w
+        self.modulate_log_q = modulate_log_q
+        log.info(f"modulate_log_w = {self.modulate_log_w}")
+        log.info(f"modulate_log_q = {self.modulate_log_q}")
 
     def _calc_coeffs(self, mod_sig_w: T, mod_sig_q: T) -> (T, T):
-        # TODO(cm): use log or not log?
-        # log_w = self.log_min_w + (self.log_max_w - self.log_min_w) * mod_sig_w
-        # w = tr.exp(log_w)
-        w = self.min_w + (self.max_w - self.min_w) * mod_sig_w
-        log_q = self.log_min_q + (self.log_max_q - self.log_min_q) * mod_sig_q
-        q = tr.exp(log_q)
+        if self.modulate_log_w:
+            log_w = self.log_min_w + (self.log_max_w - self.log_min_w) * mod_sig_w
+            w = tr.exp(log_w)
+        else:
+            w = self.min_w + (self.max_w - self.min_w) * mod_sig_w
+
+        if self.modulate_log_q:
+            log_q = self.log_min_q + (self.log_max_q - self.log_min_q) * mod_sig_q
+            q = tr.exp(log_q)
+        else:
+            q = self.min_q + (self.max_q - self.min_q) * mod_sig_q
 
         alpha_q = tr.sin(w) / (2 * q)
 
@@ -124,6 +133,14 @@ class TimeVaryingBiquad(nn.Module):
 
 
 if __name__ == "__main__":
+    os.environ["CUDA_VISIBLE_DEVICES"] = "6"
+    if tr.cuda.is_available():
+        log.info("Using GPU")
+        device = tr.device("cuda")
+    else:
+        log.info("Using CPU")
+        device = tr.device("cpu")
+
     tr.manual_seed(42)
     sr = 16000
     bs = 1
@@ -135,6 +152,7 @@ if __name__ == "__main__":
     min_w = 2 * tr.pi * min_f / sr
     max_w = 2 * tr.pi * max_f / sr
     tvb = TimeVaryingBiquad(min_w, max_w, min_q, max_q)
+    tvb.to(device)
 
     n_samples = sr
     white_noise = tr.rand((bs, n_samples)) * 2.0 - 1.0
@@ -144,29 +162,30 @@ if __name__ == "__main__":
 
     x = white_noise
     log.info("start")
+    x.to(device)
     y = tvb(x, cutoff_mod_sig=lfo, resonance_mod_sig=lfo)
     log.info(f"y.shape: {y.shape}")
     log.info(f"y[0, :4] = {y[0, :4]}")
-    torchaudio.save("../out/tmp.wav", y, sr)
+    # torchaudio.save("../out/tmp.wav", y, sr)
 
-    spec_transform = torchaudio.transforms.Spectrogram(n_fft=2048, hop_length=512)
-    spec = spec_transform(y)
-    log_spec = tr.log10(spec[0] + 1e-9)
-    plt.imshow(
-        log_spec,
-        aspect="auto",
-        origin="lower",
-        cmap="viridis",
-    )
-    plt.show()
+    # spec_transform = torchaudio.transforms.Spectrogram(n_fft=2048, hop_length=512)
+    # spec = spec_transform(y)
+    # log_spec = tr.log10(spec[0] + 1e-9)
+    # plt.imshow(
+    #     log_spec,
+    #     aspect="auto",
+    #     origin="lower",
+    #     cmap="viridis",
+    # )
+    # plt.show()
 
-    mag_response = tr.fft.rfft(y[0]).abs()
-    log.info(f"mag_response.mean() = {mag_response.mean()}")
-    log.info(f"mag_response.std() = {mag_response.std()}")
-    mag_response = mag_response / mag_response.max()
-    mag_response_db = 20 * tr.log10(mag_response)
-    plt.plot(mag_response_db.numpy())
-    plt.show()
+    # mag_response = tr.fft.rfft(y[0]).abs()
+    # log.info(f"mag_response.mean() = {mag_response.mean()}")
+    # log.info(f"mag_response.std() = {mag_response.std()}")
+    # mag_response = mag_response / mag_response.max()
+    # mag_response_db = 20 * tr.log10(mag_response)
+    # plt.plot(mag_response_db.numpy())
+    # plt.show()
 
     # b_coeff_raw = [
     #     -0.15301418463641955,
