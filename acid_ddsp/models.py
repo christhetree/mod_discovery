@@ -5,7 +5,8 @@ from typing import Optional, List, Tuple
 import torch as tr
 from torch import Tensor as T
 from torch import nn
-from torchaudio.transforms import MelSpectrogram, FrequencyMasking, TimeMasking
+
+from feature_extraction import LogMelSpecFeatureExtractor
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -24,36 +25,24 @@ def calc_receptive_field(kernel_size: int, dilations: List[int]) -> int:
 class Spectral2DCNN(nn.Module):
     def __init__(
         self,
+        fe: LogMelSpecFeatureExtractor,
         in_ch: int = 2,
-        n_samples: int = 6000,
-        sr: float = 48000,
-        n_fft: int = 1024,
-        hop_len: int = 32,
-        n_mels: int = 128,
         kernel_size: Tuple[int, int] = (5, 7),
         out_channels: Optional[List[int]] = None,
         bin_dilations: Optional[List[int]] = None,
         temp_dilations: Optional[List[int]] = None,
         pool_size: Tuple[int, int] = (2, 1),
         latent_dim: int = 1,
-        freq_mask_amount: float = 0.0,
-        time_mask_amount: float = 0.0,
         use_ln: bool = True,
-        eps: float = 1e-7,
     ) -> None:
         super().__init__()
-        self.sr = sr
-        self.n_fft = n_fft
-        self.hop_len = hop_len
-        self.n_mels = n_mels
+        self.fe = fe
+        self.in_ch = in_ch
         self.kernel_size = kernel_size
         assert pool_size[1] == 1
         self.pool_size = pool_size
         self.latent_dim = latent_dim
-        self.freq_mask_amount = freq_mask_amount
-        self.time_mask_amount = time_mask_amount
         self.use_ln = use_ln
-        self.eps = eps
         if out_channels is None:
             out_channels = [64] * 5
         self.out_channels = out_channels
@@ -65,32 +54,16 @@ class Spectral2DCNN(nn.Module):
         self.temp_dilations = temp_dilations
         assert len(out_channels) == len(bin_dilations) == len(temp_dilations)
 
-        self.spectrogram = MelSpectrogram(
-            sample_rate=int(sr),
-            n_fft=n_fft,
-            hop_length=hop_len,
-            normalized=False,
-            n_mels=n_mels,
-            center=True,
-        )
-        n_bins = n_mels
-        n_frames = n_samples // hop_len + 1
-        temporal_dims = [n_frames] * len(out_channels)
-
-        self.freq_masking = FrequencyMasking(
-            freq_mask_param=int(freq_mask_amount * n_bins)
-        )
-        self.time_masking = TimeMasking(
-            time_mask_param=int(time_mask_amount * n_frames)
-        )
+        temporal_dims = [fe.n_frames] * len(out_channels)
 
         layers = []
+        curr_n_bins = fe.n_bins
         for out_ch, b_dil, t_dil, temp_dim in zip(
             out_channels, bin_dilations, temp_dilations, temporal_dims
         ):
             if use_ln:
                 layers.append(
-                    nn.LayerNorm([n_bins, temp_dim], elementwise_affine=False)
+                    nn.LayerNorm([curr_n_bins, temp_dim], elementwise_affine=False)
                 )
             layers.append(
                 nn.Conv2d(
@@ -105,7 +78,7 @@ class Spectral2DCNN(nn.Module):
             layers.append(nn.MaxPool2d(kernel_size=pool_size))
             layers.append(nn.PReLU(num_parameters=out_ch))
             in_ch = out_ch
-            n_bins = n_bins // pool_size[0]
+            curr_n_bins = curr_n_bins // pool_size[0]
         self.cnn = nn.Sequential(*layers)
 
         # TODO(cm): change from regression to classification
@@ -113,16 +86,7 @@ class Spectral2DCNN(nn.Module):
 
     def forward(self, x: T) -> (T, T, T):
         assert x.ndim == 3
-        x = self.spectrogram(x)
-
-        if self.training:
-            if self.freq_mask_amount > 0:
-                x = self.freq_masking(x)
-            if self.time_mask_amount > 0:
-                x = self.time_masking(x)
-
-        x = tr.clip(x, min=self.eps)
-        log_spec = tr.log(x)
+        log_spec = self.fe(x)
 
         x = self.cnn(log_spec)
         x = tr.mean(x, dim=-2)

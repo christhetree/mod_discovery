@@ -32,7 +32,7 @@ class AcidDDSPDataModule(pl.LightningDataModule):
             n_frames = int(ac.sr * ac.buffer_size_seconds)
 
         super().__init__()
-        self.save_hyperparameters()
+        self.save_hyperparameters(ignore=["ac", "mod_sig_gen"])
         log.info(f"\n{self.hparams}")
 
         self.batch_size = batch_size
