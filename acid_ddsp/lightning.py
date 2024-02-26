@@ -98,18 +98,20 @@ class AcidDDSPLightingModule(pl.LightningModule):
             assert x.shape == audio.shape
 
         # Extract mod_sig_hat
-        model_in = tr.stack([audio, x], dim=1)
+        # model_in = tr.stack([x, audio], dim=1)
+        model_in = x.unsqueeze(1)
         mod_sig_hat, latent, log_spec = self.model(model_in)
         mod_sig_hat = mod_sig_hat.squeeze(1)
-        log_spec_dry = log_spec[:, 0, :, :]
-        log_spec_wet = log_spec[:, 1, :, :]
+        # log_spec_dry = log_spec[:, 1, :, :]
+        log_spec_dry = None
+        log_spec_wet = log_spec[:, 0, :, :]
 
         # import torchaudio
         # from matplotlib import pyplot as plt
         # for idx in range(x.size(0)):
-        #     torchaudio.save(
-        #         f"../out/audio_{idx}.wav", audio[idx].unsqueeze(0), self.ac.sr
-        #     )
+        #     # torchaudio.save(
+        #     #     f"../out/audio_{idx}.wav", audio[idx].unsqueeze(0), self.ac.sr
+        #     # )
         #     torchaudio.save(f"../out/x_{idx}.wav", x[idx].unsqueeze(0), self.ac.sr)
         #     # plt.plot(envelope[idx].numpy())
         #     plt.plot(mod_sig[idx].numpy())
@@ -146,7 +148,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             self.log(f"{stage}/audio_{self.loss_name}", loss, prog_bar=True, sync_dist=True)
 
         self.log(f"{stage}/ms_l1", mod_sig_mae, prog_bar=True, sync_dist=True)
-        # self.log(f"{stage}/loss", loss, prog_bar=False, sync_dist=True)
+        self.log(f"{stage}/loss", loss, prog_bar=False, sync_dist=True)
 
         out_dict = {
             "loss": loss,

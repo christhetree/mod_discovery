@@ -6,7 +6,7 @@ init_args:
   max_corner_val: 1.0
   min_end_val: 0.0
   max_end_val: 1.0
-  min_attack_frac: 0.5
-  max_attack_frac: 0.5
-  min_alpha: 1.0
-  max_alpha: 1.0
+  min_attack_frac: 0.0
+  max_attack_frac: 1.0
+  min_alpha: 0.1
+  max_alpha: 6.0
