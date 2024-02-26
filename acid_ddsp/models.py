@@ -5,8 +5,7 @@ from typing import Optional, List, Tuple
 import torch as tr
 from torch import Tensor as T
 from torch import nn
-from torchaudio.transforms import MelSpectrogram, FrequencyMasking, TimeMasking, \
-    Spectrogram
+from torchaudio.transforms import MelSpectrogram, FrequencyMasking, TimeMasking
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -74,12 +73,6 @@ class Spectral2DCNN(nn.Module):
             n_mels=n_mels,
             center=True,
         )
-        # self.spectrogram = Spectrogram(
-        #     n_fft=n_fft,
-        #     hop_length=hop_len,
-        #     normalized=False,
-        #     center=True,
-        # )
         n_bins = n_mels
         n_frames = n_samples // hop_len + 1
         temporal_dims = [n_frames] * len(out_channels)
@@ -154,5 +147,5 @@ if __name__ == "__main__":
     model = Spectral2DCNN()
     audio = tr.randn(1, 2, 6000)
     log.info(f"audio.shape: {audio.shape}")
-    out, latent = model(audio)
+    out, latent, _ = model(audio)
     log.info(f"out.shape: {out.shape}, latent.shape: {latent.shape}")

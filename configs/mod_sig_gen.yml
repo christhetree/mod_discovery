@@ -1,4 +1,4 @@
-class_path: acid_ddsp.modulations.ModSignalGenerator
+class_path: acid_ddsp.modulations.ModSignalGenerator  #
 init_args:
   min_start_val: 0.0
   max_start_val: 1.0

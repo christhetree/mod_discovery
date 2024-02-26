@@ -72,12 +72,21 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
     def step(self, batch: (T, T, T), stage: str) -> Dict[str, T]:
         midi_f0, note_on_duration, mod_sig = batch
+        batch_size = self.batch_size
+        assert midi_f0.shape == (batch_size,)
+        if stage == "train":
+            self.global_n = (
+                self.global_step * self.trainer.accumulate_grad_batches * batch_size
+            )
+        # TODO(cm): check if this works for DDP
+        self.log(f"global_n", float(self.global_n), sync_dist=True)
 
         # Generate ground truth audio x
         with tr.no_grad():
             (audio, envelope), _, _ = self.synth(
                 midi_f0=midi_f0, note_on_duration=note_on_duration
             )
+            assert audio.shape == (self.batch_size, int(self.ac.buffer_size_seconds * self.ac.sr))
             audio *= 0.5  # TODO(cm): record this somewhere
             if mod_sig.shape != audio.shape:
                 assert mod_sig.ndim == audio.ndim
@@ -86,6 +95,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     mod_sig, audio.size(-1), align_corners=True
                 )
             x = self.tvb(audio, cutoff_mod_sig=mod_sig)
+            assert x.shape == audio.shape
 
         # Extract mod_sig_hat
         model_in = tr.stack([audio, x], dim=1)
@@ -97,18 +107,20 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # import torchaudio
         # from matplotlib import pyplot as plt
         # for idx in range(x.size(0)):
-        #     # torchaudio.save(
-        #     #     f"../out/audio_{idx}.wav", audio[idx].unsqueeze(0), self.ac.sr
-        #     # )
+        #     torchaudio.save(
+        #         f"../out/audio_{idx}.wav", audio[idx].unsqueeze(0), self.ac.sr
+        #     )
         #     torchaudio.save(f"../out/x_{idx}.wav", x[idx].unsqueeze(0), self.ac.sr)
         #     # plt.plot(envelope[idx].numpy())
         #     plt.plot(mod_sig[idx].numpy())
         #     plt.ylim(0, 1)
         #     plt.show()
-        #     # plt.imshow(log_spec_dry[idx].numpy(), aspect="auto", origin="lower"
+        #     # plt.imshow(log_spec_dry[idx].numpy(), aspect="auto", origin="lower", cmap="magma")
         #     # plt.title("Dry")
         #     # plt.show()
-        #     plt.imshow(log_spec_wet[idx].numpy(), aspect="auto", origin="lower")
+        #     plt.imshow(
+        #         log_spec_wet[idx, :, :].numpy(), aspect="auto", origin="lower", cmap="magma"
+        #     )
         #     plt.title("Wet")
         #     plt.show()
         # exit()
@@ -125,16 +137,16 @@ class AcidDDSPLightingModule(pl.LightningModule):
         if self.use_p_loss:
             loss = self.loss_func(mod_sig_hat, mod_sig)
             self.log(
-                f"{stage}/ms_{self.loss_name}", loss, prog_bar=True, sync_dist=True
+                f"{stage}/ploss_{self.loss_name}", loss, prog_bar=True, sync_dist=True
             )
         else:
             x_hat = self.tvb(audio, cutoff_mod_sig=mod_sig_hat)
             assert x_hat.shape == x.shape
-            loss = self.loss_func(x_hat, x)
-            self.log(f"{stage}/x_{self.loss_name}", loss, prog_bar=True, sync_dist=True)
+            loss = self.loss_func(x_hat.unsqueeze(1), x.unsqueeze(1))
+            self.log(f"{stage}/audio_{self.loss_name}", loss, prog_bar=True, sync_dist=True)
 
         self.log(f"{stage}/ms_l1", mod_sig_mae, prog_bar=True, sync_dist=True)
-        self.log(f"{stage}/loss", loss, prog_bar=False, sync_dist=True)
+        # self.log(f"{stage}/loss", loss, prog_bar=False, sync_dist=True)
 
         out_dict = {
             "loss": loss,

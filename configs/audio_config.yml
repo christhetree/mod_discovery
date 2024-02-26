@@ -18,8 +18,8 @@ init_args:
 #  release: 0.200
 #  alpha: 2.0
 
-  min_midi_f0: 36
-  max_midi_f0: 36
+  min_midi_f0: 48
+  max_midi_f0: 48
   min_w_hz: 100.0
   max_w_hz: 8000.0
   min_q: 6.0

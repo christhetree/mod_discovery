@@ -4,3 +4,6 @@
 [submodule "torchlpc"]
 	path = torchlpc
 	url = git@github.com:christhetree/torchlpc.git
+[submodule "jtfst_implementation"]
+	path = jtfst_implementation
+	url = git@github.com:christhetree/jtfst_implementation.git

@@ -1,4 +1,4 @@
-class_path: acid_ddsp.models.Spectral2DCNN
+class_path: acid_ddsp.models.Spectral2DCNN  #
 init_args:
   in_ch: 2
   n_samples: 6000
@@ -7,8 +7,8 @@ init_args:
   hop_len: 32
   n_mels: 128
   kernel_size: [5, 7]
-  out_channels: [64, 64, 64, 64, 64]
-  temp_dilations: [1, 2, 4, 8, 16]
+  out_channels: [64, 64, 64, 64, 64, 64]
+  temp_dilations: [1, 1, 2, 4, 8, 16]
   pool_size: [2, 1]
   latent_dim: 1
   freq_mask_amount: 0.0
