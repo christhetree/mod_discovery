@@ -1,6 +1,7 @@
 import logging
 import os
 
+import librosa
 import torch as tr
 from torch import Tensor as T
 from torch import nn
@@ -26,9 +27,17 @@ class LogMelSpecFeatureExtractor(nn.Module):
         eps: float = 1e-7,
     ) -> None:
         super().__init__()
+        self.n_samples = n_samples
+        self.sr = sr
+        self.n_fft = n_fft
+        self.hop_len = hop_len
+        self.n_mels = n_mels
+        self.normalized = normalized
+        self.center = center
         self.freq_mask_amount = freq_mask_amount
         self.time_mask_amount = time_mask_amount
         self.eps = eps
+
         self.mel_spec = MelSpectrogram(
             sample_rate=int(sr),
             n_fft=n_fft,
@@ -37,6 +46,12 @@ class LogMelSpecFeatureExtractor(nn.Module):
             n_mels=n_mels,
             center=center,
         )
+        self.center_freqs = librosa.mel_frequencies(
+            n_mels=self.mel_spec.mel_scale.n_mels,
+            fmin=self.mel_spec.mel_scale.f_min,
+            fmax=self.mel_spec.mel_scale.f_max,
+            htk=self.mel_spec.mel_scale.mel_scale == "htk",
+        ).tolist()
         self.n_bins = n_mels
         self.n_frames = n_samples // hop_len + 1
         self.freq_mask = FrequencyMasking(

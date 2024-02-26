@@ -27,6 +27,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         model: nn.Module,
         loss_func: nn.Module,
         use_p_loss: bool = False,
+        log_envelope: bool = False,
     ):
         super().__init__()
         self.save_hyperparameters(ignore=["ac", "model", "loss_func"])
@@ -37,6 +38,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.model = model
         self.loss_func = loss_func
         self.use_p_loss = use_p_loss
+        self.log_envelope = log_envelope
 
         self.loss_name = self.loss_func.__class__.__name__
         self.l1 = nn.L1Loss()
@@ -103,8 +105,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         mod_sig_hat, latent, log_spec = self.model(model_in)
         mod_sig_hat = mod_sig_hat.squeeze(1)
         # log_spec_dry = log_spec[:, 1, :, :]
-        log_spec_dry = None
-        log_spec_wet = log_spec[:, 0, :, :]
+        log_spec_audio = None
+        log_spec_x = log_spec[:, 0, :, :]
 
         # import torchaudio
         # from matplotlib import pyplot as plt
@@ -133,7 +135,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             mod_sig_hat = util.linear_interpolate_last_dim(
                 mod_sig_hat, mod_sig.size(-1), align_corners=True
             )
-        mod_sig_mae = self.l1(mod_sig_hat, mod_sig)
+        mod_sig_l1 = self.l1(mod_sig_hat, mod_sig)
 
         x_hat = None
         if self.use_p_loss:
@@ -147,7 +149,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             loss = self.loss_func(x_hat.unsqueeze(1), x.unsqueeze(1))
             self.log(f"{stage}/audio_{self.loss_name}", loss, prog_bar=True, sync_dist=True)
 
-        self.log(f"{stage}/ms_l1", mod_sig_mae, prog_bar=True, sync_dist=True)
+        self.log(f"{stage}/ms_l1", mod_sig_l1, prog_bar=True, sync_dist=True)
         self.log(f"{stage}/loss", loss, prog_bar=False, sync_dist=True)
 
         out_dict = {
@@ -158,8 +160,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "x_hat": x_hat,
             "audio": audio,
             "envelope": envelope,
-            "log_spec_dry": log_spec_dry,
-            "log_spec_wet": log_spec_wet,
+            "log_spec_audio": log_spec_audio,
+            "log_spec_x": log_spec_x,
+            "mod_sig_l1": mod_sig_l1,
         }
         return out_dict
 

@@ -103,48 +103,6 @@ def plot_scalogram(
         ax.set_title(title, fontsize=fontsize)
 
 
-def plot_spectrogram(
-    audio: T,
-    ax: Optional[Subplot] = None,
-    title: Optional[str] = None,
-    save_name: Optional[str] = None,
-    save_dir: str = OUT_DIR,
-    sr: float = 44100,
-    fade_n_samples: int = 64,
-) -> T:
-    assert audio.ndim < 3
-    audio = audio.detach()
-    if audio.ndim == 1:
-        audio = audio.unsqueeze(0)
-    assert audio.size(0) == 1
-    spectrogram = Spectrogram(n_fft=512, power=1, center=True, normalized=False)
-    spec = tr.log(spectrogram(audio).squeeze(0))
-    if ax is None:
-        plt.imshow(spec, aspect="auto", interpolation="none")
-        plt.title(title)
-        plt.show()
-    else:
-        ax.imshow(spec, aspect="auto", interpolation="none")
-        if title is not None:
-            ax.set_title(title)
-
-    if save_name is not None:
-        sr = int(sr)
-        if not save_name.endswith(".wav"):
-            save_name = f"{save_name}.wav"
-        if fade_n_samples:
-            transform = Fade(
-                fade_in_len=fade_n_samples,
-                fade_out_len=fade_n_samples,
-                fade_shape="linear",
-            )
-            audio = transform(audio)
-        save_path = os.path.join(save_dir, save_name)
-        torchaudio.save(save_path, audio, sr)
-
-    return spec
-
-
 def plot_waveforms_stacked(
     waveforms: List[T],
     sr: float,

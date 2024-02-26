@@ -1,10 +1,11 @@
-seed_everything: 42
+seed_everything: 43
 
 custom:
   project_name: acid_ddsp
+  model_name: testing
 #  model_name: cnn_mel_spec_1ch_ploss
 #  model_name: cnn_mel_spec_1ch_mss
-  model_name: cnn_mel_spec_1ch_rss
+#  model_name: cnn_mel_spec_1ch_rss
   dataset_name: cf__f0_24_72__fixed_adsr
   cpu_batch_size: 3
   use_wandb_cpu: false
@@ -24,8 +25,10 @@ data:
     batch_size: 64
     ac: ../configs/audio_config.yml
     mod_sig_gen: ../configs/mod_sig_gen.yml
-    train_n_per_epoch: 8000
-    val_n_per_epoch: 2000
+#    train_n_per_epoch: 8000
+    train_n_per_epoch: 12
+#    val_n_per_epoch: 2000
+    val_n_per_epoch: 9
     num_workers: 4
 
 model:
@@ -40,5 +43,6 @@ model:
 #    use_p_loss: true
 #    loss_func: torch.nn.L1Loss
     use_p_loss: false
+    log_envelope: true
 
 optimizer: ../configs/adam_w.yml
