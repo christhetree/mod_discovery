@@ -205,7 +205,6 @@ class LogAudioCallback(Callback):
             title = f"idx_{example_idx}"
             osc_audio = out_dict.get("osc_audio")
             x = out_dict.get("x")
-            x = None
             x_hat = out_dict.get("x_hat")
             waveforms = []
             labels = []
@@ -269,7 +268,7 @@ class LogAudioCallback(Callback):
                     )
                 data = list(data.values())
                 logger.log_table(
-                    key="osc_audio", columns=columns, data=data, step=trainer.global_step
+                    key="audio", columns=columns, data=data, step=trainer.global_step
                 )
 
         self.out_dicts.clear()

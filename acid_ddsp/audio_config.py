@@ -14,11 +14,16 @@ class AudioConfig:
                  control_rate: int,
                  buffer_size_seconds: float,
                  note_on_duration: float,
-                 attack: float,
-                 decay: float,
-                 sustain: float,
-                 release: float,
-                 alpha: float,
+                 min_attack: float,
+                 max_attack: float,
+                 min_decay: float,
+                 max_decay: float,
+                 min_sustain: float,
+                 max_sustain: float,
+                 min_release: float,
+                 max_release: float,
+                 min_alpha: float,
+                 max_alpha: float,
                  min_midi_f0: int,
                  max_midi_f0: int,
                  min_w_hz: float,
@@ -30,11 +35,16 @@ class AudioConfig:
         self.control_rate = control_rate
         self.buffer_size_seconds = buffer_size_seconds
         self.note_on_duration = note_on_duration
-        self.attack = attack
-        self.decay = decay
-        self.sustain = sustain
-        self.release = release
-        self.alpha = alpha
+        self.min_attack = min_attack
+        self.max_attack = max_attack
+        self.min_decay = min_decay
+        self.max_decay = max_decay
+        self.min_sustain = min_sustain
+        self.max_sustain = max_sustain
+        self.min_release = min_release
+        self.max_release = max_release
+        self.min_alpha = min_alpha
+        self.max_alpha = max_alpha
         self.min_midi_f0 = min_midi_f0
         self.max_midi_f0 = max_midi_f0
         self.min_w_hz = min_w_hz

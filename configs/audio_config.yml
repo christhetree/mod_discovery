@@ -5,18 +5,42 @@ init_args:
 
   buffer_size_seconds: 0.125
   note_on_duration: 0.100
-  attack: 0.001
-  decay: 0.099
-  sustain: 0.5
-  release: 0.025
-  alpha: 2.0
+  min_attack: 0.001
+  max_attack: 0.001
+  min_decay: 0.099
+  max_decay: 0.099
+  min_sustain: 0.5
+  max_sustain: 0.5
+  min_release: 0.025
+  max_release: 0.025
+  min_alpha: 2.0
+  max_alpha: 2.0
+
 #  buffer_size_seconds: 1.0
 #  note_on_duration: 0.800
-#  attack: 0.008
-#  decay: 0.792
-#  sustain: 0.5
-#  release: 0.200
-#  alpha: 2.0
+#  min_attack: 0.008
+#  max_attack: 0.008
+#  min_decay: 0.792
+#  max_decay: 0.792
+#  min_sustain: 0.5
+#  max_sustain: 0.5
+#  min_release: 0.200
+#  max_release: 0.200
+#  min_alpha: 2.0
+#  max_alpha: 2.0
+
+#  buffer_size_seconds: 0.125
+#  note_on_duration: 0.100
+#  min_attack: 0.001
+#  max_attack: 0.050
+#  min_decay: 0.001
+#  max_decay: 0.100
+#  min_sustain: 0.1
+#  max_sustain: 1.0
+#  min_release: 0.001
+#  max_release: 0.050
+#  min_alpha: 0.1
+#  max_alpha: 6.0
 
   min_midi_f0: 24
   max_midi_f0: 72

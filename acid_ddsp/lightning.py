@@ -53,15 +53,23 @@ class AcidDDSPLightingModule(pl.LightningModule):
             no_grad=True,
             debug=False,
         )
-        adsr_vals = ADSRValues(
-            attack=ac.attack,
-            decay=ac.decay,
-            sustain=ac.sustain,
-            release=ac.release,
-            alpha=ac.alpha,
+        min_adsr_vals = ADSRValues(
+            attack=ac.min_attack,
+            decay=ac.min_decay,
+            sustain=ac.min_sustain,
+            release=ac.min_release,
+            alpha=ac.min_alpha,
         )
-        self.synth = CustomSynth(synthconfig=sc, adsr_vals=adsr_vals)
-
+        max_adsr_vals = ADSRValues(
+            attack=ac.max_attack,
+            decay=ac.max_decay,
+            sustain=ac.max_sustain,
+            release=ac.max_release,
+            alpha=ac.max_alpha,
+        )
+        self.synth = CustomSynth(
+            synthconfig=sc, min_adsr_vals=min_adsr_vals, max_adsr_vals=max_adsr_vals
+        )
         self.tvb = TimeVaryingBiquad(
             min_w=ac.min_w,
             max_w=ac.max_w,

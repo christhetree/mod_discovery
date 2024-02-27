@@ -18,22 +18,23 @@ class CustomSynth(AbstractSynth):
     def __init__(
         self,
         synthconfig: SynthConfig,
+        min_adsr_vals: ADSRValues,
+        max_adsr_vals: ADSRValues,
         vco_shape: Optional[float] = 1.0,
-        adsr_vals: Optional[ADSRValues] = None,
     ):
         super().__init__(synthconfig=synthconfig)
         self.vco_shape = vco_shape
         self.add_synth_modules(
             [
                 ("vco", SquareSawVCO),
-                ("adsr", CustomADSR, {"adsr_vals": adsr_vals}),
+                ("adsr", CustomADSR, {"min_adsr_vals": min_adsr_vals, "max_adsr_vals": max_adsr_vals}),
                 ("upsample", ControlRateUpsample),
                 ("vca", VCA),
             ]
         )
+        self.vco.set_parameter("tuning", tr.zeros((self.batch_size,)))
+        self.vco.set_parameter("mod_depth", tr.zeros((self.batch_size,)))
         if vco_shape is not None:
-            self.vco.set_parameter("tuning", tr.zeros((self.batch_size,)))
-            self.vco.set_parameter("mod_depth", tr.zeros((self.batch_size,)))
             self.vco.set_parameter("shape", tr.full((self.batch_size,), vco_shape))
         self.freeze_parameters(
             [
