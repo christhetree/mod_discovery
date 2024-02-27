@@ -5,17 +5,13 @@ from typing import Optional, List
 
 import PIL
 import librosa
+import librosa.display
 import numpy as np
-import torch as tr
-import torchaudio
 from matplotlib import pyplot as plt
 from matplotlib.axes import Subplot
 from matplotlib.figure import Figure
 from torch import Tensor as T
-from torchaudio.transforms import Spectrogram, Fade
 from torchvision.transforms import ToTensor
-
-from acid_ddsp.paths import OUT_DIR
 
 logging.basicConfig()
 log = logging.getLogger(__name__)

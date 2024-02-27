@@ -9,7 +9,7 @@ dependencies:
     - black
     - jsonargparse[signatures]
     - librosa
-    - matplotlib
+    - matplotlib=3.7.3
     - nnaudio
     - numba
     - numpy=1.23.5

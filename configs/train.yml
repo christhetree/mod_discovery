@@ -8,7 +8,7 @@ custom:
 #  model_name: cnn_mel_spec_1ch_rss
   dataset_name: cf__f0_24_72__fixed_adsr
   cpu_batch_size: 3
-  use_wandb_cpu: false
+  use_wandb_cpu: true
   use_wandb_gpu: true
 
 trainer:
@@ -26,7 +26,7 @@ data:
     ac: ../configs/audio_config.yml
     mod_sig_gen: ../configs/mod_sig_gen.yml
 #    train_n_per_epoch: 8000
-    train_n_per_epoch: 12
+    train_n_per_epoch: 9
 #    val_n_per_epoch: 2000
     val_n_per_epoch: 9
     num_workers: 4
@@ -38,8 +38,8 @@ model:
     model: ../configs/spectral_2dcnn.yml
 #    loss_func: torch.nn.L1Loss
 #    loss_func: torch.nn.MSELoss
-#    loss_func: auraloss.freq.MultiResolutionSTFTLoss
-    loss_func: ../configs/rand_mss.yml
+    loss_func: auraloss.freq.MultiResolutionSTFTLoss
+#    loss_func: ../configs/rand_mss.yml
 #    use_p_loss: true
 #    loss_func: torch.nn.L1Loss
     use_p_loss: false

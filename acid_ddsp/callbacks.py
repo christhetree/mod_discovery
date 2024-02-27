@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 from collections import defaultdict
 from typing import Any, Dict
@@ -160,13 +161,13 @@ class LogModSigAndSpecCallback(Callback):
         self.out_dicts.clear()
 
 
+# TODO(cm): make ABC
 class LogAudioCallback(Callback):
-    def __init__(self, n_examples: int = 5) -> None:
+    def __init__(self, n_examples: int = 5, render_time_sec: float = 1.0) -> None:
         super().__init__()
         self.n_examples = n_examples
-        self.x_audio = []
-        self.x_hat_audio = []
-        self.images = []
+        self.render_time_sec = render_time_sec
+        self.out_dicts = {}
 
     def on_validation_batch_end(
         self,
@@ -177,81 +178,98 @@ class LogAudioCallback(Callback):
         batch_idx: int,
         dataloader_idx: int = 0,
     ) -> None:
-        out_dict = {k: v.detach().cpu() for k, v in out_dict.items() if v is not None}
-
-        x = out_dict.get("x")
-        x_hat = out_dict.get("x_hat")
-        if x is None and x_hat is None:
-            log.debug(f"x and x_hat are both None, cannot log audio")
-            return
-
-        theta_density = out_dict["theta_density"]
-        theta_slope = out_dict["theta_slope"]
-        theta_density_hat = out_dict["theta_density_hat"]
-        theta_slope_hat = out_dict["theta_slope_hat"]
-
-        n_batches = theta_density.size(0)
-        if batch_idx == 0:
-            self.images = []
-            self.x_audio = []
-            self.x_hat_audio = []
-            for idx in range(self.n_examples):
-                if idx < n_batches:
-                    waveforms = []
-                    labels = []
-                    if x is not None:
-                        curr_x = x[idx]
-                        waveforms.append(curr_x)
-                        labels.append("x")
-                        self.x_audio.append(curr_x.swapaxes(0, 1).numpy())
-                    if x_hat is not None:
-                        curr_x_hat = x_hat[idx]
-                        waveforms.append(curr_x_hat)
-                        labels.append("x_hat")
-                        self.x_hat_audio.append(curr_x_hat.swapaxes(0, 1).numpy())
-
-                    title = (
-                        f"batch_idx_{idx}, "
-                        f"θd: {theta_density[idx]:.2f} -> "
-                        f"{theta_density_hat[idx]:.2f}, "
-                        f"θs: {theta_slope[idx]:.2f} -> "
-                        f"{theta_slope_hat[idx]:.2f}"
-                    )
-
-                    fig = plot_waveforms_stacked(
-                        waveforms, pl_module.synth.sr, title, labels
-                    )
-                    img = fig2img(fig)
-                    self.images.append(img)
+        example_idx = batch_idx // trainer.accumulate_grad_batches
+        if example_idx < self.n_examples:
+            if example_idx not in self.out_dicts:
+                out_dict = {
+                    k: v.detach().cpu() for k, v in out_dict.items() if v is not None
+                }
+                self.out_dicts[example_idx] = out_dict
 
     def on_validation_epoch_end(
         self, trainer: Trainer, pl_module: AcidDDSPLightingModule
     ) -> None:
+        sample_time_sec = pl_module.ac.buffer_size_seconds
+        n_repeat = math.ceil(self.render_time_sec / sample_time_sec)
+
+        images = []
+        osc_audio_waveforms = []
+        x_waveforms = []
+        x_hat_waveforms = []
+        for example_idx in range(self.n_examples):
+            if example_idx not in self.out_dicts:
+                log.warning(f"example_idx={example_idx} not in out_dicts")
+                continue
+
+            out_dict = self.out_dicts[example_idx]
+            title = f"idx_{example_idx}"
+            osc_audio = out_dict.get("osc_audio")
+            x = out_dict.get("x")
+            x = None
+            x_hat = out_dict.get("x_hat")
+            waveforms = []
+            labels = []
+
+            if osc_audio is not None:
+                osc_audio = osc_audio[0:1]
+                waveforms.append(osc_audio)
+                labels.append("osc_audio")
+                osc_audio = osc_audio.repeat(1, n_repeat)
+                osc_audio_waveforms.append(osc_audio.swapaxes(0, 1).numpy())
+            if x is not None:
+                x = x[0:1]
+                waveforms.append(x)
+                labels.append("x")
+                x = x.repeat(1, n_repeat)
+                x_waveforms.append(x.swapaxes(0, 1).numpy())
+            if x_hat is not None:
+                x_hat = x_hat[0:1]
+                waveforms.append(x_hat)
+                labels.append("x_hat")
+                x_hat = x_hat.repeat(1, n_repeat)
+                x_hat_waveforms.append(x_hat.swapaxes(0, 1).numpy())
+
+            fig = plot_waveforms_stacked(waveforms, pl_module.ac.sr, title, labels)
+            img = fig2img(fig)
+            images.append(img)
+
         for logger in trainer.loggers:
             # TODO(cm): enable for tensorboard as well
             if isinstance(logger, WandbLogger):
-                logger.log_image(
-                    key="waveforms", images=self.images, step=trainer.global_step
-                )
+                if images:
+                    logger.log_image(
+                        key="waveforms", images=images, step=trainer.global_step
+                    )
+
                 data = defaultdict(list)
-                columns = [f"idx_{idx}" for idx in range(len(self.images))]
-                for idx, curr_x_audio in enumerate(self.x_audio):
-                    data["x_audio"].append(
+                columns = [f"idx_{idx}" for idx in range(len(images))]
+                for idx, curr_osc_audio in enumerate(osc_audio_waveforms):
+                    data["osc_audio"].append(
+                        wandb.Audio(
+                            curr_osc_audio,
+                            caption=f"osc_audio_{idx}",
+                            sample_rate=int(pl_module.ac.sr),
+                        )
+                    )
+                for idx, curr_x_audio in enumerate(x_waveforms):
+                    data["x"].append(
                         wandb.Audio(
                             curr_x_audio,
                             caption=f"x_{idx}",
-                            sample_rate=int(pl_module.synth.sr),
+                            sample_rate=int(pl_module.ac.sr),
                         )
                     )
-                for idx, curr_x_hat_audio in enumerate(self.x_hat_audio):
-                    data["x_hat_audio"].append(
+                for idx, curr_x_hat_audio in enumerate(x_hat_waveforms):
+                    data["x_hat"].append(
                         wandb.Audio(
                             curr_x_hat_audio,
                             caption=f"x_hat_{idx}",
-                            sample_rate=int(pl_module.synth.sr),
+                            sample_rate=int(pl_module.ac.sr),
                         )
                     )
                 data = list(data.values())
                 logger.log_table(
-                    key="audio", columns=columns, data=data, step=trainer.global_step
+                    key="osc_audio", columns=columns, data=data, step=trainer.global_step
                 )
+
+        self.out_dicts.clear()
