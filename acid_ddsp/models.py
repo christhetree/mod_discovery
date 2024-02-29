@@ -7,6 +7,7 @@ from torch import Tensor as T
 from torch import nn
 
 from feature_extraction import LogMelSpecFeatureExtractor
+from tcn import TCN
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -84,7 +85,7 @@ class Spectral2DCNN(nn.Module):
         # TODO(cm): change from regression to classification
         self.output = nn.Conv1d(out_channels[-1], self.latent_dim, kernel_size=(1,))
 
-    def forward(self, x: T) -> (T, T, T):
+    def forward(self, x: T) -> (T, T, Optional[T]):
         assert x.ndim == 3
         log_spec = self.fe(x)
 
@@ -95,6 +96,39 @@ class Spectral2DCNN(nn.Module):
         x = self.output(x)
         x = tr.sigmoid(x)
         return x, latent, log_spec
+
+
+class AudioTCN(nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: List[int],
+        kernel_size: int,
+        dilations: List[int],
+        padding: str = "same",
+        padding_mode: str = "zeros",
+        act_name: str = "prelu",
+    ) -> None:
+        super().__init__()
+        self.tcn = TCN(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            dilations=dilations,
+            padding=padding,
+            padding_mode=padding_mode,
+            causal=False,
+            cached=False,
+            act_name=act_name,
+        )
+        log.info(f"TCN receptive field: {self.tcn.calc_receptive_field()}")
+        self.output = nn.Conv1d(out_channels[-1], out_channels=1, kernel_size=1)
+
+    def forward(self, x: T) -> (T, T, Optional[T]):
+        latent = self.tcn(x)
+        x = self.output(latent)
+        x = tr.sigmoid(x)
+        return x, latent, None
 
 
 if __name__ == "__main__":

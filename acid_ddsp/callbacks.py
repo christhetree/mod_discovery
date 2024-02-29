@@ -52,7 +52,7 @@ class LogModSigAndSpecCallback(Callback):
             if example_idx not in self.out_dicts:
                 if "x_hat" in out_dict:
                     x_hat = out_dict["x_hat"].unsqueeze(1)
-                    log_spec_x_hat = pl_module.model.fe(x_hat).squeeze(1)
+                    log_spec_x_hat = pl_module.spectral_visualizer(x_hat).squeeze(1)
                     out_dict["log_spec_x_hat"] = log_spec_x_hat
                 out_dict = {
                     k: v.detach().cpu() for k, v in out_dict.items() if v is not None
@@ -76,7 +76,7 @@ class LogModSigAndSpecCallback(Callback):
             mod_sig_hat = out_dict.get("mod_sig_hat")
             mod_sig_l1 = -1
 
-            y_coords = pl_module.model.fe.center_freqs
+            y_coords = pl_module.spectral_visualizer.center_freqs
             y_ticks = [
                 (idx, f"{f:.0f}")
                 for idx, f in list(enumerate(y_coords))[:: len(y_coords) // 10]

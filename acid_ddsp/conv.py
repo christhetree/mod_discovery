@@ -280,10 +280,10 @@ class Conv1dGeneral(nn.Module):
         in cached mode since the output number of samples can be different than the
         input number of samples, so this would typically only be used in cached mode.
         """
-        if not self.is_cached():
-            log.warning("`get_delay_samples()` is ill-defined when not in cached mode "
-                        "since the output number of samples can be different than the "
-                        "input number of samples.")
+        # if not self.is_cached():
+        #     log.warning("`get_delay_samples()` is ill-defined when not in cached mode "
+        #                 "since the output number of samples can be different than the "
+        #                 "input number of samples.")
         return self.padding_r
 
     def prepare_for_inference(self) -> None:

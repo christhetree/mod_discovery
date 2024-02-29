@@ -12,6 +12,7 @@ from acid_ddsp.audio_config import AudioConfig
 from acid_ddsp.filters import TimeVaryingBiquad
 from acid_ddsp.synth_modules import ADSRValues
 from acid_ddsp.synths import CustomSynth
+from feature_extraction import LogMelSpecFeatureExtractor
 from torchsynth.config import SynthConfig
 
 logging.basicConfig()
@@ -26,17 +27,21 @@ class AcidDDSPLightingModule(pl.LightningModule):
         ac: AudioConfig,
         model: nn.Module,
         loss_func: nn.Module,
+        spectral_visualizer: LogMelSpecFeatureExtractor,
         use_p_loss: bool = False,
         log_envelope: bool = False,
     ):
         super().__init__()
-        self.save_hyperparameters(ignore=["ac", "model", "loss_func"])
+        self.save_hyperparameters(
+            ignore=["ac", "model", "loss_func", "spectral_visualizer"]
+        )
         log.info(f"\n{self.hparams}")
 
         self.batch_size = batch_size
         self.ac = ac
         self.model = model
         self.loss_func = loss_func
+        self.spectral_visualizer = spectral_visualizer
         self.use_p_loss = use_p_loss
         self.log_envelope = log_envelope
 
@@ -115,9 +120,14 @@ class AcidDDSPLightingModule(pl.LightningModule):
         model_in = x.unsqueeze(1)
         mod_sig_hat, latent, log_spec = self.model(model_in)
         mod_sig_hat = mod_sig_hat.squeeze(1)
-        # log_spec_dry = log_spec[:, 1, :, :]
+
         log_spec_audio = None
+        if log_spec is None:
+            log_spec = self.spectral_visualizer(model_in)
+        assert log_spec.ndim == 4
         log_spec_x = log_spec[:, 0, :, :]
+        if log_spec.size(1) == 2:
+            log_spec_audio = log_spec[:, 1, :, :]
 
         # import torchaudio
         # from matplotlib import pyplot as plt

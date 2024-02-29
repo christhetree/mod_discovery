@@ -10,14 +10,16 @@ from conv import Conv1dGeneral
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
-log.setLevel(level=os.environ.get('LOGLEVEL', 'INFO'))
+log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
 class FiLM(nn.Module):
-    def __init__(self,
-                 cond_dim: int,  # Dim of conditioning input
-                 num_features: int,  # Dim of the conv channel
-                 use_bn: bool) -> None:
+    def __init__(
+        self,
+        cond_dim: int,  # Dim of conditioning input
+        num_features: int,  # Dim of the conv channel
+        use_bn: bool,
+    ) -> None:
         super().__init__()
         self.num_features = num_features
         self.use_bn = use_bn
@@ -38,27 +40,29 @@ class FiLM(nn.Module):
 
 
 class TCNBlock(nn.Module):
-    def __init__(self,
-                 in_channels: int,
-                 out_channels: int,
-                 kernel_size: int = 3,
-                 stride: int = 1,
-                 padding: Union[str, int, Tuple[int]] = "same",
-                 dilation: int = 1,
-                 bias: bool = True,
-                 padding_mode: str = "zeros",
-                 causal: bool = True,
-                 cached: bool = False,
-                 use_dynamic_bs: bool = True,
-                 batch_size: int = 1,
-                 use_ln: bool = False,
-                 temporal_dim: Optional[int] = None,
-                 use_act: bool = True,
-                 act_name: str = "prelu",
-                 use_res: bool = True,
-                 cond_dim: int = 0,
-                 use_film_bn: bool = True,  # TODO(cm): check if this should be false
-                 debug_mode: bool = True) -> None:
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        stride: int = 1,
+        padding: Union[str, int, Tuple[int]] = "same",
+        dilation: int = 1,
+        bias: bool = True,
+        padding_mode: str = "zeros",
+        causal: bool = True,
+        cached: bool = False,
+        use_dynamic_bs: bool = True,
+        batch_size: int = 1,
+        use_ln: bool = False,
+        temporal_dim: Optional[int] = None,
+        use_act: bool = True,
+        act_name: str = "prelu",
+        use_res: bool = True,
+        cond_dim: int = 0,
+        use_film_bn: bool = True,  # TODO(cm): check if this should be false
+        debug_mode: bool = True,
+    ) -> None:
         super().__init__()
         self.use_ln = use_ln
         self.temporal_dim = temporal_dim
@@ -73,32 +77,37 @@ class TCNBlock(nn.Module):
         if use_ln:
             assert temporal_dim is not None and temporal_dim > 0
             self.ln = nn.LayerNorm(
-                [in_channels, temporal_dim], elementwise_affine=False)
+                [in_channels, temporal_dim], elementwise_affine=False
+            )
 
         self.act = None
         if use_act:
             self.act = self.get_activation(act_name, out_channels)
 
-        self.conv = Conv1dGeneral(in_channels,
-                                  out_channels,
-                                  kernel_size,
-                                  stride=stride,
-                                  padding=padding,
-                                  dilation=dilation,
-                                  bias=bias,
-                                  padding_mode=padding_mode,
-                                  causal=causal,
-                                  cached=cached,
-                                  use_dynamic_bs=use_dynamic_bs,
-                                  batch_size=batch_size,
-                                  debug_mode=debug_mode)
+        self.conv = Conv1dGeneral(
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            bias=bias,
+            padding_mode=padding_mode,
+            causal=causal,
+            cached=cached,
+            use_dynamic_bs=use_dynamic_bs,
+            batch_size=batch_size,
+            debug_mode=debug_mode,
+        )
         self.res = None
         if use_res:
-            self.res = nn.Conv1d(in_channels,
-                                 out_channels,
-                                 kernel_size=(1,),
-                                 stride=(stride,),
-                                 bias=False)
+            self.res = nn.Conv1d(
+                in_channels,
+                out_channels,
+                kernel_size=(1,),
+                stride=(stride,),
+                bias=False,
+            )
 
         self.film = None
         if cond_dim > 0:
@@ -245,27 +254,29 @@ class TCNBlock(nn.Module):
 
 
 class TCN(nn.Module):
-    def __init__(self,
-                 in_channels: int,
-                 out_channels: List[int],
-                 kernel_size: int = 3,
-                 strides: Optional[List[int]] = None,
-                 padding: Union[str, int, Tuple[int]] = "same",
-                 dilations: Optional[List[int]] = None,
-                 bias: bool = True,
-                 padding_mode: str = "zeros",
-                 causal: bool = True,
-                 cached: bool = False,
-                 use_dynamic_bs: bool = True,
-                 batch_size: int = 1,
-                 use_ln: bool = False,
-                 temporal_dims: Optional[List[int]] = None,
-                 use_act: bool = True,
-                 act_name: str = "prelu",
-                 use_res: bool = True,
-                 cond_dim: int = 0,
-                 use_film_bn: bool = True,  # TODO(cm): check if this should be false
-                 debug_mode: bool = True) -> None:
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: List[int],
+        kernel_size: int = 3,
+        strides: Optional[List[int]] = None,
+        padding: Union[str, int, Tuple[int]] = "same",
+        dilations: Optional[List[int]] = None,
+        bias: bool = True,
+        padding_mode: str = "zeros",
+        causal: bool = True,
+        cached: bool = False,
+        use_dynamic_bs: bool = True,
+        batch_size: int = 1,
+        use_ln: bool = False,
+        temporal_dims: Optional[List[int]] = None,
+        use_act: bool = True,
+        act_name: str = "prelu",
+        use_res: bool = True,
+        cond_dim: int = 0,
+        use_film_bn: bool = True,  # TODO(cm): check if this should be false
+        debug_mode: bool = True,
+    ) -> None:
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -292,7 +303,7 @@ class TCN(nn.Module):
         assert self.n_blocks > 0
 
         if dilations is None:
-            dilations = [4 ** idx for idx in range(self.n_blocks)]
+            dilations = [4**idx for idx in range(self.n_blocks)]
             log.info(f"Setting dilations automatically to: {dilations}")
         assert len(dilations) == self.n_blocks
         self.dilations = dilations
@@ -309,9 +320,9 @@ class TCN(nn.Module):
 
         self.blocks = nn.ModuleList()
         block_out_ch = None
-        for idx, (curr_out_ch, dil, stride) in enumerate(zip(out_channels,
-                                                             dilations,
-                                                             strides)):
+        for idx, (curr_out_ch, dil, stride) in enumerate(
+            zip(out_channels, dilations, strides)
+        ):
             if idx == 0:
                 block_in_ch = in_channels
             else:
@@ -322,26 +333,30 @@ class TCN(nn.Module):
             if temporal_dims is not None:
                 temp_dim = temporal_dims[idx]
 
-            self.blocks.append(TCNBlock(block_in_ch,
-                                        block_out_ch,
-                                        kernel_size,
-                                        stride,
-                                        padding,
-                                        dil,
-                                        bias,
-                                        padding_mode,
-                                        causal,
-                                        cached,
-                                        use_dynamic_bs,
-                                        batch_size,
-                                        use_ln,
-                                        temp_dim,
-                                        use_act,
-                                        act_name,
-                                        use_res,
-                                        cond_dim,
-                                        use_film_bn,
-                                        debug_mode))
+            self.blocks.append(
+                TCNBlock(
+                    block_in_ch,
+                    block_out_ch,
+                    kernel_size,
+                    stride,
+                    padding,
+                    dil,
+                    bias,
+                    padding_mode,
+                    causal,
+                    cached,
+                    use_dynamic_bs,
+                    batch_size,
+                    use_ln,
+                    temp_dim,
+                    use_act,
+                    act_name,
+                    use_res,
+                    cond_dim,
+                    use_film_bn,
+                    debug_mode,
+                )
+            )
 
     @tr.jit.export
     def is_conditional(self) -> bool:
@@ -399,7 +414,7 @@ class TCN(nn.Module):
         assert self.dilations[0] == 1  # TODO(cm): add support for >1 starting dilation
         rf = self.kernel_size
         for dil in self.dilations[1:]:
-            rf += ((self.kernel_size - 1) * dil)
+            rf += (self.kernel_size - 1) * dil
         return rf
 
     def prepare_for_inference(self) -> None:
@@ -424,15 +439,27 @@ class TCN(nn.Module):
         return x
 
 
-if __name__ == '__main__':
-    out_channels = [8] * 4
-    tcn = TCN(1, out_channels, cond_dim=3, causal=False, cached=False, padding="valid")
+if __name__ == "__main__":
+    n_layers = 9
+    out_channels = [8] * n_layers
+    dilations = [2**idx for idx in range(n_layers)]
+    tcn = TCN(
+        in_channels=1,
+        out_channels=out_channels,
+        kernel_size=11,
+        dilations=dilations,
+        cond_dim=0,
+        causal=False,
+        cached=False,
+        padding="same",
+        padding_mode="zeros",
+    )
     log.info(f"Receptive field: {tcn.calc_receptive_field()}")
-    log.info(f"Delay samples:   {tcn.get_delay_samples()}")
+    # log.info(f"Delay samples:   {tcn.get_delay_samples()}")
     audio = tr.rand((1, 1, 65536))
-    cond = tr.rand((1, 3))
-    # cond = None
+    # cond = tr.rand((1, 3))
+    cond = None
     out = tcn.forward(audio, cond)
     log.info(out.shape)
 
-    script = tr.jit.script(tcn)
+    # script = tr.jit.script(tcn)

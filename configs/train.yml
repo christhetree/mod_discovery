@@ -1,8 +1,11 @@
-seed_everything: 43
+seed_everything: 42
 
 custom:
   project_name: acid_ddsp
   model_name: testing
+#  model_name: tcn_1ch_ploss
+#  model_name: tcn_1ch_mss
+#  model_name: tcn_1ch_esr
 #  model_name: cnn_mel_spec_1ch_ploss
 #  model_name: cnn_mel_spec_1ch_mss
 #  model_name: cnn_mel_spec_1ch_rss
@@ -14,7 +17,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [0]
+  devices: [1]
   max_epochs: 20
   num_sanity_val_steps: 0
   accumulate_grad_batches: 1
@@ -36,13 +39,16 @@ model:
   init_args:
     ac: ../configs/audio_config.yml
     model: ../configs/spectral_2dcnn.yml
+#    model: ../configs/audio_tcn.yml
 #    loss_func: torch.nn.L1Loss
 #    loss_func: torch.nn.MSELoss
+#    loss_func: auraloss.time.ESRLoss
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
 #    loss_func: ../configs/rand_mss.yml
 #    use_p_loss: true
 #    loss_func: torch.nn.L1Loss
     use_p_loss: false
     log_envelope: true
+    spectral_visualizer: ../configs/log_mel_spec.yml
 
 optimizer: ../configs/adam_w.yml
