@@ -5,6 +5,7 @@ from collections import defaultdict
 from typing import Any, Dict
 
 import wandb
+from auraloss.time import ESRLoss
 from matplotlib import pyplot as plt
 from pytorch_lightning import Trainer, Callback
 from pytorch_lightning.callbacks import LearningRateMonitor
@@ -36,6 +37,7 @@ class LogModSigAndSpecCallback(Callback):
         super().__init__()
         self.n_examples = n_examples
         self.out_dicts = {}
+        self.esr = ESRLoss()
         self.l1 = nn.L1Loss()
 
     def on_validation_batch_end(
@@ -50,7 +52,7 @@ class LogModSigAndSpecCallback(Callback):
         example_idx = batch_idx // trainer.accumulate_grad_batches
         if example_idx < self.n_examples:
             if example_idx not in self.out_dicts:
-                if "x_hat" in out_dict:
+                if "x_hat" in out_dict and out_dict["x_hat"] is not None:
                     x_hat = out_dict["x_hat"].unsqueeze(1)
                     log_spec_x_hat = pl_module.spectral_visualizer(x_hat).squeeze(1)
                     out_dict["log_spec_x_hat"] = log_spec_x_hat
@@ -74,6 +76,7 @@ class LogModSigAndSpecCallback(Callback):
             envelope = out_dict.get("envelope")
             mod_sig = out_dict.get("mod_sig")
             mod_sig_hat = out_dict.get("mod_sig_hat")
+            mod_sig_esr = -1
             mod_sig_l1 = -1
 
             y_coords = pl_module.spectral_visualizer.center_freqs
@@ -88,6 +91,7 @@ class LogModSigAndSpecCallback(Callback):
                 vmin = min(log_spec_x[0].min(), log_spec_x_hat[0].min())
                 vmax = max(log_spec_x[0].max(), log_spec_x_hat[0].max())
             if mod_sig is not None and mod_sig_hat is not None:
+                mod_sig_esr = self.esr(mod_sig[0], mod_sig_hat[0]).item()
                 mod_sig_l1 = self.l1(mod_sig[0], mod_sig_hat[0]).item()
 
             title = f"idx_{example_idx}"
@@ -131,8 +135,17 @@ class LogModSigAndSpecCallback(Callback):
                 ax[2].set(aspect=envelope.size(1))
 
             if mod_sig is not None:
-                ax[2].plot(mod_sig[0].numpy(), label="ms", color="black")
+                mod_sig_np = mod_sig[0].numpy()
+                ax[2].plot(mod_sig_np, label="ms", color="black")
                 ax[2].set(aspect=mod_sig.size(1))
+                # mod_sig_fitted = piecewise_fitting_noncontinuous(
+                #     mod_sig_np, degree=degree, n_knots=n_segments - 1
+                # )
+                # ax[2].plot(
+                #     mod_sig_fitted,
+                #     label=f"poly{degree}s{n_segments}",
+                #     color="red"
+                # )
 
             if mod_sig_hat is not None:
                 ax[2].plot(mod_sig_hat[0].numpy(), label="ms_hat", color="orange")
@@ -142,6 +155,7 @@ class LogModSigAndSpecCallback(Callback):
             ax[2].set_ylabel("Amplitude")
             ax[2].set_ylim(0, 1)
             ax[2].set_title(
+                # f"env (blu), ms (blk), ms_hat (orange), p{degree}s{n_segments} (red)\n"
                 f"env (blue), mod_sig (black), mod_sig_hat (orange)\n"
                 f"mod_sig_l1: {mod_sig_l1:.3f}"
             )

@@ -4,6 +4,7 @@ from typing import Dict
 
 import pytorch_lightning as pl
 import torch as tr
+from auraloss.time import ESRLoss
 from torch import Tensor as T
 from torch import nn
 
@@ -46,6 +47,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.log_envelope = log_envelope
 
         self.loss_name = self.loss_func.__class__.__name__
+        self.esr = ESRLoss()
         self.l1 = nn.L1Loss()
         self.global_n = 0
 
@@ -156,7 +158,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
             mod_sig_hat = util.linear_interpolate_last_dim(
                 mod_sig_hat, mod_sig.size(-1), align_corners=True
             )
-        mod_sig_l1 = self.l1(mod_sig_hat, mod_sig)
+
+        with tr.no_grad():
+            mod_sig_esr = self.esr(mod_sig_hat, mod_sig)
+            mod_sig_l1 = self.l1(mod_sig_hat, mod_sig)
 
         x_hat = None
         if self.use_p_loss:
@@ -172,6 +177,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 f"{stage}/audio_{self.loss_name}", loss, prog_bar=True, sync_dist=True
             )
 
+        self.log(f"{stage}/ms_esr", mod_sig_esr, prog_bar=True, sync_dist=True)
         self.log(f"{stage}/ms_l1", mod_sig_l1, prog_bar=True, sync_dist=True)
         self.log(f"{stage}/loss", loss, prog_bar=False, sync_dist=True)
 

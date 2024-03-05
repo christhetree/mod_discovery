@@ -192,3 +192,33 @@ def plot_xy_points_and_grads(
     ax.set_title(title, fontsize=fontsize)
     ax.set_xlabel(x_label, fontsize=fontsize)
     ax.set_ylabel(y_label, fontsize=fontsize)
+
+
+def piecewise_fitting_noncontinuous(
+    y: np.ndarray,
+    degree: int = 3,
+    n_knots: int = 0,
+    knot_locations: Optional[List[int]] = None,
+) -> np.ndarray:
+    assert y.ndim == 1
+    n_samples = y.shape[0]
+    if knot_locations is None:
+        step_size = n_samples // (n_knots + 1)
+        knot_locations = [step_size * (idx + 1) for idx in range(n_knots)]
+    assert len(knot_locations) == n_knots
+    assert all(0 < k < n_samples for k in knot_locations)
+
+    segments = []
+    knot_locations = knot_locations + [n_samples]
+    x = np.linspace(0, 1, n_samples)
+    start_idx = 0
+    for end_idx in knot_locations:
+        curr_x = x[start_idx:end_idx]
+        curr_y = y[start_idx:end_idx]
+        poly = np.polynomial.Polynomial.fit(x=curr_x, y=curr_y, deg=degree)
+        segment = poly(curr_x)
+        segments.append(segment)
+        start_idx = end_idx
+
+    y_fitted = np.concatenate(segments)
+    return y_fitted
