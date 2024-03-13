@@ -1,5 +1,6 @@
 import logging
 import os
+from typing import Dict
 
 import torch as tr
 from torch import Tensor as T
@@ -31,8 +32,15 @@ class MidiF0ModSignalDataset(Dataset):
     def __len__(self) -> int:
         return self.num_examples_per_epoch
 
-    def __getitem__(self, idx: int) -> (T, T, T):
+    def __getitem__(self, idx: int) -> Dict[str, T]:
         midi_f0 = tr.randint(self.ac.min_midi_f0, self.ac.max_midi_f0 + 1, (1,))
         midi_f0 = midi_f0.squeeze(0)
         mod_sig = self.mod_sig_gen(self.n_frames)
-        return midi_f0, self.note_on_duration, mod_sig
+        q_norm = tr.rand((1,))
+        q_norm = q_norm.squeeze(0)
+        return {
+            "midi_f0": midi_f0,
+            "note_on_duration": self.note_on_duration,
+            "mod_sig": mod_sig,
+            "q_norm": q_norm,
+        }

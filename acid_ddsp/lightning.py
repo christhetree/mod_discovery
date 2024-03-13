@@ -87,8 +87,13 @@ class AcidDDSPLightingModule(pl.LightningModule):
     def on_train_start(self) -> None:
         self.global_n = 0
 
-    def step(self, batch: (T, T, T), stage: str) -> Dict[str, T]:
-        midi_f0, note_on_duration, mod_sig = batch
+    def step(self, batch: Dict[str, T], stage: str) -> Dict[str, T]:
+        midi_f0 = batch["midi_f0"]
+        note_on_duration = batch["note_on_duration"]
+        mod_sig = batch["mod_sig"]
+        q_norm = batch["q_norm"]
+        q = q_norm * (self.ac.max_q - self.ac.min_q) + self.ac.min_q
+
         batch_size = self.batch_size
         assert midi_f0.shape == (batch_size,)
         if stage == "train":
@@ -114,7 +119,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 mod_sig = util.linear_interpolate_last_dim(
                     mod_sig, osc_audio.size(-1), align_corners=True
                 )
-            x = self.tvb(osc_audio, cutoff_mod_sig=mod_sig)
+            q_mod_sig = tr.ones_like(mod_sig) * q_norm.unsqueeze(-1)
+            x = self.tvb(osc_audio, cutoff_mod_sig=mod_sig, resonance_mod_sig=q_mod_sig)
             assert x.shape == osc_audio.shape
 
         # Extract mod_sig_hat
@@ -170,7 +176,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 f"{stage}/ploss_{self.loss_name}", loss, prog_bar=True, sync_dist=True
             )
         else:
-            x_hat = self.tvb(osc_audio, cutoff_mod_sig=mod_sig_hat)
+            x_hat = self.tvb(
+                osc_audio, cutoff_mod_sig=mod_sig_hat, resonance_mod_sig=q_mod_sig
+            )
             assert x_hat.shape == x.shape
             loss = self.loss_func(x_hat.unsqueeze(1), x.unsqueeze(1))
             self.log(
@@ -191,14 +199,15 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "envelope": envelope,
             "log_spec_audio": log_spec_audio,
             "log_spec_x": log_spec_x,
+            "q": q,
         }
         return out_dict
 
-    def training_step(self, batch: (T, T, T), batch_idx: int) -> Dict[str, T]:
+    def training_step(self, batch: Dict[str, T], batch_idx: int) -> Dict[str, T]:
         return self.step(batch, stage="train")
 
-    def validation_step(self, batch: (T, T, T), stage: str) -> Dict[str, T]:
+    def validation_step(self, batch: Dict[str, T], stage: str) -> Dict[str, T]:
         return self.step(batch, stage="val")
 
-    def test_step(self, batch: (T, T, T), stage: str) -> Dict[str, T]:
+    def test_step(self, batch: Dict[str, T], stage: str) -> Dict[str, T]:
         return self.step(batch, stage="test")

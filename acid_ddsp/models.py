@@ -150,8 +150,8 @@ class Spectral2DCNN(nn.Module):
         # # x = magic_clamp(x, min_value=0.0, max_value=1.0)
 
         x = self.output(x)
-        # x = tr.sigmoid(x)
-        x = magic_clamp(x, min_value=0.0, max_value=1.0)
+        x = tr.sigmoid(x)
+        # x = magic_clamp(x, min_value=0.0, max_value=1.0)
         # x = tr.clamp(x, min=0.0, max=1.0)
         return x, latent, log_spec
 
