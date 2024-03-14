@@ -3,10 +3,10 @@ seed_everything: 42
 custom:
   project_name: acid_ddsp
 #  model_name: testing
-  model_name: cnn_mel_spec_mss_sigmoid
-#  model_name: cnn_mel_spec_mss_clamped
-#  dataset_name: cf__f0_24_72__fixed_adsr__rand_q
-  dataset_name: cf_pointy__f0_24_72__fixed_adsr
+#  model_name: cnn_mel_spec_ploss
+  model_name: cnn_mel_spec_mss
+  dataset_name: cfq__f0_24_72__fixed_adsr
+#  dataset_name: cfq_pointy__f0_24_72__fixed_adsr
   cpu_batch_size: 3
   use_wandb_cpu: false
   use_wandb_gpu: true
@@ -14,7 +14,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [4]
+  devices: [7]
   max_epochs: 20
   num_sanity_val_steps: 0
   accumulate_grad_batches: 1
@@ -24,8 +24,8 @@ data:
   init_args:
     batch_size: 64
     ac: ../configs/audio_config.yml
-#    mod_sig_gen: ../configs/mod_sig_gen.yml
-    mod_sig_gen: ../configs/mod_sig_gen__pointy.yml
+    mod_sig_gen: ../configs/mod_sig_gen.yml
+#    mod_sig_gen: ../configs/mod_sig_gen__pointy.yml
     train_n_per_epoch: 8000
 #    train_n_per_epoch: 9
     val_n_per_epoch: 2000

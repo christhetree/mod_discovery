@@ -77,6 +77,7 @@ class LogModSigAndSpecCallback(Callback):
             mod_sig = out_dict.get("mod_sig")
             mod_sig_hat = out_dict.get("mod_sig_hat")
             q = out_dict.get("q", [-1])
+            q_hat = out_dict.get("q_hat", [-1])
             mod_sig_esr = -1
             mod_sig_l1 = -1
 
@@ -158,7 +159,8 @@ class LogModSigAndSpecCallback(Callback):
             ax[2].set_title(
                 # f"env (blu), ms (blk), ms_hat (orange), p{degree}s{n_segments} (red)\n"
                 f"env (blue), mod_sig (black), mod_sig_hat (orange)\n"
-                f"ms_l1: {mod_sig_l1:.3f}, ms_esr: {mod_sig_esr:.3f}, q: {q[0]:.3f}"
+                f"ms_l1: {mod_sig_l1:.3f}, ms_esr: {mod_sig_esr:.3f}\n"
+                f"q: {q[0]:.3f}, q_hat: {q_hat[0]:.3f}"
             )
 
             fig.tight_layout()

@@ -50,6 +50,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.esr = ESRLoss()
         self.l1 = nn.L1Loss()
         self.global_n = 0
+        self.is_q_learnable = ac.min_q != ac.max_q
 
         sc = SynthConfig(
             batch_size=batch_size,
@@ -126,8 +127,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # Extract mod_sig_hat
         # model_in = tr.stack([x, osc_audio], dim=1)
         model_in = x.unsqueeze(1)
-        mod_sig_hat, latent, log_spec = self.model(model_in)
+        mod_sig_hat, q_norm_hat, latent, log_spec = self.model(model_in)
         mod_sig_hat = mod_sig_hat.squeeze(1)
+        q_hat = q_norm_hat * (self.ac.max_q - self.ac.min_q) + self.ac.min_q
 
         log_spec_audio = None
         if log_spec is None:
@@ -168,16 +170,29 @@ class AcidDDSPLightingModule(pl.LightningModule):
         with tr.no_grad():
             mod_sig_esr = self.esr(mod_sig_hat, mod_sig)
             mod_sig_l1 = self.l1(mod_sig_hat, mod_sig)
+            q_norm_l1 = 0.0
+            if self.is_q_learnable:
+                q_norm_l1 = self.l1(q_norm_hat, q_norm)
 
         x_hat = None
         if self.use_p_loss:
             loss = self.loss_func(mod_sig_hat, mod_sig)
+            if self.is_q_learnable:
+                q_loss = self.loss_func(q_norm_hat, q_norm)
+                self.log(
+                    f"{stage}/ploss_{self.loss_name}_q",
+                    q_loss,
+                    prog_bar=False,
+                    sync_dist=True,
+                )
+                loss += q_loss
             self.log(
                 f"{stage}/ploss_{self.loss_name}", loss, prog_bar=True, sync_dist=True
             )
         else:
+            q_mod_sig_hat = tr.ones_like(mod_sig_hat) * q_norm_hat.unsqueeze(-1)
             x_hat = self.tvb(
-                osc_audio, cutoff_mod_sig=mod_sig_hat, resonance_mod_sig=q_mod_sig
+                osc_audio, cutoff_mod_sig=mod_sig_hat, resonance_mod_sig=q_mod_sig_hat
             )
             assert x_hat.shape == x.shape
             loss = self.loss_func(x_hat.unsqueeze(1), x.unsqueeze(1))
@@ -185,8 +200,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 f"{stage}/audio_{self.loss_name}", loss, prog_bar=True, sync_dist=True
             )
 
-        self.log(f"{stage}/ms_esr", mod_sig_esr, prog_bar=True, sync_dist=True)
+        self.log(f"{stage}/ms_esr", mod_sig_esr, prog_bar=False, sync_dist=True)
         self.log(f"{stage}/ms_l1", mod_sig_l1, prog_bar=True, sync_dist=True)
+        self.log(f"{stage}/q_l1", q_norm_l1, prog_bar=False, sync_dist=True)
         self.log(f"{stage}/loss", loss, prog_bar=False, sync_dist=True)
 
         out_dict = {
@@ -200,6 +216,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "log_spec_audio": log_spec_audio,
             "log_spec_x": log_spec_x,
             "q": q,
+            "q_hat": q_hat,
         }
         return out_dict
 

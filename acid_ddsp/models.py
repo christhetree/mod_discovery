@@ -35,6 +35,7 @@ class Spectral2DCNN(nn.Module):
         pool_size: Tuple[int, int] = (2, 1),
         latent_dim: int = 1,
         use_ln: bool = True,
+        dropout: float = 0.25,
         # degree: int = 3,
         # n_segments: int = 4,
     ) -> None:
@@ -87,7 +88,15 @@ class Spectral2DCNN(nn.Module):
             curr_n_bins = curr_n_bins // pool_size[0]
         self.cnn = nn.Sequential(*layers)
 
-        self.output = nn.Conv1d(out_channels[-1], self.latent_dim, kernel_size=(1,))
+        self.out_ms = nn.Conv1d(out_channels[-1], self.latent_dim, kernel_size=(1,))
+
+        self.out_q = nn.Sequential(
+            nn.Linear(out_channels[-1], out_channels[-1] // 2),
+            nn.Dropout(p=dropout),
+            nn.PReLU(num_parameters=out_channels[-1] // 2),
+            nn.Linear(out_channels[-1] // 2, 1),
+            nn.Sigmoid(),
+        )
 
         # support = tr.linspace(0.0, 1.0, fe.n_frames).view(1, -1, 1, 1)
         # support = support.repeat(1, 1, n_segments, degree)
@@ -149,11 +158,14 @@ class Spectral2DCNN(nn.Module):
         # x = tr.sigmoid(x)
         # # x = magic_clamp(x, min_value=0.0, max_value=1.0)
 
-        x = self.output(x)
-        x = tr.sigmoid(x)
-        # x = magic_clamp(x, min_value=0.0, max_value=1.0)
-        # x = tr.clamp(x, min=0.0, max=1.0)
-        return x, latent, log_spec
+        x = self.out_ms(x)
+        ms_hat = tr.sigmoid(x)
+        # ms_hat = magic_clamp(x, min_value=0.0, max_value=1.0)
+
+        x = tr.mean(latent, dim=-1)
+        q_norm_hat = self.out_q(x).squeeze(-1)
+
+        return ms_hat, q_norm_hat, latent, log_spec
 
 
 class AudioTCN(nn.Module):
