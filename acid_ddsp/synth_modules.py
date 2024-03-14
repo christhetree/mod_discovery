@@ -64,9 +64,11 @@ class CustomADSR(ADSR):
 
 class SquareSawVCOLite(nn.Module):
     # Based off TorchSynth's SquareSawVCO
-    def __init__(self, sr: int):
+    def __init__(self, sr: int, batch_size: int):
         super().__init__()
         self.sr = sr
+        self.batch_size = batch_size
+        self.register_buffer("phase", tr.zeros((batch_size, 1)))
 
     def calc_n_partials(self, f0_hz: T) -> T:
         assert f0_hz.ndim == 2
@@ -89,7 +91,7 @@ class SquareSawVCOLite(nn.Module):
             osc_shape = osc_shape.unsqueeze(1)
             osc_shape = osc_shape.expand(-1, n_samples)
 
-        phase = (tr.rand((bs, 1)) * 2 * tr.pi) - tr.pi
+        phase = (self.phase.uniform_() * 2 * tr.pi) - tr.pi
         arg = tr.cumsum(2 * tr.pi * f0_hz / self.sr, dim=1)
         arg += phase
 

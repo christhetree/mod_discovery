@@ -33,7 +33,7 @@ class AcidSynth(nn.Module):
             release=ac.max_release,
             alpha=ac.max_alpha,
         )
-        self.vco = SquareSawVCOLite(ac.sr)
+        self.vco = SquareSawVCOLite(ac.sr, batch_size)
         self.adsr = CustomADSR(
             ac.sr, ac.n_samples, batch_size, min_adsr_vals, max_adsr_vals
         )
