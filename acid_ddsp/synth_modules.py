@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Optional, Dict
 
 import torch as tr
-from torch import Tensor as T
+from torch import Tensor as T, nn
 
 from torchsynth.config import SynthConfig
 from torchsynth.module import SquareSawVCO, LFO, ADSR
@@ -13,7 +13,7 @@ from torchsynth.signal import Signal
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
-log.setLevel(level=os.environ.get('LOGLEVEL', 'INFO'))
+log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
 @dataclass
@@ -75,6 +75,44 @@ class CustomLFO(LFO):
                 self.set_parameter(curr_lfo_type, tr.zeros(self.batch_size))
 
 
+class SquareSawVCOLite(nn.Module):
+    # Based off TorchSynth's SquareSawVCO
+    def __init__(self, sr: float):
+        super().__init__()
+        self.sr = sr
+
+    def calc_n_partials(self, freq_hz: T) -> T:
+        assert freq_hz.ndim == 2
+        max_f0_hz = tr.max(freq_hz, dim=1, keepdim=True).values
+        # TODO(cm): check this calculation
+        n_partials = 12000 / (max_f0_hz * tr.log10(max_f0_hz))
+        return n_partials
+
+    def forward(self, f0_hz: T, osc_shape: T, n_samples: Optional[int] = None) -> T:
+        assert 1 <= f0_hz.ndim <= 2
+        assert 1 <= osc_shape.ndim <= 2
+        bs = f0_hz.size(0)
+
+        if f0_hz.ndim == 1:
+            assert n_samples is not None
+            f0_hz = f0_hz.unsqueeze(1)
+            f0_hz = f0_hz.expand(-1, n_samples)
+        if osc_shape.ndim == 1:
+            assert n_samples is not None
+            osc_shape = osc_shape.unsqueeze(1)
+            osc_shape = osc_shape.expand(-1, n_samples)
+
+        phase = (tr.rand((bs, 1)) * 2 * tr.pi) - tr.pi
+        arg = tr.cumsum(2 * tr.pi * f0_hz / self.sr, dim=1)
+        arg += phase
+
+        # TODO(cm): check how this works
+        n_partials = self.calc_n_partials(f0_hz)
+        square_wave = tr.tanh(tr.pi * n_partials * tr.sin(arg) / 2)
+        out_wave = (1 - (osc_shape / 2)) * square_wave * (1 + (osc_shape * tr.cos(arg)))
+        return out_wave
+
+
 class CustomSquareSawVCO(SquareSawVCO):
     def __init__(
         self,
@@ -117,3 +155,18 @@ class CustomSquareSawVCO(SquareSawVCO):
         cosine_argument += self.p("initial_phase").unsqueeze(1)
         output = self.oscillator(cosine_argument, midi_f0, shape_mod_signal)
         return output.as_subclass(Signal)
+
+
+if __name__ == "__main__":
+    import torchaudio
+    freq = tr.tensor([220.0, 220.0])
+    osc_shape = tr.tensor([1.0, 0.5])
+
+    sr = 48000
+    n_samples = 48000
+    vco = SquareSawVCOLite(sr)
+    out_wave = vco(freq, osc_shape, n_samples)
+
+    for idx, audio in enumerate(out_wave):
+        audio = audio.unsqueeze(0)
+        torchaudio.save(f"../out/out_wave_{idx}.wav", audio, sr)
