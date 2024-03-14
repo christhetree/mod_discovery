@@ -80,6 +80,8 @@ class LogModSigAndSpecCallback(Callback):
             q_hat = out_dict.get("q_hat", [-1])
             dist_gain = out_dict.get("dist_gain", [-1])
             dist_gain_hat = out_dict.get("dist_gain_hat", [-1])
+            osc_shape = out_dict.get("osc_shape", [-1])
+            osc_shape_hat = out_dict.get("osc_shape_hat", [-1])
             mod_sig_esr = -1
             mod_sig_l1 = -1
 
@@ -163,7 +165,8 @@ class LogModSigAndSpecCallback(Callback):
                 f"env (blue), mod_sig (black), mod_sig_hat (orange)\n"
                 f"ms_l1: {mod_sig_l1:.3f}, ms_esr: {mod_sig_esr:.3f}\n"
                 f"q: {q[0]:.2f}, q': {q_hat[0]:.2f}, "
-                f"dg: {dist_gain[0]:.2f}, dg': {dist_gain_hat[0]:.2f}"
+                f"dg: {dist_gain[0]:.2f}, dg': {dist_gain_hat[0]:.2f},"
+                f"os: {osc_shape[0]:.2f}, os': {osc_shape_hat[0]:.2f}"
             )
 
             fig.tight_layout()

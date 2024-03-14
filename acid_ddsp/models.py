@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 from magic_clamp import magic_clamp
 import torch as tr
 from torch import Tensor as T
@@ -106,6 +106,14 @@ class Spectral2DCNN(nn.Module):
             nn.Sigmoid(),
         )
 
+        self.out_osc_shape = nn.Sequential(
+            nn.Linear(out_channels[-1], out_channels[-1] // 2),
+            nn.Dropout(p=dropout),
+            nn.PReLU(num_parameters=out_channels[-1] // 2),
+            nn.Linear(out_channels[-1] // 2, 1),
+            nn.Sigmoid(),
+        )
+
         # support = tr.linspace(0.0, 1.0, fe.n_frames).view(1, -1, 1, 1)
         # support = support.repeat(1, 1, n_segments, degree)
         #
@@ -131,7 +139,7 @@ class Spectral2DCNN(nn.Module):
         # self.lstm = nn.LSTM(out_channels[-1], out_channels[-1], batch_first=True)
         # self.lstm = nn.LSTM(fe.n_bins, out_channels[-1], batch_first=True)
 
-    def forward(self, x: T) -> (T, T, Optional[T]):
+    def forward(self, x: T) -> Dict[str, T]:
         assert x.ndim == 3
         log_spec = self.fe(x)
 
@@ -173,8 +181,16 @@ class Spectral2DCNN(nn.Module):
         x = tr.mean(latent, dim=-1)
         q_norm_hat = self.out_q(x).squeeze(-1)
         dist_gain_norm_hat = self.out_dist_gain(x).squeeze(-1)
+        osc_shape_norm_hat = self.out_osc_shape(x).squeeze(-1)
 
-        return ms_hat, q_norm_hat, dist_gain_norm_hat, latent, log_spec
+        return {
+            "mod_sig_hat": ms_hat,
+            "q_norm_hat": q_norm_hat,
+            "dist_gain_norm_hat": dist_gain_norm_hat,
+            "osc_shape_norm_hat": osc_shape_norm_hat,
+            "latent": latent,
+            "log_spec": log_spec,
+        }
 
 
 class AudioTCN(nn.Module):

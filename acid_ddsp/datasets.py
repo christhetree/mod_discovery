@@ -34,16 +34,15 @@ class AcidSynthDataset(Dataset):
     def __getitem__(self, idx: int) -> Dict[str, T]:
         f0_hz = util.sample_log_uniform(self.ac.min_f0_hz, self.ac.max_f0_hz)
         f0_hz = tr.tensor(f0_hz)
-        osc_shape = tr.rand((1,))
-        osc_shape = osc_shape.squeeze(0)
         mod_sig = self.mod_sig_gen(self.ac.n_samples)
         q_norm = tr.rand((1,)).squeeze(0)
         dist_gain_norm = tr.rand((1,)).squeeze(0)
+        osc_shape_norm = tr.rand((1,)).squeeze(0)
         return {
             "f0_hz": f0_hz,
-            "osc_shape": osc_shape,
             "note_on_duration": self.note_on_duration,
             "mod_sig": mod_sig,
             "q_norm": q_norm,
             "dist_gain_norm": dist_gain_norm,
+            "osc_shape_norm": osc_shape_norm,
         }

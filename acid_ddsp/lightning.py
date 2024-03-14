@@ -49,6 +49,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.global_n = 0
         self.is_q_learnable = ac.min_q != ac.max_q
         self.is_dist_gain_learnable = ac.min_dist_gain != ac.max_dist_gain
+        self.is_osc_shape_learnable = ac.min_osc_shape != ac.max_osc_shape
 
         self.synth = AcidSynth(ac, batch_size)
 
@@ -57,15 +58,20 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
     def step(self, batch: Dict[str, T], stage: str) -> Dict[str, T]:
         f0_hz = batch["f0_hz"]
-        osc_shape = batch["osc_shape"]
         note_on_duration = batch["note_on_duration"]
         mod_sig = batch["mod_sig"]
         q_norm = batch["q_norm"]
         dist_gain_norm = batch["dist_gain_norm"]
+        osc_shape_norm = batch["osc_shape_norm"]
+
         q = q_norm * (self.ac.max_q - self.ac.min_q) + self.ac.min_q
         dist_gain = (
             dist_gain_norm * (self.ac.max_dist_gain - self.ac.min_dist_gain)
             + self.ac.min_dist_gain
+        )
+        osc_shape = (
+            osc_shape_norm * (self.ac.max_osc_shape - self.ac.min_osc_shape)
+            + self.ac.min_osc_shape
         )
 
         batch_size = self.batch_size
@@ -92,14 +98,22 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # Extract mod_sig_hat
         model_in = wet.unsqueeze(1)
-        mod_sig_hat, q_norm_hat, dist_gain_norm_hat, latent, log_spec = self.model(
-            model_in
-        )
+        model_out = self.model(model_in)
+        mod_sig_hat = model_out["mod_sig_hat"]
+        q_norm_hat = model_out["q_norm_hat"]
+        dist_gain_norm_hat = model_out["dist_gain_norm_hat"]
+        osc_shape_norm_hat = model_out["osc_shape_norm_hat"]
+        log_spec = model_out["log_spec"]
+
         mod_sig_hat = mod_sig_hat.squeeze(1)
         q_hat = q_norm_hat * (self.ac.max_q - self.ac.min_q) + self.ac.min_q
         dist_gain_hat = (
             dist_gain_norm_hat * (self.ac.max_dist_gain - self.ac.min_dist_gain)
             + self.ac.min_dist_gain
+        )
+        osc_shape_hat = (
+            osc_shape_norm_hat * (self.ac.max_osc_shape - self.ac.min_osc_shape)
+            + self.ac.min_osc_shape
         )
 
         log_spec_audio = None
@@ -147,6 +161,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             dist_gain_norm_l1 = 0.0
             if self.is_dist_gain_learnable:
                 dist_gain_norm_l1 = self.l1(dist_gain_norm_hat, dist_gain_norm)
+            osc_shape_norm_l1 = 0.0
+            if self.is_osc_shape_learnable:
+                osc_shape_norm_l1 = self.l1(osc_shape_norm_hat, osc_shape_norm)
 
         wet_hat = None
         if self.use_p_loss:
@@ -169,6 +186,15 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     sync_dist=True,
                 )
                 loss += dist_gain_loss
+            if self.is_osc_shape_learnable:
+                osc_shape_loss = self.loss_func(osc_shape_norm_hat, osc_shape_norm)
+                self.log(
+                    f"{stage}/ploss_{self.loss_name}_os",
+                    osc_shape_loss,
+                    prog_bar=False,
+                    sync_dist=True,
+                )
+                loss += osc_shape_loss
             self.log(
                 f"{stage}/ploss_{self.loss_name}", loss, prog_bar=True, sync_dist=True
             )
@@ -176,7 +202,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             q_mod_sig_hat = tr.ones_like(mod_sig_hat) * q_norm_hat.unsqueeze(-1)
             _, wet_hat, _ = self.synth(
                 f0_hz,
-                osc_shape,
+                osc_shape_hat,
                 note_on_duration,
                 mod_sig_hat,
                 q_mod_sig_hat,
@@ -191,6 +217,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.log(f"{stage}/ms_l1", mod_sig_l1, prog_bar=True, sync_dist=True)
         self.log(f"{stage}/q_l1", q_norm_l1, prog_bar=False, sync_dist=True)
         self.log(f"{stage}/dg_l1", dist_gain_norm_l1, prog_bar=False, sync_dist=True)
+        self.log(f"{stage}/os_l1", osc_shape_norm_l1, prog_bar=False, sync_dist=True)
         self.log(f"{stage}/loss", loss, prog_bar=False, sync_dist=True)
 
         out_dict = {
@@ -207,6 +234,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "q_hat": q_hat,
             "dist_gain": dist_gain,
             "dist_gain_hat": dist_gain_hat,
+            "osc_shape": osc_shape,
+            "osc_shape_hat": osc_shape_hat,
         }
         return out_dict
 

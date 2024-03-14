@@ -5,8 +5,8 @@ custom:
 #  model_name: testing
 #  model_name: cnn_ploss
   model_name: cnn_mss
-  dataset_name: cfqd
-#  dataset_name: cfqd_pointy
+  dataset_name: cfqdo
+#  dataset_name: cfqdo_pointy
   cpu_batch_size: 3
   use_wandb_cpu: false
   use_wandb_gpu: true
