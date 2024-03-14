@@ -26,7 +26,7 @@ class ADSRValues:
 class CustomADSR(ADSR):
     def __init__(
         self,
-        sr: float,
+        sr: int,
         n_samples: int,
         batch_size: int,
         min_adsr_vals: ADSRValues,
@@ -52,7 +52,7 @@ class CustomADSR(ADSR):
                 dr.maximum = max_adsr_vals.alpha
         sc = SynthConfig(
             batch_size=batch_size,
-            sample_rate=int(sr),
+            sample_rate=sr,
             buffer_size_seconds=n_samples / sr,
             control_rate=int(sr),
             reproducible=False,
@@ -64,13 +64,13 @@ class CustomADSR(ADSR):
 
 class SquareSawVCOLite(nn.Module):
     # Based off TorchSynth's SquareSawVCO
-    def __init__(self, sr: float):
+    def __init__(self, sr: int):
         super().__init__()
         self.sr = sr
 
-    def calc_n_partials(self, freq_hz: T) -> T:
-        assert freq_hz.ndim == 2
-        max_f0_hz = tr.max(freq_hz, dim=1, keepdim=True).values
+    def calc_n_partials(self, f0_hz: T) -> T:
+        assert f0_hz.ndim == 2
+        max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
         # TODO(cm): check this calculation
         n_partials = 12000 / (max_f0_hz * tr.log10(max_f0_hz))
         return n_partials

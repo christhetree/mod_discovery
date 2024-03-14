@@ -1,7 +1,6 @@
 class_path: acid_ddsp.data_modules.AudioConfig
 init_args:
   sr: 48000
-  control_rate: 480
 
   buffer_size_seconds: 0.125
   note_on_duration: 0.100
@@ -42,8 +41,10 @@ init_args:
 #  min_alpha: 0.1
 #  max_alpha: 6.0
 
-  min_midi_f0: 24
-  max_midi_f0: 72
+#  min_midi_f0: 24
+#  max_midi_f0: 72
+  min_f0_hz: 32.70
+  max_f0_hz: 523.25
   min_w_hz: 100.0
   max_w_hz: 8000.0
   min_q: 0.7071
@@ -54,4 +55,5 @@ init_args:
   max_dist_gain: 3.0
   min_osc_shape: 1.0
   max_osc_shape: 1.0
+  osc_audio_gain: 0.5
   stability_eps: 0.001

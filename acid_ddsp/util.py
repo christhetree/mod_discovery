@@ -1,7 +1,10 @@
 import logging
 import os
+from typing import Union
 
+import torch as tr
 import torch.nn.functional as F
+from scipy.stats import loguniform
 from torch import Tensor as T
 
 logging.basicConfig()
@@ -24,3 +27,16 @@ def linear_interpolate_last_dim(x: T, n: int, align_corners: bool = True) -> T:
     elif n_dim == 2:
         x = x.squeeze(1)
     return x
+
+
+def sample_log_uniform(low: float, high: float, n: int = 1) -> Union[float, T]:
+    # TODO(cm): replace with torch
+    if low == high:
+        if n == 1:
+            return low
+        else:
+            return tr.full(size=(n,), fill_value=low)
+    x = loguniform.rvs(low, high, size=n)
+    if n == 1:
+        return float(x)
+    return tr.from_numpy(x).float()

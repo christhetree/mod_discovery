@@ -5,7 +5,7 @@ from typing import Optional
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 
-from acid_ddsp.datasets import MidiF0ModSignalDataset
+from acid_ddsp.datasets import AcidSynthDataset
 from acid_ddsp.modulations import ModSignalGenerator
 from acid_ddsp.audio_config import AudioConfig
 
@@ -23,13 +23,10 @@ class AcidDDSPDataModule(pl.LightningDataModule):
         train_n_per_epoch: int,
         val_n_per_epoch: int,
         test_n_per_epoch: Optional[int] = None,
-        n_frames: Optional[int] = None,
         num_workers: int = 0,
     ):
         if test_n_per_epoch is None:
             test_n_per_epoch = val_n_per_epoch
-        if n_frames is None:
-            n_frames = int(ac.sr * ac.buffer_size_seconds)
 
         super().__init__()
         self.save_hyperparameters(ignore=["ac", "mod_sig_gen"])
@@ -41,25 +38,21 @@ class AcidDDSPDataModule(pl.LightningDataModule):
         self.train_n_per_epoch = train_n_per_epoch
         self.val_n_per_epoch = val_n_per_epoch
         self.test_n_per_epoch = test_n_per_epoch
-        self.n_frames = n_frames
         self.num_workers = num_workers
 
-        self.train_ds = MidiF0ModSignalDataset(
+        self.train_ds = AcidSynthDataset(
             ac,
             mod_sig_gen,
-            n_frames,
             train_n_per_epoch,
         )
-        self.val_ds = MidiF0ModSignalDataset(
+        self.val_ds = AcidSynthDataset(
             ac,
             mod_sig_gen,
-            n_frames,
             val_n_per_epoch,
         )
-        self.test_ds = MidiF0ModSignalDataset(
+        self.test_ds = AcidSynthDataset(
             ac,
             mod_sig_gen,
-            n_frames,
             test_n_per_epoch,
         )
 

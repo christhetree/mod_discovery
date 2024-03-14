@@ -3,10 +3,10 @@ seed_everything: 42
 custom:
   project_name: acid_ddsp
 #  model_name: testing
-#  model_name: cnn_mel_spec_ploss
-  model_name: cnn_mel_spec_mss
-  dataset_name: cfqd__f0_24_72__fixed_adsr
-#  dataset_name: cfqd_pointy__f0_24_72__fixed_adsr
+  model_name: cnn_ploss
+#  model_name: cnn_mss
+  dataset_name: cfqd
+#  dataset_name: cfqd_pointy
   cpu_batch_size: 3
   use_wandb_cpu: false
   use_wandb_gpu: true
@@ -41,13 +41,13 @@ model:
 #    loss_func: torch.nn.L1Loss
 #    loss_func: torch.nn.MSELoss
 #    loss_func: auraloss.time.ESRLoss
-    loss_func: auraloss.freq.MultiResolutionSTFTLoss
+#    loss_func: auraloss.freq.MultiResolutionSTFTLoss
 #    loss_func: ../configs/rand_mss.yml
-    use_p_loss: false
+#    use_p_loss: false
 
-#    use_p_loss: true
+    use_p_loss: true
 #    loss_func: torch.nn.L1Loss
-#    loss_func: torch.nn.MSELoss
+    loss_func: torch.nn.MSELoss
 #    loss_func: auraloss.time.ESRLoss
 
     log_envelope: false

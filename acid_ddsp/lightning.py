@@ -10,11 +10,8 @@ from torch import nn
 
 import acid_ddsp.util as util
 from acid_ddsp.audio_config import AudioConfig
-from acid_ddsp.filters import TimeVaryingBiquad
-from acid_ddsp.synth_modules import ADSRValues
-from acid_ddsp.synths import CustomSynth
 from feature_extraction import LogMelSpecFeatureExtractor
-from torchsynth.config import SynthConfig
+from synths import AcidSynth
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -53,44 +50,14 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.is_q_learnable = ac.min_q != ac.max_q
         self.is_dist_gain_learnable = ac.min_dist_gain != ac.max_dist_gain
 
-        sc = SynthConfig(
-            batch_size=batch_size,
-            sample_rate=ac.sr,
-            buffer_size_seconds=ac.buffer_size_seconds,
-            control_rate=ac.control_rate,
-            reproducible=False,
-            no_grad=True,
-            debug=False,
-        )
-        min_adsr_vals = ADSRValues(
-            attack=ac.min_attack,
-            decay=ac.min_decay,
-            sustain=ac.min_sustain,
-            release=ac.min_release,
-            alpha=ac.min_alpha,
-        )
-        max_adsr_vals = ADSRValues(
-            attack=ac.max_attack,
-            decay=ac.max_decay,
-            sustain=ac.max_sustain,
-            release=ac.max_release,
-            alpha=ac.max_alpha,
-        )
-        self.synth = CustomSynth(
-            synthconfig=sc, min_adsr_vals=min_adsr_vals, max_adsr_vals=max_adsr_vals
-        )
-        self.tvb = TimeVaryingBiquad(
-            min_w=ac.min_w,
-            max_w=ac.max_w,
-            min_q=ac.min_q,
-            max_q=ac.max_q,
-        )
+        self.synth = AcidSynth(ac, batch_size)
 
     def on_train_start(self) -> None:
         self.global_n = 0
 
     def step(self, batch: Dict[str, T], stage: str) -> Dict[str, T]:
-        midi_f0 = batch["midi_f0"]
+        f0_hz = batch["f0_hz"]
+        osc_shape = batch["osc_shape"]
         note_on_duration = batch["note_on_duration"]
         mod_sig = batch["mod_sig"]
         q_norm = batch["q_norm"]
@@ -102,7 +69,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
         )
 
         batch_size = self.batch_size
-        assert midi_f0.shape == (batch_size,)
+        assert f0_hz.shape == (batch_size,)
+        assert osc_shape.shape == (batch_size,)
+        assert note_on_duration.shape == (batch_size,)
+        assert mod_sig.shape == (batch_size, self.ac.n_samples)
+        assert q_norm.shape == (batch_size,)
+        assert dist_gain_norm.shape == (batch_size,)
         if stage == "train":
             self.global_n = (
                 self.global_step * self.trainer.accumulate_grad_batches * batch_size
@@ -112,28 +84,14 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # Generate ground truth audio x
         with tr.no_grad():
-            (osc_audio, envelope), _, _ = self.synth(
-                midi_f0=midi_f0, note_on_duration=note_on_duration
-            )
-            assert osc_audio.shape == (
-                self.batch_size,
-                int(self.ac.buffer_size_seconds * self.ac.sr),
-            )
-            osc_audio *= 0.5  # TODO(cm): record this somewhere
-            if mod_sig.shape != osc_audio.shape:
-                assert mod_sig.ndim == osc_audio.ndim
-                assert mod_sig.size(-1) < osc_audio.size(-1)
-                mod_sig = util.linear_interpolate_last_dim(
-                    mod_sig, osc_audio.size(-1), align_corners=True
-                )
             q_mod_sig = tr.ones_like(mod_sig) * q_norm.unsqueeze(-1)
-            x = self.tvb(osc_audio, cutoff_mod_sig=mod_sig, resonance_mod_sig=q_mod_sig)
-            assert x.shape == osc_audio.shape
-            x *= dist_gain.unsqueeze(-1)
-            x = tr.tanh(x)
+            dry, wet, envelope = self.synth(
+                f0_hz, osc_shape, note_on_duration, mod_sig, q_mod_sig, dist_gain
+            )
+            assert dry.shape == wet.shape == (self.batch_size, self.ac.n_samples)
 
         # Extract mod_sig_hat
-        model_in = x.unsqueeze(1)
+        model_in = wet.unsqueeze(1)
         mod_sig_hat, q_norm_hat, dist_gain_norm_hat, latent, log_spec = self.model(
             model_in
         )
@@ -190,7 +148,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             if self.is_dist_gain_learnable:
                 dist_gain_norm_l1 = self.l1(dist_gain_norm_hat, dist_gain_norm)
 
-        x_hat = None
+        wet_hat = None
         if self.use_p_loss:
             loss = self.loss_func(mod_sig_hat, mod_sig)
             if self.is_q_learnable:
@@ -216,14 +174,15 @@ class AcidDDSPLightingModule(pl.LightningModule):
             )
         else:
             q_mod_sig_hat = tr.ones_like(mod_sig_hat) * q_norm_hat.unsqueeze(-1)
-            x_hat = self.tvb(
-                osc_audio, cutoff_mod_sig=mod_sig_hat, resonance_mod_sig=q_mod_sig_hat
+            _, wet_hat, _ = self.synth(
+                f0_hz,
+                osc_shape,
+                note_on_duration,
+                mod_sig_hat,
+                q_mod_sig_hat,
+                dist_gain_hat,
             )
-            assert x_hat.shape == x.shape
-            x_hat *= dist_gain_hat.unsqueeze(-1)
-            x_hat = tr.tanh(x_hat)
-
-            loss = self.loss_func(x_hat.unsqueeze(1), x.unsqueeze(1))
+            loss = self.loss_func(wet_hat.unsqueeze(1), wet.unsqueeze(1))
             self.log(
                 f"{stage}/audio_{self.loss_name}", loss, prog_bar=True, sync_dist=True
             )
@@ -238,9 +197,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "loss": loss,
             "mod_sig": mod_sig,
             "mod_sig_hat": mod_sig_hat,
-            "x": x,
-            "x_hat": x_hat,
-            "osc_audio": osc_audio,
+            "x": wet,
+            "x_hat": wet_hat,
+            "osc_audio": dry,
             "envelope": envelope,
             "log_spec_audio": log_spec_audio,
             "log_spec_x": log_spec_x,
