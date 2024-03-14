@@ -30,6 +30,10 @@ class AudioConfig:
                  max_w_hz: float,
                  min_q: float = 0.7071,
                  max_q: float = 8.0,
+                 min_dist_gain: float = 1.0,
+                 max_dist_gain: float = 1.0,
+                 min_osc_shape: float = 1.0,
+                 max_osc_shape: float = 1.0,
                  stability_eps: float = 0.001):
         self.sr = sr
         self.control_rate = control_rate
@@ -51,6 +55,10 @@ class AudioConfig:
         self.max_w_hz = max_w_hz
         self.min_q = min_q
         self.max_q = max_q
+        self.min_dist_gain = min_dist_gain
+        self.max_dist_gain = max_dist_gain
+        self.min_osc_shape = min_osc_shape
+        self.max_osc_shape = max_osc_shape
         self.stability_eps = stability_eps
 
         self.min_w = self.calc_w(min_w_hz)

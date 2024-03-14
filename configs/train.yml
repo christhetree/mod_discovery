@@ -5,9 +5,9 @@ custom:
 #  model_name: testing
 #  model_name: cnn_mel_spec_ploss
   model_name: cnn_mel_spec_mss
-  dataset_name: cfq__f0_24_72__fixed_adsr
-#  dataset_name: cfq_pointy__f0_24_72__fixed_adsr
-  cpu_batch_size: 3
+  dataset_name: cfqd__f0_24_72__fixed_adsr
+#  dataset_name: cfqd_pointy__f0_24_72__fixed_adsr
+  cpu_batch_size: 1
   use_wandb_cpu: false
   use_wandb_gpu: true
 

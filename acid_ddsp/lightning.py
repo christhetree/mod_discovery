@@ -51,6 +51,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.l1 = nn.L1Loss()
         self.global_n = 0
         self.is_q_learnable = ac.min_q != ac.max_q
+        self.is_dist_gain_learnable = ac.min_dist_gain != ac.max_dist_gain
 
         sc = SynthConfig(
             batch_size=batch_size,
@@ -93,7 +94,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
         note_on_duration = batch["note_on_duration"]
         mod_sig = batch["mod_sig"]
         q_norm = batch["q_norm"]
+        dist_gain_norm = batch["dist_gain_norm"]
         q = q_norm * (self.ac.max_q - self.ac.min_q) + self.ac.min_q
+        dist_gain = (
+            dist_gain_norm * (self.ac.max_dist_gain - self.ac.min_dist_gain)
+            + self.ac.min_dist_gain
+        )
 
         batch_size = self.batch_size
         assert midi_f0.shape == (batch_size,)
@@ -123,13 +129,20 @@ class AcidDDSPLightingModule(pl.LightningModule):
             q_mod_sig = tr.ones_like(mod_sig) * q_norm.unsqueeze(-1)
             x = self.tvb(osc_audio, cutoff_mod_sig=mod_sig, resonance_mod_sig=q_mod_sig)
             assert x.shape == osc_audio.shape
+            x *= dist_gain.unsqueeze(-1)
+            x = tr.tanh(x)
 
         # Extract mod_sig_hat
-        # model_in = tr.stack([x, osc_audio], dim=1)
         model_in = x.unsqueeze(1)
-        mod_sig_hat, q_norm_hat, latent, log_spec = self.model(model_in)
+        mod_sig_hat, q_norm_hat, dist_gain_norm_hat, latent, log_spec = self.model(
+            model_in
+        )
         mod_sig_hat = mod_sig_hat.squeeze(1)
         q_hat = q_norm_hat * (self.ac.max_q - self.ac.min_q) + self.ac.min_q
+        dist_gain_hat = (
+            dist_gain_norm_hat * (self.ac.max_dist_gain - self.ac.min_dist_gain)
+            + self.ac.min_dist_gain
+        )
 
         log_spec_audio = None
         if log_spec is None:
@@ -173,6 +186,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             q_norm_l1 = 0.0
             if self.is_q_learnable:
                 q_norm_l1 = self.l1(q_norm_hat, q_norm)
+            dist_gain_norm_l1 = 0.0
+            if self.is_dist_gain_learnable:
+                dist_gain_norm_l1 = self.l1(dist_gain_norm_hat, dist_gain_norm)
 
         x_hat = None
         if self.use_p_loss:
@@ -186,6 +202,15 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     sync_dist=True,
                 )
                 loss += q_loss
+            if self.is_dist_gain_learnable:
+                dist_gain_loss = self.loss_func(dist_gain_norm_hat, dist_gain_norm)
+                self.log(
+                    f"{stage}/ploss_{self.loss_name}_dg",
+                    dist_gain_loss,
+                    prog_bar=False,
+                    sync_dist=True,
+                )
+                loss += dist_gain_loss
             self.log(
                 f"{stage}/ploss_{self.loss_name}", loss, prog_bar=True, sync_dist=True
             )
@@ -195,6 +220,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 osc_audio, cutoff_mod_sig=mod_sig_hat, resonance_mod_sig=q_mod_sig_hat
             )
             assert x_hat.shape == x.shape
+            x_hat *= dist_gain_hat.unsqueeze(-1)
+            x_hat = tr.tanh(x_hat)
+
             loss = self.loss_func(x_hat.unsqueeze(1), x.unsqueeze(1))
             self.log(
                 f"{stage}/audio_{self.loss_name}", loss, prog_bar=True, sync_dist=True
@@ -203,6 +231,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.log(f"{stage}/ms_esr", mod_sig_esr, prog_bar=False, sync_dist=True)
         self.log(f"{stage}/ms_l1", mod_sig_l1, prog_bar=True, sync_dist=True)
         self.log(f"{stage}/q_l1", q_norm_l1, prog_bar=False, sync_dist=True)
+        self.log(f"{stage}/dg_l1", dist_gain_norm_l1, prog_bar=False, sync_dist=True)
         self.log(f"{stage}/loss", loss, prog_bar=False, sync_dist=True)
 
         out_dict = {
@@ -217,6 +246,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "log_spec_x": log_spec_x,
             "q": q,
             "q_hat": q_hat,
+            "dist_gain": dist_gain,
+            "dist_gain_hat": dist_gain_hat,
         }
         return out_dict
 

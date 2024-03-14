@@ -35,12 +35,18 @@ class MidiF0ModSignalDataset(Dataset):
     def __getitem__(self, idx: int) -> Dict[str, T]:
         midi_f0 = tr.randint(self.ac.min_midi_f0, self.ac.max_midi_f0 + 1, (1,))
         midi_f0 = midi_f0.squeeze(0)
+        osc_shape = tr.rand((1,))
+        osc_shape = osc_shape.squeeze(0)
         mod_sig = self.mod_sig_gen(self.n_frames)
         q_norm = tr.rand((1,))
         q_norm = q_norm.squeeze(0)
+        dist_gain_norm = tr.rand((1,))
+        dist_gain_norm = dist_gain_norm.squeeze(0)
         return {
             "midi_f0": midi_f0,
+            "osc_shape": osc_shape,
             "note_on_duration": self.note_on_duration,
             "mod_sig": mod_sig,
             "q_norm": q_norm,
+            "dist_gain_norm": dist_gain_norm,
         }

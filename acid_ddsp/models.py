@@ -98,6 +98,14 @@ class Spectral2DCNN(nn.Module):
             nn.Sigmoid(),
         )
 
+        self.out_dist_gain = nn.Sequential(
+            nn.Linear(out_channels[-1], out_channels[-1] // 2),
+            nn.Dropout(p=dropout),
+            nn.PReLU(num_parameters=out_channels[-1] // 2),
+            nn.Linear(out_channels[-1] // 2, 1),
+            nn.Sigmoid(),
+        )
+
         # support = tr.linspace(0.0, 1.0, fe.n_frames).view(1, -1, 1, 1)
         # support = support.repeat(1, 1, n_segments, degree)
         #
@@ -164,8 +172,9 @@ class Spectral2DCNN(nn.Module):
 
         x = tr.mean(latent, dim=-1)
         q_norm_hat = self.out_q(x).squeeze(-1)
+        dist_gain_norm_hat = self.out_dist_gain(x).squeeze(-1)
 
-        return ms_hat, q_norm_hat, latent, log_spec
+        return ms_hat, q_norm_hat, dist_gain_norm_hat, latent, log_spec
 
 
 class AudioTCN(nn.Module):
