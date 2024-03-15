@@ -14,6 +14,64 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
+# Based off https://github.com/csteinmetz1/dasp-pytorch/blob/main/dasp_pytorch/signal.py
+def fft_freqz(b: T, a: T, n_fft: int = 512):
+    B = tr.fft.rfft(b, n_fft)
+    A = tr.fft.rfft(a, n_fft)
+    H = B / A
+    return H
+
+
+# Based off https://github.com/csteinmetz1/dasp-pytorch/blob/main/dasp_pytorch/signal.py
+def freqdomain_fir(x: T, H: T, n_fft: int):
+    X = tr.fft.rfft(x, n_fft)
+    Y = X * H.type_as(X)
+    y = tr.fft.irfft(Y, n_fft)
+    return y
+
+
+# Based off https://github.com/csteinmetz1/dasp-pytorch/blob/main/dasp_pytorch/signal.py
+def lfilter_via_fsm(x: T, b: T, a: T = None):
+    """Use the frequency sampling method to approximate an IIR filter.
+    The filter will be applied along the final dimension of x.
+    Args:
+        x (torch.Tensor): Time domain signal with shape (bs, 1, timesteps)
+        b (torch.Tensor): Numerator coefficients with shape (bs, N).
+        a (torch.Tensor): Denominator coefficients with shape (bs, N).
+    Returns:
+        y (torch.Tensor): Filtered time domain signal with shape (bs, 1, timesteps)
+    """
+    bs, chs, seq_len = x.size()  # enforce shape
+    assert chs == 1
+
+    # round up to nearest power of 2 for FFT
+    n_fft = 2 ** tr.ceil(tr.log2(tr.tensor(x.shape[-1] + x.shape[-1] - 1)))
+    n_fft = n_fft.int()
+
+    # move coefficients to same device as x
+    b = b.type_as(x)
+
+    if a is None:
+        # directly compute FFT of numerator coefficients
+        H = tr.fft.rfft(b, n_fft)
+    else:
+        a = a.type_as(x)
+        # compute complex response as ratio of polynomials
+        H = fft_freqz(b, a, n_fft=n_fft)
+
+    # add extra dims to broadcast filter across
+    for _ in range(x.ndim - 2):
+        H = H.unsqueeze(1)
+
+    # apply as a FIR filter in the frequency domain
+    y = freqdomain_fir(x, H, n_fft)
+
+    # crop
+    y = y[..., : x.shape[-1]]
+
+    return y
+
+
 def time_varying_fir(x: T, b: T) -> T:
     assert x.ndim == 2
     assert b.ndim == 3
