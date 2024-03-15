@@ -29,6 +29,13 @@ def linear_interpolate_last_dim(x: T, n: int, align_corners: bool = True) -> T:
     return x
 
 
+def sample_uniform(low: float, high: float, n: int = 1) -> Union[float, T]:
+    x = (tr.rand(n) * (high - low)) + low
+    if n == 1:
+        return x.item()
+    return x
+
+
 def sample_log_uniform(low: float, high: float, n: int = 1) -> Union[float, T]:
     # TODO(cm): replace with torch
     if low == high:

@@ -1,14 +1,7 @@
-class_path: acid_ddsp.modulations.ModSignalGenerator
+class_path: acid_ddsp.modulations.ModSignalGeneratorPointy
 init_args:
-  min_start_val: 0.0
-  max_start_val: 0.0
-
-  min_corner_val: 1.0
-  max_corner_val: 1.0
-
-  min_end_val: 0.0
-  max_end_val: 0.0
-
+  min_diff: 0.2
+  max_diff: 1.0
   min_attack_frac: 0.0
   max_attack_frac: 1.0
   min_alpha: 0.1

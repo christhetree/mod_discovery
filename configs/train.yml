@@ -5,8 +5,8 @@ custom:
 #  model_name: testing
 #  model_name: cnn_ploss
   model_name: cnn_mss
-  dataset_name: cfqdo
-#  dataset_name: cfqdo_pointy
+#  dataset_name: cfqdo
+  dataset_name: cfqdo_pointy
   cpu_batch_size: 3
   use_wandb_cpu: false
   use_wandb_gpu: true
@@ -24,8 +24,8 @@ data:
   init_args:
     batch_size: 64
     ac: ../configs/audio_config.yml
-    mod_sig_gen: ../configs/mod_sig_gen.yml
-#    mod_sig_gen: ../configs/mod_sig_gen__pointy.yml
+#    mod_sig_gen: ../configs/mod_sig_gen.yml
+    mod_sig_gen: ../configs/mod_sig_gen__pointy.yml
     train_n_per_epoch: 8000
 #    train_n_per_epoch: 9
     val_n_per_epoch: 2000

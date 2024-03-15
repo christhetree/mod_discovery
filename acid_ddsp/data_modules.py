@@ -5,9 +5,9 @@ from typing import Optional
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 
+from acid_ddsp.audio_config import AudioConfig
 from acid_ddsp.datasets import AcidSynthDataset
 from acid_ddsp.modulations import ModSignalGenerator
-from acid_ddsp.audio_config import AudioConfig
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
