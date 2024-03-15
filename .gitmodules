@@ -7,3 +7,6 @@
 [submodule "jtfst_implementation"]
 	path = jtfst_implementation
 	url = git@github.com:christhetree/jtfst_implementation.git
+[submodule "ddsp-phaser"]
+	path = ddsp-phaser
+	url = git@github.com:christhetree/ddsp-phaser.git
