@@ -11,7 +11,7 @@ from torch import nn
 import acid_ddsp.util as util
 from acid_ddsp.audio_config import AudioConfig
 from feature_extraction import LogMelSpecFeatureExtractor
-from synths import AcidSynth
+from synths import AcidSynth, AcidSynthLSTM
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -52,6 +52,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.is_osc_shape_learnable = ac.min_osc_shape != ac.max_osc_shape
 
         self.synth = AcidSynth(ac, batch_size)
+        self.synth_hat = AcidSynth(ac, batch_size)
+        # self.synth_hat = AcidSynthLSTM(ac, batch_size, n_hidden=128)
 
     def on_train_start(self) -> None:
         self.global_n = 0
@@ -200,7 +202,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             )
         else:
             q_mod_sig_hat = tr.ones_like(mod_sig_hat) * q_norm_hat.unsqueeze(-1)
-            _, wet_hat, _ = self.synth(
+            _, wet_hat, _ = self.synth_hat(
                 f0_hz,
                 osc_shape_hat,
                 note_on_duration,

@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-class ModSignalGenerator(nn.Module, ABC):
+class ModSignalGenerator(ABC, nn.Module):
     @abstractmethod
     def forward(self, n_frames: int) -> T:
         pass
@@ -49,6 +49,7 @@ class ModSignalGeneratorRandom(ModSignalGenerator):
         self.min_alpha = min_alpha
         self.max_alpha = max_alpha
 
+    # TODO(cm): fix alpha application
     def forward(self, n_frames: int) -> T:
         assert n_frames > 2
         start_val = (
