@@ -30,16 +30,51 @@ def time_varying_fir(x: T, b: T) -> T:
     return y
 
 
-def calc_logits_to_biquad_coeff(a_logits: T, eps: float = 1e-3) -> T:
+def calc_logits_to_biquad_a_coeff_triangle(a_logits: T, eps: float = 1e-3) -> T:
     assert a_logits.size(-1) == 2
-    max_a1_abs = 1.0 - eps
+    stability_factor = 1.0 - eps
     a1_logits = a_logits[..., 0]
     a2_logits = a_logits[..., 1]
-    a1 = 2 * tr.tanh(a1_logits) * max_a1_abs
+    a1 = 2 * tr.tanh(a1_logits) * stability_factor
     a1_abs = a1.abs()
-    a2 = (((2 - a1_abs) * tr.tanh(a2_logits) * max_a1_abs) + a1_abs) / 2
+    a2 = (((2 - a1_abs) * tr.tanh(a2_logits) * stability_factor) + a1_abs) / 2
+    assert (a1.abs() < 2.0).all()
+    assert (a2 < 1.0).all()
+    assert (a1 < a2 + 1.0).all()
+    assert (a1 > -(a2 + 1.0)).all()
     a = tr.stack([a1, a2], dim=2)
     return a
+
+
+def calc_lp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T):
+    assert w.ndim == 2
+    assert q.ndim == 2
+    assert 0.0 <= w.min()
+    assert tr.pi >= w.max()
+    assert 0.0 < q.min()
+
+    stability_factor = 1.0 - eps
+    alpha_q = tr.sin(w) / (2 * q)
+    a0 = 1.0 + alpha_q
+    a1 = -2.0 * tr.cos(w) * stability_factor
+    a1 /= a0
+    a2 = (1.0 - alpha_q) * stability_factor
+    a2 /= a0
+    assert (a1.abs() < 2.0).all()
+    assert (a2 < 1.0).all()
+    assert (a1 < a2 + 1.0).all()
+    assert (a1 > -(a2 + 1.0)).all()
+    a = tr.stack([a1, a2], dim=2)
+
+    b0 = (1.0 - tr.cos(w)) / 2.0
+    b0 /= a0
+    b1 = 1.0 - tr.cos(w)
+    b1 /= a0
+    b2 = (1.0 - tr.cos(w)) / 2.0
+    b2 /= a0
+    b = tr.stack([b0, b1, b2], dim=2)
+
+    return a, b
 
 
 class TimeVaryingBiquad(nn.Module):
