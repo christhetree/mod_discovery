@@ -114,6 +114,13 @@ class Spectral2DCNN(nn.Module):
             nn.Sigmoid(),
         )
 
+        # self.out_coeff = nn.Sequential(
+        #     nn.Linear(out_channels[-1], out_channels[-1] // 2),
+        #     nn.Dropout(p=dropout),
+        #     nn.PReLU(),
+        #     nn.Linear(out_channels[-1] // 2, 5),
+        # )
+
         # support = tr.linspace(0.0, 1.0, fe.n_frames).view(1, -1, 1, 1)
         # support = support.repeat(1, 1, n_segments, degree)
         #
@@ -183,6 +190,11 @@ class Spectral2DCNN(nn.Module):
         dist_gain_norm_hat = self.out_dist_gain(x).squeeze(-1)
         osc_shape_norm_hat = self.out_osc_shape(x).squeeze(-1)
 
+        # x = tr.swapaxes(latent, 1, 2)
+        # coeff = self.out_coeff(x)
+        # a_coeff_hat = coeff[..., :2]
+        # b_coeff_hat = coeff[..., 2:]
+
         return {
             "mod_sig_hat": ms_hat,
             "q_norm_hat": q_norm_hat,
@@ -190,6 +202,8 @@ class Spectral2DCNN(nn.Module):
             "osc_shape_norm_hat": osc_shape_norm_hat,
             "latent": latent,
             "log_spec": log_spec,
+            # "a_coeff_hat": a_coeff_hat,
+            # "b_coeff_hat": b_coeff_hat,
         }
 
 

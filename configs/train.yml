@@ -4,7 +4,7 @@ custom:
   project_name: acid_ddsp
 #  model_name: testing
 #  model_name: cnn_ploss
-  model_name: cnn_mss
+  model_name: cnn_mss_learned_ab
 #  dataset_name: cfqdo
   dataset_name: cfqdo_pointy
   cpu_batch_size: 3

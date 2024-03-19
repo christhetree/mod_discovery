@@ -11,7 +11,7 @@ from torch import nn
 import acid_ddsp.util as util
 from acid_ddsp.audio_config import AudioConfig
 from feature_extraction import LogMelSpecFeatureExtractor
-from synths import AcidSynth, AcidSynthLSTM
+from synths import AcidSynth, AcidSynthLSTM, AcidSynthLearnedBiquad
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -53,6 +53,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         self.synth = AcidSynth(ac, batch_size)
         self.synth_hat = AcidSynth(ac, batch_size)
+        # self.synth_hat = AcidSynthLearnedBiquad(ac, batch_size)
         # self.synth_hat = AcidSynthLSTM(ac, batch_size, n_hidden=128)
 
     def on_train_start(self) -> None:
@@ -106,6 +107,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         dist_gain_norm_hat = model_out["dist_gain_norm_hat"]
         osc_shape_norm_hat = model_out["osc_shape_norm_hat"]
         log_spec = model_out["log_spec"]
+        # a_coeff_hat = model_out.get("a_coeff_hat", None)
+        # b_coeff_hat = model_out.get("b_coeff_hat", None)
 
         mod_sig_hat = mod_sig_hat.squeeze(1)
         q_hat = q_norm_hat * (self.ac.max_q - self.ac.min_q) + self.ac.min_q
@@ -153,6 +156,16 @@ class AcidDDSPLightingModule(pl.LightningModule):
             mod_sig_hat = util.linear_interpolate_last_dim(
                 mod_sig_hat, mod_sig.size(-1), align_corners=True
             )
+            # a_coeff_hat = tr.swapaxes(a_coeff_hat, 1, 2)
+            # a_coeff_hat = util.linear_interpolate_last_dim(
+            #     a_coeff_hat, mod_sig.size(-1), align_corners=True
+            # )
+            # a_coeff_hat = tr.swapaxes(a_coeff_hat, 1, 2)
+            # b_coeff_hat = tr.swapaxes(b_coeff_hat, 1, 2)
+            # b_coeff_hat = util.linear_interpolate_last_dim(
+            #     b_coeff_hat, mod_sig.size(-1), align_corners=True
+            # )
+            # b_coeff_hat = tr.swapaxes(b_coeff_hat, 1, 2)
 
         with tr.no_grad():
             mod_sig_esr = self.esr(mod_sig_hat, mod_sig)

@@ -7,7 +7,7 @@ from torch import Tensor as T, nn
 
 from acid_ddsp.synth_modules import CustomADSR, ADSRValues, SquareSawVCOLite
 from audio_config import AudioConfig
-from filters import TimeVaryingBiquad
+from filters import TimeVaryingBiquad, stable_time_varying_biquad
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -83,6 +83,12 @@ class AcidSynth(AcidSynthBase):
     def filter_dry_audio(self, dry_audio: T, fc_mod_sig: T, q_mod_sig: T) -> T:
         x = self.tvb(dry_audio, fc_mod_sig, q_mod_sig)
         return x
+
+
+# class AcidSynthLearnedBiquad(AcidSynthBase):
+#     def filter_dry_audio(self, dry_audio: T, a_coeff: T, b_coeff: T) -> T:
+#         x = stable_time_varying_biquad(dry_audio, a_coeff, b_coeff)
+#         return x
 
 
 class AcidSynthLSTM(AcidSynthBase):
