@@ -46,6 +46,33 @@ def calc_logits_to_biquad_a_coeff_triangle(a_logits: T, eps: float = 1e-3) -> T:
     return a
 
 
+def calc_logits_to_biquad_coeff_pole_zero(
+    q_real: T, q_imag: T, p_real: T, p_imag: T, eps: float = 1e-3
+) -> (T, T):
+    assert q_real.ndim == 2
+    assert q_real.size() == q_imag.size() == p_real.size() == p_imag.size()
+    stability_factor = 1.0 - eps
+    p_abs = tr.sqrt(p_real**2 + p_imag**2)
+    p_scaling_factor = tr.tanh(p_abs) * stability_factor / p_abs
+    p_real = p_real * p_scaling_factor
+    p_imag = p_imag * p_scaling_factor
+
+    a1 = -2.0 * p_real
+    a2 = p_real**2 + p_imag**2
+    assert (a1.abs() < 2.0).all()
+    assert (a2 < 1.0).all()
+    assert (a1 < a2 + 1.0).all()
+    assert (a1 > -(a2 + 1.0)).all()
+    a = tr.stack([a1, a2], dim=2)
+
+    b0 = tr.ones_like(q_real)
+    b1 = -2.0 * q_real
+    b2 = q_real**2 + q_imag**2
+    b = tr.stack([b0, b1, b2], dim=2)
+
+    return a, b
+
+
 def calc_lp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T):
     assert w.ndim == 2
     assert q.ndim == 2
@@ -57,9 +84,9 @@ def calc_lp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T):
     alpha_q = tr.sin(w) / (2 * q)
     a0 = 1.0 + alpha_q
     a1 = -2.0 * tr.cos(w) * stability_factor
-    a1 /= a0
+    a1 = a1 / a0
     a2 = (1.0 - alpha_q) * stability_factor
-    a2 /= a0
+    a2 = a2 / a0
     assert (a1.abs() < 2.0).all()
     assert (a2 < 1.0).all()
     assert (a1 < a2 + 1.0).all()
@@ -67,11 +94,11 @@ def calc_lp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T):
     a = tr.stack([a1, a2], dim=2)
 
     b0 = (1.0 - tr.cos(w)) / 2.0
-    b0 /= a0
+    b0 = b0 / a0
     b1 = 1.0 - tr.cos(w)
-    b1 /= a0
+    b1 = b1 / a0
     b2 = (1.0 - tr.cos(w)) / 2.0
-    b2 /= a0
+    b2 = b2 / a0
     b = tr.stack([b0, b1, b2], dim=2)
 
     return a, b
