@@ -104,101 +104,66 @@ def calc_lp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T):
     return a, b
 
 
-class TimeVaryingBiquad(nn.Module):
+class TimeVaryingLPBiquad(nn.Module):
     def __init__(
         self,
         min_w: float = 0.0,
         max_w: float = tr.pi,
         min_q: float = 0.7071,
         max_q: float = 4.0,
-        stability_eps: float = 1e-3,
+        eps: float = 1e-3,
         modulate_log_w: bool = True,
         modulate_log_q: bool = True,
     ):
         super().__init__()
         assert 0.0 <= min_w <= max_w <= tr.pi
         assert 0.0 < min_q <= max_q
-        self.min_w = tr.tensor(min_w).clamp(stability_eps, tr.pi - stability_eps)
-        self.max_w = tr.tensor(max_w).clamp(stability_eps, tr.pi - stability_eps)
-        self.min_q = tr.tensor(min_q).clamp_min(stability_eps)
-        self.max_q = tr.tensor(max_q).clamp_min(stability_eps)
+        self.min_w = tr.tensor(min_w)
+        self.max_w = tr.tensor(max_w)
+        self.min_q = tr.tensor(min_q)
+        self.max_q = tr.tensor(max_q)
         self.log_min_w = tr.log(self.min_w)
         self.log_max_w = tr.log(self.max_w)
         self.log_min_q = tr.log(self.min_q)
         self.log_max_q = tr.log(self.max_q)
-        self.stability_eps = stability_eps
+        self.eps = eps
         self.modulate_log_w = modulate_log_w
         self.modulate_log_q = modulate_log_q
-        log.info(f"modulate_log_w = {self.modulate_log_w}")
-        log.info(f"modulate_log_q = {self.modulate_log_q}")
-
-    def _calc_coeffs(self, mod_sig_w: T, mod_sig_q: T) -> (T, T):
-        if self.modulate_log_w:
-            log_w = self.log_min_w + (self.log_max_w - self.log_min_w) * mod_sig_w
-            w = tr.exp(log_w)
-        else:
-            w = self.min_w + (self.max_w - self.min_w) * mod_sig_w
-
-        if self.modulate_log_q:
-            log_q = self.log_min_q + (self.log_max_q - self.log_min_q) * mod_sig_q
-            q = tr.exp(log_q)
-        else:
-            q = self.min_q + (self.max_q - self.min_q) * mod_sig_q
-
-        alpha_q = tr.sin(w) / (2 * q)
-
-        a0 = 1.0 + alpha_q
-        a1 = -2.0 * tr.cos(w)
-        a1 /= a0
-        # a1 = (1.0 - self.stability_eps) * a1
-        a2 = 1.0 - alpha_q
-        a2 /= a0
-        # a2 = (1.0 - self.stability_eps) * a2
-        assert (a1.abs() < 2.0).all()
-        assert (a2 < 1.0).all()
-        assert (a1 < a2 + 1.0).all()
-        assert (a1 > -(a2 + 1.0)).all()
-        # log.info(
-        #     f"a0[0,0] = {a0[0, 0]:.4f}, a1[0, 0] = {a1[0, 0]:.4f}, a2[0, 0] = {a2[0, 0]:.4f}"
-        # )
-        # log.info(f"\n{a0[0, 0]:.4f}\n{a1[0, 0]:.4f}\n{a2[0, 0]:.4f}")
-        a = tr.stack([a1, a2], dim=2)
-
-        b0 = (1.0 - tr.cos(w)) / 2.0
-        b0 /= a0
-        b1 = 1.0 - tr.cos(w)
-        b1 /= a0
-        b2 = (1.0 - tr.cos(w)) / 2.0
-        b2 /= a0
-        # log.info(
-        #     f"b0[0,0] = {b0[0, 0]:.4f}, b1[0, 0] = {b1[0, 0]:.4f}, b2[0, 0] = {b2[0, 0]:.4f}"
-        # )
-        # log.info(f"\n{b0[0, 0]:.4f}\n{b1[0, 0]:.4f}\n{b2[0, 0]:.4f}")
-        b = tr.stack([b0, b1, b2], dim=2)
-
-        return a, b
 
     def forward(
         self,
         x: T,
-        cutoff_mod_sig: Optional[T] = None,
-        resonance_mod_sig: Optional[T] = None,
+        w_mod_sig: Optional[T] = None,
+        q_mod_sig: Optional[T] = None,
     ) -> T:
-        if cutoff_mod_sig is None:
-            cutoff_mod_sig = tr.zeros_like(x)
-        if resonance_mod_sig is None:
-            resonance_mod_sig = tr.zeros_like(x)
+        if w_mod_sig is None:
+            w_mod_sig = tr.zeros_like(x)
+        if q_mod_sig is None:
+            q_mod_sig = tr.zeros_like(x)
 
         assert x.ndim == 2
-        assert cutoff_mod_sig.shape == x.shape
-        assert cutoff_mod_sig.size(1) == x.size(1)
-        assert cutoff_mod_sig.min() >= 0.0
-        assert cutoff_mod_sig.max() <= 1.0
-        assert resonance_mod_sig.shape == x.shape
-        assert resonance_mod_sig.size(1) == x.size(1)
-        assert resonance_mod_sig.min() >= 0.0
-        assert resonance_mod_sig.max() <= 1.0
-        a_coeffs, b_coeffs = self._calc_coeffs(cutoff_mod_sig, resonance_mod_sig)
+        assert w_mod_sig.shape == x.shape
+        assert w_mod_sig.size(1) == x.size(1)
+        assert w_mod_sig.min() >= 0.0
+        assert w_mod_sig.max() <= 1.0
+        assert q_mod_sig.shape == x.shape
+        assert q_mod_sig.size(1) == x.size(1)
+        assert q_mod_sig.min() >= 0.0
+        assert q_mod_sig.max() <= 1.0
+
+        if self.modulate_log_w:
+            log_w = self.log_min_w + (self.log_max_w - self.log_min_w) * w_mod_sig
+            w = tr.exp(log_w)
+        else:
+            w = self.min_w + (self.max_w - self.min_w) * w_mod_sig
+
+        if self.modulate_log_q:
+            log_q = self.log_min_q + (self.log_max_q - self.log_min_q) * q_mod_sig
+            q = tr.exp(log_q)
+        else:
+            q = self.min_q + (self.max_q - self.min_q) * q_mod_sig
+
+        a_coeffs, b_coeffs = calc_lp_biquad_coeff(w, q, eps=self.eps)
         y_a = sample_wise_lpc(x, a_coeffs)
         assert not tr.isinf(y_a).any()
         assert not tr.isnan(y_a).any()

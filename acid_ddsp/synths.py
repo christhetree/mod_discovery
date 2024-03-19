@@ -7,7 +7,7 @@ from torch import Tensor as T, nn
 
 from acid_ddsp.synth_modules import CustomADSR, ADSRValues, SquareSawVCOLite
 from audio_config import AudioConfig
-from filters import TimeVaryingBiquad, stable_time_varying_biquad
+from filters import TimeVaryingLPBiquad
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -73,7 +73,7 @@ class AcidSynthBase(ABC, nn.Module):
 class AcidSynth(AcidSynthBase):
     def __init__(self, ac: AudioConfig, batch_size: int):
         super().__init__(ac, batch_size)
-        self.tvb = TimeVaryingBiquad(
+        self.tvb = TimeVaryingLPBiquad(
             min_w=ac.min_w,
             max_w=ac.max_w,
             min_q=ac.min_q,

@@ -4,7 +4,7 @@ import os
 import torch as tr
 import torchaudio
 
-from acid_ddsp.filters import TimeVaryingBiquad
+from acid_ddsp.filters import TimeVaryingLPBiquad
 from acid_ddsp.synth_modules import ADSRValues
 from acid_ddsp.synths import CustomSynth
 from torchsynth.config import SynthConfig
@@ -44,7 +44,7 @@ if __name__ == "__main__":
 
     min_w = 2 * tr.pi * min_f / sr
     max_w = 2 * tr.pi * max_f / sr
-    tvb = TimeVaryingBiquad(min_w, max_w, min_q, max_q)
+    tvb = TimeVaryingLPBiquad(min_w, max_w, min_q, max_q)
 
     sc = SynthConfig(
         batch_size=batch_size,

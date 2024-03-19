@@ -11,7 +11,7 @@ from torch import nn
 import acid_ddsp.util as util
 from acid_ddsp.audio_config import AudioConfig
 from feature_extraction import LogMelSpecFeatureExtractor
-from synths import AcidSynth, AcidSynthLSTM, AcidSynthLearnedBiquad
+from synths import AcidSynth, AcidSynthLSTM
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
