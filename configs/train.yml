@@ -4,7 +4,7 @@ custom:
   project_name: acid_ddsp
 #  model_name: testing
 #  model_name: cnn_ploss
-  model_name: cnn_mss_learned_ab
+  model_name: cnn_mss
 #  dataset_name: cfqdo
   dataset_name: cfqdo_pointy
   cpu_batch_size: 3
@@ -26,10 +26,10 @@ data:
     ac: ../configs/audio_config.yml
 #    mod_sig_gen: ../configs/mod_sig_gen.yml
     mod_sig_gen: ../configs/mod_sig_gen__pointy.yml
-    train_n_per_epoch: 8000
-#    train_n_per_epoch: 9
-    val_n_per_epoch: 2000
-#    val_n_per_epoch: 9
+#    train_n_per_epoch: 8000
+    train_n_per_epoch: 9
+#    val_n_per_epoch: 2000
+    val_n_per_epoch: 9
     num_workers: 4
 
 model:
@@ -42,11 +42,11 @@ model:
 #    loss_func: torch.nn.MSELoss
 #    loss_func: auraloss.time.ESRLoss
 #    loss_func: ../configs/rand_mss.yml
-    loss_func: auraloss.freq.MultiResolutionSTFTLoss
-    use_p_loss: false
+#    loss_func: auraloss.freq.MultiResolutionSTFTLoss
+#    use_p_loss: false
 
-#    use_p_loss: true
-#    loss_func: torch.nn.MSELoss
+    use_p_loss: true
+    loss_func: torch.nn.MSELoss
 #    loss_func: torch.nn.L1Loss
 #    loss_func: auraloss.time.ESRLoss
 
