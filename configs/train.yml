@@ -13,7 +13,7 @@ custom:
   dataset_name: cfqdo_pointy
   cpu_batch_size: 3
   use_wandb_cpu: false
-  use_wandb_gpu: false
+  use_wandb_gpu: true
 
 trainer:
   accelerator: gpu
