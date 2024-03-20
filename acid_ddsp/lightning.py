@@ -233,7 +233,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         if mod_sig_hat is not None:
             if mod_sig_hat.shape != mod_sig.shape:
                 assert mod_sig_hat.ndim == mod_sig.ndim
-                assert mod_sig_hat.size(-1) < mod_sig.size(-1)
                 mod_sig_hat = util.linear_interpolate_last_dim(
                     mod_sig_hat, mod_sig.size(-1), align_corners=True
                 )

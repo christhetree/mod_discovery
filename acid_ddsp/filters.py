@@ -131,7 +131,10 @@ class TimeVaryingIIRFSM(nn.Module):
             self.hop_len = win_len // hops_per_frame
 
         self.n_fft = 2 ** (math.ceil(math.log2(self.win_len)) + oversampling_factor)
-        self.hann = tr.hann_window(self.win_len, periodic=True)
+        self.register_buffer("hann", tr.hann_window(self.win_len, periodic=True))
+        log.info(
+            f"win_len: {self.win_len}, hop_len: {self.hop_len}, n_fft: {self.n_fft}"
+        )
 
     def calc_n_frames(self, n_samples: int) -> int:
         n_frames = math.ceil(n_samples / self.hop_len)

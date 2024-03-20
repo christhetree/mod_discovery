@@ -70,6 +70,20 @@ class AcidSynthBase(ABC, nn.Module):
     def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> T:
         pass
 
+    def resize_mod_sig(self, x: T, w_mod_sig: T, q_mod_sig: T) -> (T, T):
+        assert x.ndim == 2
+        if w_mod_sig.shape != x.shape:
+            assert w_mod_sig.ndim == x.ndim
+            w_mod_sig = util.linear_interpolate_last_dim(
+                w_mod_sig, x.size(1), align_corners=True
+            )
+        if q_mod_sig.shape != x.shape:
+            assert q_mod_sig.ndim == x.ndim
+            q_mod_sig = util.linear_interpolate_last_dim(
+                q_mod_sig, x.size(1), align_corners=True
+            )
+        return w_mod_sig, q_mod_sig
+
     def forward(
         self,
         f0_hz: T,
@@ -108,16 +122,7 @@ class AcidSynth(AcidSynthBase):
     def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> T:
         w_mod_sig = filter_args["w_mod_sig"]
         q_mod_sig = filter_args["q_mod_sig"]
-        if w_mod_sig.shape != x.shape:
-            assert w_mod_sig.ndim == x.ndim
-            w_mod_sig = util.linear_interpolate_last_dim(
-                w_mod_sig, x.size(-1), align_corners=True
-            )
-        if q_mod_sig.shape != x.shape:
-            assert q_mod_sig.ndim == x.ndim
-            q_mod_sig = util.linear_interpolate_last_dim(
-                q_mod_sig, x.size(-1), align_corners=True
-            )
+        w_mod_sig, q_mod_sig = self.resize_mod_sig(x, w_mod_sig, q_mod_sig)
         y = self.filter(x, w_mod_sig, q_mod_sig)
         return y
 
@@ -226,6 +231,7 @@ class AcidSynthLSTM(AcidSynthBase):
     def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> T:
         w_mod_sig = filter_args["w_mod_sig"]
         q_mod_sig = filter_args["q_mod_sig"]
+        w_mod_sig, q_mod_sig = self.resize_mod_sig(x, w_mod_sig, q_mod_sig)
         x_orig = x
         x = tr.stack([x, w_mod_sig, q_mod_sig], dim=2)
         x, _ = self.lstm(x)
