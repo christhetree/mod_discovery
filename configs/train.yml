@@ -5,9 +5,10 @@ custom:
 #  model_name: testing
 #  model_name: cnn_ploss
 #  model_name: cnn_mss
+  model_name: cnn_mss_fsm_1024_32_0
 #  model_name: cnn_mss_coeff
 #  model_name: cnn_mss_pole_zero
-  model_name: cnn_mss_lstm64
+#  model_name: cnn_mss_lstm64
 #  dataset_name: cfqdo
   dataset_name: cfqdo_pointy
   cpu_batch_size: 3
@@ -41,14 +42,20 @@ model:
     ac: ../configs/audio_config.yml
 #    model: ../configs/spectral_2dcnn.yml
 #    synth_hat_type: AcidSynth
+    model: ../configs/spectral_2dcnn.yml
+    synth_hat_type: AcidSynthLPBiquadFSM
+    synth_hat_kwargs:
+      win_len: 1024
+      overlap: 0.96875
+      oversampling_factor: 0
 #    model: ../configs/spectral_2dcnn_logits5.yml
 #    synth_hat_type: AcidSynthLearnedBiquadCoeff
 #    model: ../configs/spectral_2dcnn_logits4.yml
 #    synth_hat_type: AcidSynthLearnedBiquadPoleZero
-    model: ../configs/spectral_2dcnn.yml
-    synth_hat_type: AcidSynthLSTM
-    synth_hat_kwargs:
-      n_hidden: 64
+#    model: ../configs/spectral_2dcnn.yml
+#    synth_hat_type: AcidSynthLSTM
+#    synth_hat_kwargs:
+#      n_hidden: 64
 #    loss_func: torch.nn.L1Loss
 #    loss_func: torch.nn.MSELoss
 #    loss_func: auraloss.time.ESRLoss

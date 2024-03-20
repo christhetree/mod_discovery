@@ -175,14 +175,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # Postprocess logits
         logits = model_out.get("logits", None)
         if logits is not None:
-            assert logits.ndim == 3
-            if logits.size(1) != mod_sig.size(1):
-                assert logits.size(1) < mod_sig.size(1)
-                logits = logits.swapaxes(1, 2)
-                logits = util.linear_interpolate_last_dim(
-                    logits, mod_sig.size(1), align_corners=True
-                )
-                logits = logits.swapaxes(1, 2)
             filter_args_hat["logits"] = logits
 
         wet_hat = None

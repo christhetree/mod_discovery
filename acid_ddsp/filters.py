@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 from typing import Optional
 
@@ -7,6 +8,7 @@ import torch.nn.functional as F
 from torch import Tensor as T
 from torch import nn
 
+import util
 from torchlpc import sample_wise_lpc
 
 logging.basicConfig()
@@ -50,7 +52,7 @@ def calc_logits_to_biquad_coeff_pole_zero(
     q_real: T, q_imag: T, p_real: T, p_imag: T, eps: float = 1e-3
 ) -> (T, T):
     assert q_real.ndim == 2
-    assert q_real.size() == q_imag.size() == p_real.size() == p_imag.size()
+    assert q_real.shape == q_imag.shape == p_real.shape == p_imag.shape
     stability_factor = 1.0 - eps
     p_abs = tr.sqrt(p_real**2 + p_imag**2)
     p_scaling_factor = tr.tanh(p_abs) * stability_factor / p_abs
@@ -104,6 +106,76 @@ def calc_lp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T):
     return a, b
 
 
+class TimeVaryingIIRFSM(nn.Module):
+    def __init__(
+        self,
+        sr: float,
+        win_len: Optional[int] = None,
+        win_len_sec: Optional[float] = None,
+        overlap: float = 0.75,
+        oversampling_factor: int = 1,
+    ):
+        super().__init__()
+        self.sr = sr
+        self.overlap = overlap
+
+        hops_per_frame = int(1.0 / (1.0 - overlap))
+        if win_len is None:
+            assert win_len_sec is not None
+            self.hop_len = int(win_len_sec * sr / hops_per_frame)
+            self.win_len = hops_per_frame * self.hop_len
+        else:
+            assert win_len_sec is None
+            assert win_len % hops_per_frame == 0
+            self.win_len = win_len
+            self.hop_len = win_len // hops_per_frame
+
+        self.n_fft = 2 ** (math.ceil(math.log2(self.win_len)) + oversampling_factor)
+        self.hann = tr.hann_window(self.win_len, periodic=True)
+
+    def calc_n_frames(self, n_samples: int) -> int:
+        n_frames = math.ceil(n_samples / self.hop_len)
+        return n_frames
+
+    def forward(self, x: T, a: T, b: T) -> T:
+        assert x.ndim == 2
+        assert a.ndim == 3
+        x_n_samples = x.size(1)
+        X = tr.stft(
+            x,
+            n_fft=self.n_fft,
+            hop_length=self.hop_len,
+            win_length=self.win_len,
+            window=self.hann,
+            center=True,
+            pad_mode="constant",
+            onesided=True,
+            return_complex=True,
+        )
+
+        n_frames = X.size(2)
+        assert a.size(1) == n_frames
+        assert b.size(1) == n_frames
+
+        A = tr.fft.rfft(a, self.n_fft)
+        B = tr.fft.rfft(b, self.n_fft)
+        H = B / A
+        H = H.swapaxes(1, 2)
+        Y = X * H
+
+        y = tr.istft(
+            Y,
+            n_fft=self.n_fft,
+            hop_length=self.hop_len,
+            win_length=self.win_len,
+            window=self.hann,
+            center=True,
+            onesided=True,
+            length=x_n_samples,
+        )
+        return y
+
+
 class TimeVaryingLPBiquad(nn.Module):
     def __init__(
         self,
@@ -130,24 +202,19 @@ class TimeVaryingLPBiquad(nn.Module):
         self.modulate_log_w = modulate_log_w
         self.modulate_log_q = modulate_log_q
 
-    def forward(
-        self,
-        x: T,
-        w_mod_sig: Optional[T] = None,
-        q_mod_sig: Optional[T] = None,
-    ) -> T:
+    def calc_w_and_q(
+        self, x: T, w_mod_sig: Optional[T] = None, q_mod_sig: Optional[T] = None
+    ) -> (T, T):
         if w_mod_sig is None:
             w_mod_sig = tr.zeros_like(x)
         if q_mod_sig is None:
             q_mod_sig = tr.zeros_like(x)
 
         assert x.ndim == 2
-        assert w_mod_sig.shape == x.shape
-        assert w_mod_sig.size(1) == x.size(1)
+        assert w_mod_sig.ndim == 2
         assert w_mod_sig.min() >= 0.0
         assert w_mod_sig.max() <= 1.0
-        assert q_mod_sig.shape == x.shape
-        assert q_mod_sig.size(1) == x.size(1)
+        assert q_mod_sig.ndim == 2
         assert q_mod_sig.min() >= 0.0
         assert q_mod_sig.max() <= 1.0
 
@@ -163,12 +230,76 @@ class TimeVaryingLPBiquad(nn.Module):
         else:
             q = self.min_q + (self.max_q - self.min_q) * q_mod_sig
 
+        return w, q
+
+    def forward(
+        self,
+        x: T,
+        w_mod_sig: Optional[T] = None,
+        q_mod_sig: Optional[T] = None,
+    ) -> T:
+        w, q = self.calc_w_and_q(x, w_mod_sig, q_mod_sig)
         a_coeffs, b_coeffs = calc_lp_biquad_coeff(w, q, eps=self.eps)
         y_a = sample_wise_lpc(x, a_coeffs)
         assert not tr.isinf(y_a).any()
         assert not tr.isnan(y_a).any()
         y_ab = time_varying_fir(y_a, b_coeffs)
         return y_ab
+
+
+class TimeVaryingLPBiquadFSM(TimeVaryingLPBiquad):
+    def __init__(
+        self,
+        sr: float,
+        win_len: Optional[int] = None,
+        win_len_sec: Optional[float] = None,
+        overlap: float = 0.75,
+        oversampling_factor: int = 1,
+        min_w: float = 0.0,
+        max_w: float = tr.pi,
+        min_q: float = 0.7071,
+        max_q: float = 4.0,
+        eps: float = 1e-3,
+        modulate_log_w: bool = True,
+        modulate_log_q: bool = True,
+    ):
+        super().__init__(
+            min_w=min_w,
+            max_w=max_w,
+            min_q=min_q,
+            max_q=max_q,
+            eps=eps,
+            modulate_log_w=modulate_log_w,
+            modulate_log_q=modulate_log_q,
+        )
+        self.filter = TimeVaryingIIRFSM(
+            sr=sr,
+            win_len=win_len,
+            win_len_sec=win_len_sec,
+            overlap=overlap,
+            oversampling_factor=oversampling_factor,
+        )
+
+    def forward(
+        self,
+        x: T,
+        w_mod_sig: Optional[T] = None,
+        q_mod_sig: Optional[T] = None,
+    ) -> T:
+        w, q = self.calc_w_and_q(x, w_mod_sig, q_mod_sig)
+        n_samples = x.size(1)
+        n_frames = self.filter.calc_n_frames(n_samples)
+        if w.size(1) != n_frames:
+            w = util.linear_interpolate_last_dim(w, n_frames, align_corners=True)
+        if q.size(1) != n_frames:
+            q = util.linear_interpolate_last_dim(q, n_frames, align_corners=True)
+        a_coeffs, b_coeffs = calc_lp_biquad_coeff(w, q, eps=self.eps)
+        a1 = a_coeffs[:, :, 0]
+        a2 = a_coeffs[:, :, 1]
+        a0 = tr.ones_like(a1)
+        a_coeffs = tr.stack([a0, a1, a2], dim=2)
+        y = self.filter(x, a_coeffs, b_coeffs)
+        return y
 
 
 if __name__ == "__main__":
