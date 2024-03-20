@@ -2,6 +2,7 @@ import logging
 import os
 from typing import Dict, Any, Optional
 
+import auraloss
 import pytorch_lightning as pl
 import torch as tr
 from auraloss.time import ESRLoss
@@ -11,7 +12,7 @@ from torch import nn
 import acid_ddsp.util as util
 from acid_ddsp.audio_config import AudioConfig
 from feature_extraction import LogMelSpecFeatureExtractor
-from synths import AcidSynth, AcidSynthLSTM, AcidSynthBase, make_synth
+from synths import AcidSynth, make_synth
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.loss_name = self.loss_func.__class__.__name__
         self.esr = ESRLoss()
         self.l1 = nn.L1Loss()
+        self.mss = auraloss.freq.MultiResolutionSTFTLoss()
         self.global_n = 0
         self.is_q_learnable = ac.min_q != ac.max_q
         self.is_dist_gain_learnable = ac.min_dist_gain != ac.max_dist_gain
@@ -166,9 +168,23 @@ class AcidDDSPLightingModule(pl.LightningModule):
         if logits is not None:
             filter_args_hat["logits"] = logits
 
-        wet_hat = None
+        # Generate audio x_hat
+        _, wet_hat, _ = self.synth_hat(
+            f0_hz,
+            osc_shape_hat,
+            note_on_duration,
+            filter_args_hat,
+            dist_gain_hat,
+        )
+
+        # Compute loss
         if self.use_p_loss:
             assert mod_sig_hat is not None
+            if mod_sig_hat.shape != mod_sig.shape:
+                assert mod_sig_hat.ndim == mod_sig.ndim
+                mod_sig_hat = util.linear_interpolate_last_dim(
+                    mod_sig_hat, mod_sig.size(-1), align_corners=True
+                )
             loss = self.loss_func(mod_sig_hat, mod_sig)
             if self.is_q_learnable and q_norm_hat is not None:
                 q_loss = self.loss_func(q_norm_hat, q_norm)
@@ -198,22 +214,20 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 )
                 loss += osc_shape_loss
             self.log(
-                f"{stage}/ploss_{self.loss_name}", loss, prog_bar=True, sync_dist=True
+                f"{stage}/ploss_{self.loss_name}", loss, prog_bar=False, sync_dist=True
             )
         else:
-            _, wet_hat, _ = self.synth_hat(
-                f0_hz,
-                osc_shape_hat,
-                note_on_duration,
-                filter_args_hat,
-                dist_gain_hat,
-            )
             loss = self.loss_func(wet_hat.unsqueeze(1), wet.unsqueeze(1))
             self.log(
-                f"{stage}/audio_{self.loss_name}", loss, prog_bar=True, sync_dist=True
+                f"{stage}/audio_{self.loss_name}", loss, prog_bar=False, sync_dist=True
             )
 
         self.log(f"{stage}/loss", loss, prog_bar=False, sync_dist=True)
+
+        # Log MSS loss
+        with tr.no_grad():
+            mss_loss = self.mss(wet_hat.unsqueeze(1), wet.unsqueeze(1))
+        self.log(f"{stage}/audio_mss", mss_loss, prog_bar=True, sync_dist=True)
 
         # Log mod_sig_hat metrics
         if mod_sig_hat is not None:

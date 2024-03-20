@@ -60,11 +60,11 @@ model:
 #    loss_func: torch.nn.MSELoss
 #    loss_func: auraloss.time.ESRLoss
 #    loss_func: ../configs/rand_mss.yml
-    loss_func: auraloss.freq.MultiResolutionSTFTLoss
-    use_p_loss: false
+#    loss_func: auraloss.freq.MultiResolutionSTFTLoss
+#    use_p_loss: false
 
-#    use_p_loss: true
-#    loss_func: torch.nn.MSELoss
+    use_p_loss: true
+    loss_func: torch.nn.MSELoss
 #    loss_func: torch.nn.L1Loss
 #    loss_func: auraloss.time.ESRLoss
 
