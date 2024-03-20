@@ -4,8 +4,8 @@ custom:
   project_name: acid_ddsp
 #  model_name: testing
 #  model_name: cnn_ploss
-#  model_name: cnn_mss
-  model_name: cnn_mss_fsm_1024_32_0
+  model_name: cnn_mss
+#  model_name: cnn_mss_fsm_1024_32_0
 #  model_name: cnn_mss_coeff
 #  model_name: cnn_mss_pole_zero
 #  model_name: cnn_mss_lstm64
@@ -46,7 +46,7 @@ model:
     synth_hat_type: AcidSynthLPBiquadFSM
     synth_hat_kwargs:
       win_len: 1024
-      overlap: 0.96875
+      overlap: 0.96875  # 32 samples at 1024
       oversampling_factor: 0
 #    model: ../configs/spectral_2dcnn_logits5.yml
 #    synth_hat_type: AcidSynthLearnedBiquadCoeff

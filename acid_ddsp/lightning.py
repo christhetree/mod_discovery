@@ -96,7 +96,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # Generate ground truth audio x
         with tr.no_grad():
-            q_mod_sig = tr.ones_like(mod_sig) * q_norm.unsqueeze(-1)
+            q_mod_sig = q_norm.unsqueeze(-1)
             filter_args = {
                 "w_mod_sig": mod_sig,
                 "q_mod_sig": q_mod_sig,
@@ -114,18 +114,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # Postprocess mod_sig_hat
         mod_sig_hat = model_out.get("mod_sig_hat", None)
         if mod_sig_hat is not None:
-            if mod_sig_hat.shape != mod_sig.shape:
-                assert mod_sig_hat.ndim == mod_sig.ndim
-                assert mod_sig_hat.size(-1) < mod_sig.size(-1)
-                mod_sig_hat = util.linear_interpolate_last_dim(
-                    mod_sig_hat, mod_sig.size(-1), align_corners=True
-                )
             filter_args_hat["w_mod_sig"] = mod_sig_hat
-            with tr.no_grad():
-                mod_sig_esr = self.esr(mod_sig_hat, mod_sig)
-                mod_sig_l1 = self.l1(mod_sig_hat, mod_sig)
-            self.log(f"{stage}/ms_esr", mod_sig_esr, prog_bar=False, sync_dist=True)
-            self.log(f"{stage}/ms_l1", mod_sig_l1, prog_bar=True, sync_dist=True)
 
         # Postprocess q_hat
         q_norm_hat = model_out.get("q_norm_hat", None)
@@ -135,7 +124,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 with tr.no_grad():
                     q_norm_l1 = self.l1(q_norm_hat, q_norm)
                 self.log(f"{stage}/q_l1", q_norm_l1, prog_bar=False, sync_dist=True)
-            q_mod_sig_hat = tr.ones_like(mod_sig) * q_norm_hat.unsqueeze(-1)
+            q_mod_sig_hat = q_norm_hat.unsqueeze(-1)
             filter_args_hat["q_mod_sig"] = q_mod_sig_hat
             q_hat = q_norm_hat * (self.ac.max_q - self.ac.min_q) + self.ac.min_q
 
@@ -225,6 +214,20 @@ class AcidDDSPLightingModule(pl.LightningModule):
             )
 
         self.log(f"{stage}/loss", loss, prog_bar=False, sync_dist=True)
+
+        # Log mod_sig_hat metrics
+        if mod_sig_hat is not None:
+            if mod_sig_hat.shape != mod_sig.shape:
+                assert mod_sig_hat.ndim == mod_sig.ndim
+                assert mod_sig_hat.size(-1) < mod_sig.size(-1)
+                mod_sig_hat = util.linear_interpolate_last_dim(
+                    mod_sig_hat, mod_sig.size(-1), align_corners=True
+                )
+            with tr.no_grad():
+                mod_sig_esr = self.esr(mod_sig_hat, mod_sig)
+                mod_sig_l1 = self.l1(mod_sig_hat, mod_sig)
+            self.log(f"{stage}/ms_esr", mod_sig_esr, prog_bar=False, sync_dist=True)
+            self.log(f"{stage}/ms_l1", mod_sig_l1, prog_bar=True, sync_dist=True)
 
         out_dict = {
             "loss": loss,

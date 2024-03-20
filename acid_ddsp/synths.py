@@ -108,7 +108,16 @@ class AcidSynth(AcidSynthBase):
     def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> T:
         w_mod_sig = filter_args["w_mod_sig"]
         q_mod_sig = filter_args["q_mod_sig"]
-        assert w_mod_sig.shape == q_mod_sig.shape
+        if w_mod_sig.shape != x.shape:
+            assert w_mod_sig.ndim == x.ndim
+            w_mod_sig = util.linear_interpolate_last_dim(
+                w_mod_sig, x.size(-1), align_corners=True
+            )
+        if q_mod_sig.shape != x.shape:
+            assert q_mod_sig.ndim == x.ndim
+            q_mod_sig = util.linear_interpolate_last_dim(
+                q_mod_sig, x.size(-1), align_corners=True
+            )
         y = self.filter(x, w_mod_sig, q_mod_sig)
         return y
 
@@ -139,6 +148,18 @@ class AcidSynthLPBiquadFSM(AcidSynthBase):
     def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> T:
         w_mod_sig = filter_args["w_mod_sig"]
         q_mod_sig = filter_args["q_mod_sig"]
+        n_samples = x.size(1)
+        n_frames = self.filter.filter.calc_n_frames(n_samples)
+        if w_mod_sig.size(1) != n_frames:
+            assert w_mod_sig.ndim == x.ndim
+            w_mod_sig = util.linear_interpolate_last_dim(
+                w_mod_sig, n_frames, align_corners=True
+            )
+        if q_mod_sig.size(1) != n_frames:
+            assert q_mod_sig.ndim == x.ndim
+            q_mod_sig = util.linear_interpolate_last_dim(
+                q_mod_sig, n_frames, align_corners=True
+            )
         y = self.filter(x, w_mod_sig, q_mod_sig)
         return y
 

@@ -239,6 +239,7 @@ class TimeVaryingLPBiquad(nn.Module):
         q_mod_sig: Optional[T] = None,
     ) -> T:
         w, q = self.calc_w_and_q(x, w_mod_sig, q_mod_sig)
+        assert x.shape == w.shape == q.shape
         a_coeffs, b_coeffs = calc_lp_biquad_coeff(w, q, eps=self.eps)
         y_a = sample_wise_lpc(x, a_coeffs)
         assert not tr.isinf(y_a).any()
@@ -287,12 +288,6 @@ class TimeVaryingLPBiquadFSM(TimeVaryingLPBiquad):
         q_mod_sig: Optional[T] = None,
     ) -> T:
         w, q = self.calc_w_and_q(x, w_mod_sig, q_mod_sig)
-        n_samples = x.size(1)
-        n_frames = self.filter.calc_n_frames(n_samples)
-        if w.size(1) != n_frames:
-            w = util.linear_interpolate_last_dim(w, n_frames, align_corners=True)
-        if q.size(1) != n_frames:
-            q = util.linear_interpolate_last_dim(q, n_frames, align_corners=True)
         a_coeffs, b_coeffs = calc_lp_biquad_coeff(w, q, eps=self.eps)
         a1 = a_coeffs[:, :, 0]
         a2 = a_coeffs[:, :, 1]
