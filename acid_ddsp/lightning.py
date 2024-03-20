@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Dict
+from typing import Dict, Any, Optional
 
 import pytorch_lightning as pl
 import torch as tr
@@ -11,7 +11,7 @@ from torch import nn
 import acid_ddsp.util as util
 from acid_ddsp.audio_config import AudioConfig
 from feature_extraction import LogMelSpecFeatureExtractor
-from synths import AcidSynth, AcidSynthLSTM
+from synths import AcidSynth, AcidSynthLSTM, AcidSynthBase, make_synth
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -28,8 +28,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
         spectral_visualizer: LogMelSpecFeatureExtractor,
         use_p_loss: bool = False,
         log_envelope: bool = False,
+        synth_hat_type: str = "AcidSynth",
+        synth_hat_kwargs: Optional[Dict[str, Any]] = None,
     ):
         super().__init__()
+        if synth_hat_kwargs is None:
+            synth_hat_kwargs = {}
         self.save_hyperparameters(
             ignore=["ac", "model", "loss_func", "spectral_visualizer"]
         )
@@ -52,10 +56,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.is_osc_shape_learnable = ac.min_osc_shape != ac.max_osc_shape
 
         self.synth = AcidSynth(ac, batch_size)
-        self.synth_hat = AcidSynth(ac, batch_size)
-        # self.synth_hat = AcidSynthLearnedBiquadCoeff(ac, batch_size)
-        # self.synth_hat = AcidSynthLearnedBiquadPoleZero(ac, batch_size)
-        # self.synth_hat = AcidSynthLSTM(ac, batch_size, n_hidden=128)
+        self.synth_hat = make_synth(synth_hat_type, ac, batch_size, **synth_hat_kwargs)
 
     def on_train_start(self) -> None:
         self.global_n = 0
@@ -174,7 +175,15 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # Postprocess logits
         logits = model_out.get("logits", None)
         if logits is not None:
-            assert False  # TODO(cm): interpolate logits
+            assert logits.ndim == 3
+            if logits.size(1) != mod_sig.size(1):
+                assert logits.size(1) < mod_sig.size(1)
+                logits = logits.swapaxes(1, 2)
+                logits = util.linear_interpolate_last_dim(
+                    logits, mod_sig.size(1), align_corners=True
+                )
+                logits = logits.swapaxes(1, 2)
+            filter_args_hat["logits"] = logits
 
         wet_hat = None
         if self.use_p_loss:

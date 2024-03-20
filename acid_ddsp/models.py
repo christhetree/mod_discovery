@@ -35,6 +35,7 @@ class Spectral2DCNN(nn.Module):
         pool_size: Tuple[int, int] = (2, 1),
         use_ln: bool = True,
         dropout: float = 0.25,
+        n_logits: int = 0,
     ) -> None:
         super().__init__()
         self.fe = fe
@@ -43,6 +44,8 @@ class Spectral2DCNN(nn.Module):
         assert pool_size[1] == 1
         self.pool_size = pool_size
         self.use_ln = use_ln
+        self.dropout = dropout
+        self.n_logits = n_logits
 
         if out_channels is None:
             out_channels = [64] * 5
@@ -83,15 +86,20 @@ class Spectral2DCNN(nn.Module):
 
         self.cnn = nn.Sequential(*layers)
 
-        self.out_ms = nn.Linear(out_channels[-1], 1)
+        if n_logits:
+            self.out_frame_wise = nn.Linear(out_channels[-1], n_logits)
+        else:
+            self.out_frame_wise = nn.Linear(out_channels[-1], 1)
 
-        self.out_q = nn.Sequential(
-            nn.Linear(out_channels[-1], out_channels[-1] // 2),
-            nn.Dropout(p=dropout),
-            nn.PReLU(num_parameters=out_channels[-1] // 2),
-            nn.Linear(out_channels[-1] // 2, 1),
-            nn.Sigmoid(),
-        )
+        self.out_q = None
+        if not n_logits:
+            self.out_q = nn.Sequential(
+                nn.Linear(out_channels[-1], out_channels[-1] // 2),
+                nn.Dropout(p=dropout),
+                nn.PReLU(num_parameters=out_channels[-1] // 2),
+                nn.Linear(out_channels[-1] // 2, 1),
+                nn.Sigmoid(),
+            )
 
         self.out_dist_gain = nn.Sequential(
             nn.Linear(out_channels[-1], out_channels[-1] // 2),
@@ -117,13 +125,21 @@ class Spectral2DCNN(nn.Module):
         x = tr.mean(x, dim=-2)
         latent = x.swapaxes(1, 2)
 
-        x = self.out_ms(latent)
-        ms_hat = tr.sigmoid(x)
-        # ms_hat = magic_clamp(x, min_value=0.0, max_value=1.0)
-        ms_hat = ms_hat.squeeze(-1)
+        x = self.out_frame_wise(latent)
+
+        ms_hat = None
+        logits = None
+        if self.n_logits:
+            logits = x
+        else:
+            x = tr.sigmoid(x)
+            # x = magic_clamp(x, min_value=0.0, max_value=1.0)
+            ms_hat = x.squeeze(-1)
 
         x = tr.mean(latent, dim=-2)
-        q_norm_hat = self.out_q(x).squeeze(-1)
+        q_norm_hat = None
+        if not self.n_logits:
+            q_norm_hat = self.out_q(x).squeeze(-1)
         dist_gain_norm_hat = self.out_dist_gain(x).squeeze(-1)
         osc_shape_norm_hat = self.out_osc_shape(x).squeeze(-1)
 
@@ -134,6 +150,7 @@ class Spectral2DCNN(nn.Module):
             "osc_shape_norm_hat": osc_shape_norm_hat,
             "latent": latent,
             "log_spec": log_spec,
+            "logits": logits,
         }
 
 

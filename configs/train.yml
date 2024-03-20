@@ -4,7 +4,10 @@ custom:
   project_name: acid_ddsp
 #  model_name: testing
 #  model_name: cnn_ploss
-  model_name: cnn_mss
+#  model_name: cnn_mss
+#  model_name: cnn_mss_coeff
+#  model_name: cnn_mss_pole_zero
+  model_name: cnn_mss_lstm64
 #  dataset_name: cfqdo
   dataset_name: cfqdo_pointy
   cpu_batch_size: 3
@@ -14,7 +17,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [7]
+  devices: [3]
   max_epochs: 20
   num_sanity_val_steps: 0
   accumulate_grad_batches: 1
@@ -26,31 +29,39 @@ data:
     ac: ../configs/audio_config.yml
 #    mod_sig_gen: ../configs/mod_sig_gen.yml
     mod_sig_gen: ../configs/mod_sig_gen__pointy.yml
-#    train_n_per_epoch: 8000
-    train_n_per_epoch: 9
-#    val_n_per_epoch: 2000
-    val_n_per_epoch: 9
+    train_n_per_epoch: 8000
+#    train_n_per_epoch: 9
+    val_n_per_epoch: 2000
+#    val_n_per_epoch: 9
     num_workers: 4
 
 model:
   class_path: acid_ddsp.lightning.AcidDDSPLightingModule
   init_args:
     ac: ../configs/audio_config.yml
+#    model: ../configs/spectral_2dcnn.yml
+#    synth_hat_type: AcidSynth
+#    model: ../configs/spectral_2dcnn_logits5.yml
+#    synth_hat_type: AcidSynthLearnedBiquadCoeff
+#    model: ../configs/spectral_2dcnn_logits4.yml
+#    synth_hat_type: AcidSynthLearnedBiquadPoleZero
     model: ../configs/spectral_2dcnn.yml
-#    model: ../configs/audio_tcn.yml
+    synth_hat_type: AcidSynthLSTM
+    synth_hat_kwargs:
+      n_hidden: 64
 #    loss_func: torch.nn.L1Loss
 #    loss_func: torch.nn.MSELoss
 #    loss_func: auraloss.time.ESRLoss
 #    loss_func: ../configs/rand_mss.yml
-#    loss_func: auraloss.freq.MultiResolutionSTFTLoss
-#    use_p_loss: false
+    loss_func: auraloss.freq.MultiResolutionSTFTLoss
+    use_p_loss: false
 
-    use_p_loss: true
-    loss_func: torch.nn.MSELoss
+#    use_p_loss: true
+#    loss_func: torch.nn.MSELoss
 #    loss_func: torch.nn.L1Loss
 #    loss_func: auraloss.time.ESRLoss
 
-    log_envelope: false
+    log_envelope: true
     spectral_visualizer: ../configs/log_mel_spec.yml
 
 optimizer: ../configs/adam_w.yml

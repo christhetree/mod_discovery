@@ -1,4 +1,4 @@
-class_path: acid_ddsp.data_modules.AudioConfig
+class_path: data_modules.AudioConfig
 init_args:
   sr: 48000
 

@@ -1,7 +1,7 @@
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Dict
+from typing import Dict, Any
 
 import torch as tr
 from torch import Tensor as T, nn
@@ -19,6 +19,22 @@ from torchlpc import sample_wise_lpc
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
+
+
+def make_synth(
+    synth_type: str, ac: AudioConfig, batch_size: int, **kwargs: Dict[str, Any]
+) -> "AcidSynthBase":
+    if synth_type == "AcidSynth":
+        synth_class = AcidSynth
+    elif synth_type == "AcidSynthLearnedBiquadCoeff":
+        synth_class = AcidSynthLearnedBiquadCoeff
+    elif synth_type == "AcidSynthLearnedBiquadPoleZero":
+        synth_class = AcidSynthLearnedBiquadPoleZero
+    elif synth_type == "AcidSynthLSTM":
+        synth_class = AcidSynthLSTM
+    else:
+        raise ValueError(f"Unknown synth_type: {synth_type}")
+    return synth_class(ac, batch_size, **kwargs)
 
 
 class AcidSynthBase(ABC, nn.Module):
@@ -95,9 +111,12 @@ class AcidSynth(AcidSynthBase):
 
 class AcidSynthLearnedBiquadCoeff(AcidSynthBase):
     def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> T:
-        a_logits = filter_args["a_logits"]
+        logits = filter_args["logits"]
+        assert logits.shape == (x.size(0), x.size(1), 5)
+        a_logits = logits[..., :2]
         a = calc_logits_to_biquad_a_coeff_triangle(a_logits)
-        b = filter_args["b_logits"]
+        b = logits[..., 2:]
+
         y_a = sample_wise_lpc(x, a)
         assert not tr.isinf(y_a).any()
         assert not tr.isnan(y_a).any()
@@ -107,11 +126,14 @@ class AcidSynthLearnedBiquadCoeff(AcidSynthBase):
 
 class AcidSynthLearnedBiquadPoleZero(AcidSynthBase):
     def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> T:
-        q_real = filter_args["q_real"]
-        q_imag = filter_args["q_imag"]
-        p_real = filter_args["p_real"]
-        p_imag = filter_args["p_imag"]
+        logits = filter_args["logits"]
+        assert logits.shape == (x.size(0), x.size(1), 4)
+        q_real = logits[..., 0]
+        q_imag = logits[..., 1]
+        p_real = logits[..., 2]
+        p_imag = logits[..., 3]
         a, b = calc_logits_to_biquad_coeff_pole_zero(q_real, q_imag, p_real, p_imag)
+
         y_a = sample_wise_lpc(x, a)
         assert not tr.isinf(y_a).any()
         assert not tr.isnan(y_a).any()
@@ -121,11 +143,11 @@ class AcidSynthLearnedBiquadPoleZero(AcidSynthBase):
 
 class AcidSynthLSTM(AcidSynthBase):
     def __init__(
-        self, ac: AudioConfig, batch_size: int, n_ch: int = 1, n_hidden: int = 3
+        self, ac: AudioConfig, batch_size: int, n_hidden: int, n_ch: int = 1
     ):
         super().__init__(ac, batch_size)
-        self.n_ch = n_ch
         self.n_hidden = n_hidden
+        self.n_ch = n_ch
         self.lstm = nn.LSTM(
             input_size=n_ch + 2,
             hidden_size=n_hidden,
