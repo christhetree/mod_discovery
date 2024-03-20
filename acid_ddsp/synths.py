@@ -139,11 +139,11 @@ class AcidSynthLPBiquadFSM(AcidSynthBase):
     ):
         super().__init__(ac, batch_size)
         self.filter = TimeVaryingLPBiquadFSM(
-            ac.sr,
-            win_len,
-            win_len_sec,
-            overlap,
-            oversampling_factor,
+            win_len=win_len,
+            win_len_sec=win_len_sec,
+            sr=ac.sr,
+            overlap=overlap,
+            oversampling_factor=oversampling_factor,
             min_w=ac.min_w,
             max_w=ac.max_w,
             min_q=ac.min_q,

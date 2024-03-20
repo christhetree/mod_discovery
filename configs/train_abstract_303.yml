@@ -1,0 +1,68 @@
+seed_everything: 42
+
+custom:
+  project_name: acid_ddsp
+#  model_name: testing
+  model_name: cnn_mss
+#  model_name: cnn_mss_fsm_4096_32_1
+#  model_name: cnn_mss_coeff
+#  model_name: cnn_mss_pole_zero
+#  model_name: cnn_mss_lstm64
+  dataset_name: abstract_303__6k__4k_min
+  cpu_batch_size: 3
+  use_wandb_cpu: false
+  use_wandb_gpu: true
+
+trainer:
+  accelerator: gpu
+  benchmark: false
+  devices: [1]
+  max_epochs: 20
+  num_sanity_val_steps: 0
+  accumulate_grad_batches: 1
+
+data:
+  class_path: acid_ddsp.data_modules.PreprocDataModule
+  init_args:
+    batch_size: 16
+    ac: ../configs/audio_config_abstract_303.yml
+    data_dir: ../data/abstract_303__6k__4k_min
+    ext: .wav
+    val_split: 0.15
+    test_split: 0.15
+    split_seed: 33
+    num_workers: 4
+
+model:
+  class_path: acid_ddsp.lightning.AcidDDSPLightingModule
+  init_args:
+    ac: ../configs/audio_config.yml
+    model: ../configs/spectral_2dcnn.yml
+    synth_hat_type: AcidSynth
+#    model: ../configs/spectral_2dcnn.yml
+#    synth_hat_type: AcidSynthLPBiquadFSM
+#    synth_hat_kwargs:
+#      win_len: 1024
+##      overlap: 0.96875  # 32 samples at 1024
+##      overlap: 0.9921875  # 32 samples at 4096
+#      overlap: 0.75
+#      oversampling_factor: 1
+#    model: ../configs/spectral_2dcnn_logits5.yml
+#    synth_hat_type: AcidSynthLearnedBiquadCoeff
+#    model: ../configs/spectral_2dcnn_logits4.yml
+#    synth_hat_type: AcidSynthLearnedBiquadPoleZero
+#    model: ../configs/spectral_2dcnn.yml
+#    synth_hat_type: AcidSynthLSTM
+#    synth_hat_kwargs:
+#      n_hidden: 64
+#    loss_func: torch.nn.L1Loss
+#    loss_func: torch.nn.MSELoss
+#    loss_func: auraloss.time.ESRLoss
+#    loss_func: ../configs/rand_mss.yml
+    loss_func: auraloss.freq.MultiResolutionSTFTLoss
+    use_p_loss: false
+
+    log_envelope: false
+    spectral_visualizer: ../configs/log_mel_spec_44100.yml
+
+optimizer: ../configs/adam_w.yml

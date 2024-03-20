@@ -8,7 +8,6 @@ import torch.nn.functional as F
 from torch import Tensor as T
 from torch import nn
 
-import util
 from torchlpc import sample_wise_lpc
 
 logging.basicConfig()
@@ -109,19 +108,21 @@ def calc_lp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T):
 class TimeVaryingIIRFSM(nn.Module):
     def __init__(
         self,
-        sr: float,
         win_len: Optional[int] = None,
         win_len_sec: Optional[float] = None,
+        sr: Optional[float] = None,
         overlap: float = 0.75,
         oversampling_factor: int = 1,
     ):
         super().__init__()
         self.sr = sr
         self.overlap = overlap
+        self.oversampling_factor = oversampling_factor
 
         hops_per_frame = int(1.0 / (1.0 - overlap))
         if win_len is None:
             assert win_len_sec is not None
+            assert sr is not None
             self.hop_len = int(win_len_sec * sr / hops_per_frame)
             self.win_len = hops_per_frame * self.hop_len
         else:
@@ -143,6 +144,7 @@ class TimeVaryingIIRFSM(nn.Module):
     def forward(self, x: T, a: T, b: T) -> T:
         assert x.ndim == 2
         assert a.ndim == 3
+        assert b.ndim == 3
         x_n_samples = x.size(1)
         X = tr.stft(
             x,
@@ -254,9 +256,9 @@ class TimeVaryingLPBiquad(nn.Module):
 class TimeVaryingLPBiquadFSM(TimeVaryingLPBiquad):
     def __init__(
         self,
-        sr: float,
         win_len: Optional[int] = None,
         win_len_sec: Optional[float] = None,
+        sr: Optional[float] = None,
         overlap: float = 0.75,
         oversampling_factor: int = 1,
         min_w: float = 0.0,
@@ -277,9 +279,9 @@ class TimeVaryingLPBiquadFSM(TimeVaryingLPBiquad):
             modulate_log_q=modulate_log_q,
         )
         self.filter = TimeVaryingIIRFSM(
-            sr=sr,
             win_len=win_len,
             win_len_sec=win_len_sec,
+            sr=sr,
             overlap=overlap,
             oversampling_factor=oversampling_factor,
         )

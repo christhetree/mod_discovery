@@ -1,8 +1,10 @@
 import logging
 import os
-from typing import Dict
+from typing import Dict, List
 
+import librosa
 import torch as tr
+import torchaudio
 from torch import Tensor as T
 from torch.utils.data import Dataset
 
@@ -45,4 +47,40 @@ class AcidSynthDataset(Dataset):
             "q_norm": q_norm,
             "dist_gain_norm": dist_gain_norm,
             "osc_shape_norm": osc_shape_norm,
+        }
+
+
+class PreprocDataset(Dataset):
+    def __init__(
+        self,
+        ac: AudioConfig,
+        audio_paths: List[str],
+    ):
+        super().__init__()
+        self.ac = ac
+        self.audio_paths = audio_paths
+        self.note_on_duration = tr.tensor(ac.note_on_duration)
+
+        audio_f0_hz = []
+        for audio_path in audio_paths:
+            midi_f0 = int(audio_path.split("_")[-1].split(".")[0])
+            f0_hz = librosa.midi_to_hz(midi_f0)
+            audio_f0_hz.append(f0_hz)
+        self.audio_f0_hz = audio_f0_hz
+
+    def __len__(self) -> int:
+        return len(self.audio_paths)
+
+    def __getitem__(self, idx: int) -> Dict[str, T]:
+        audio_path = self.audio_paths[idx]
+        f0_hz = self.audio_f0_hz[idx]
+        audio, sr = torchaudio.load(audio_path)
+        n_samples = audio.size(1)
+        assert sr == self.ac.sr
+        assert n_samples == self.ac.n_samples
+
+        return {
+            "wet": audio,
+            "f0_hz": f0_hz,
+            "note_on_duration": self.note_on_duration,
         }
