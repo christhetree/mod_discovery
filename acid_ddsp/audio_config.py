@@ -34,7 +34,8 @@ class AudioConfig:
         max_dist_gain: float = 1.0,
         min_osc_shape: float = 1.0,
         max_osc_shape: float = 1.0,
-        osc_audio_gain: float = 1.0,
+        min_osc_gain: float = 1.0,
+        max_osc_gain: float = 1.0,
         stability_eps: float = 0.001,
     ):
         self.sr = sr
@@ -60,7 +61,8 @@ class AudioConfig:
         self.max_dist_gain = max_dist_gain
         self.min_osc_shape = min_osc_shape
         self.max_osc_shape = max_osc_shape
-        self.osc_audio_gain = osc_audio_gain
+        self.min_osc_gain = min_osc_gain
+        self.max_osc_gain = max_osc_gain
         self.stability_eps = stability_eps
 
         self.n_samples = int(sr * buffer_size_seconds)
