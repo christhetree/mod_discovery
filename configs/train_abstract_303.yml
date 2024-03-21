@@ -3,20 +3,20 @@ seed_everything: 42
 custom:
   project_name: acid_ddsp
 #  model_name: testing
-  model_name: cnn_mss
+#  model_name: cnn_mss
 #  model_name: cnn_mss_fsm_4096_32_1
-#  model_name: cnn_mss_coeff
+  model_name: cnn_mss_coeff
 #  model_name: cnn_mss_pole_zero
 #  model_name: cnn_mss_lstm64
   dataset_name: abstract_303__6k__4k_min
-  cpu_batch_size: 40
+  cpu_batch_size: 10
   use_wandb_cpu: false
   use_wandb_gpu: true
 
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [4]
+  devices: [0]
   max_epochs: 200
   num_sanity_val_steps: 0
   accumulate_grad_batches: 1
@@ -26,7 +26,8 @@ data:
   init_args:
     batch_size: 10
     ac: ../configs/audio_config_abstract_303.yml
-    data_dir: ../data/abstract_303__6k__4k_min
+    data_dir: ../data/abstract_303_48k__6k__4k_min
+#    data_dir: data/abstract_303_48k__6k__4k_min
     ext: .wav
     val_split: 0.15
     test_split: 0.15
@@ -37,8 +38,8 @@ model:
   class_path: lightning.PreprocLightningModule
   init_args:
     ac: ../configs/audio_config_abstract_303.yml
-    model: ../configs/spectral_2dcnn.yml
-    synth_hat_type: AcidSynth
+#    model: ../configs/spectral_2dcnn.yml
+#    synth_hat_type: AcidSynth
 #    model: ../configs/spectral_2dcnn.yml
 #    synth_hat_type: AcidSynthLPBiquadFSM
 #    synth_hat_kwargs:
@@ -47,8 +48,8 @@ model:
 ##      overlap: 0.9921875  # 32 samples at 4096
 #      overlap: 0.75
 #      oversampling_factor: 1
-#    model: ../configs/spectral_2dcnn_logits5.yml
-#    synth_hat_type: AcidSynthLearnedBiquadCoeff
+    model: ../configs/spectral_2dcnn_logits5.yml
+    synth_hat_type: AcidSynthLearnedBiquadCoeff
 #    model: ../configs/spectral_2dcnn_logits4.yml
 #    synth_hat_type: AcidSynthLearnedBiquadPoleZero
 #    model: ../configs/spectral_2dcnn.yml
@@ -63,6 +64,6 @@ model:
     use_p_loss: false
 
     log_envelope: true
-    spectral_visualizer: ../configs/log_mel_spec_44100.yml
+    spectral_visualizer: ../configs/log_mel_spec.yml
 
 optimizer: ../configs/adam_w.yml

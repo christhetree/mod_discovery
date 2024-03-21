@@ -59,14 +59,19 @@ class PreprocDataset(Dataset):
         super().__init__()
         self.ac = ac
         self.audio_paths = audio_paths
-        self.note_on_duration = tr.tensor(ac.note_on_duration)
 
         audio_f0_hz = []
+        note_on_durations = []
         for audio_path in audio_paths:
-            midi_f0 = tr.tensor(int(audio_path.split("_")[-1].split(".")[0])).int()
+            tokens = audio_path.split("__")
+            midi_f0 = int(tokens[-3])
             f0_hz = tr.tensor(librosa.midi_to_hz(midi_f0)).float()
             audio_f0_hz.append(f0_hz)
+            note_on_duration = int(tokens[-2]) / ac.sr
+            note_on_duration = tr.tensor(note_on_duration).float()
+            note_on_durations.append(note_on_duration)
         self.audio_f0_hz = audio_f0_hz
+        self.note_on_durations = note_on_durations
 
     def __len__(self) -> int:
         return len(self.audio_paths)
@@ -74,6 +79,7 @@ class PreprocDataset(Dataset):
     def __getitem__(self, idx: int) -> Dict[str, T]:
         audio_path = self.audio_paths[idx]
         f0_hz = self.audio_f0_hz[idx]
+        note_on_duration = self.note_on_durations[idx]
         audio, sr = torchaudio.load(audio_path)
         n_samples = audio.size(1)
         assert sr == self.ac.sr
@@ -84,5 +90,5 @@ class PreprocDataset(Dataset):
         return {
             "wet": audio,
             "f0_hz": f0_hz,
-            "note_on_duration": self.note_on_duration,
+            "note_on_duration": note_on_duration,
         }

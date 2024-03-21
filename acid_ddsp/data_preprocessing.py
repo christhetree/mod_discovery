@@ -2,16 +2,11 @@ import logging
 import os
 
 import numpy as np
-import torchaudio
-
-import torch as tr
-from torch import Tensor as T
-from torch.utils.data import Dataset
-from tqdm import tqdm
 import pretty_midi
-import util
-from acid_ddsp.audio_config import AudioConfig
-from acid_ddsp.modulations import ModSignalGenerator
+import torch as tr
+import torchaudio
+from tqdm import tqdm
+
 from paths import DATA_DIR
 
 logging.basicConfig()
@@ -52,6 +47,8 @@ def extract_notes_from_midi(
 
     all_note_n_samples = []
     n_saved_notes = 0
+    all_note_min = []
+    all_note_max = []
     for idx, note in tqdm(enumerate(midi_data.notes)):
         start_time = note.start
         end_time = note.end
@@ -67,8 +64,14 @@ def extract_notes_from_midi(
         elif note_n_samples < max_n_samples:
             pad = tr.zeros((1, max_n_samples - note_n_samples))
             note_wav = tr.cat([note_wav, pad], dim=1)
+        note_min = note_wav.min().item()
+        note_max = note_wav.max().item()
+        all_note_min.append(note_min)
+        all_note_max.append(note_max)
         midi_f0 = note.pitch
-        note_wav_path = os.path.join(out_dir, f"note_{idx:03d}__midi_f0_{midi_f0}.wav")
+        note_wav_path = os.path.join(
+            out_dir, f"note_{idx:03d}__{midi_f0}__{min(note_n_samples, max_n_samples)}__.wav"
+        )
         torchaudio.save(note_wav_path, note_wav, sr)
         n_saved_notes += 1
 
@@ -86,12 +89,21 @@ def extract_notes_from_midi(
     log.info(f"Total saved note length: {n_saved_notes * max_n_samples} samples")
     log.info(f"Total saved note length: {n_saved_notes * max_n_samples / sr} seconds")
 
+    log.info(f"Min note min: {min(all_note_min)}")
+    log.info(f"Max note min: {max(all_note_min)}")
+    log.info(f"Average note min: {sum(all_note_min) / len(all_note_min)}")
+    log.info(f"STD note min: {np.std(all_note_min)}")
+    log.info(f"Min note max: {min(all_note_max)}")
+    log.info(f"Max note max: {max(all_note_max)}")
+    log.info(f"Average note max: {sum(all_note_max) / len(all_note_max)}")
+    log.info(f"STD note max: {np.std(all_note_max)}")
+
 
 if __name__ == "__main__":
     # data_dir = os.path.join(DATA_DIR, "samplescience_abstract_303")
     # out_path = os.path.join(DATA_DIR, "all.wav")
     # concat_wav_files(data_dir, out_path)
-    audio_path = os.path.join(DATA_DIR, "abstract_303_all.wav")
+    audio_path = os.path.join(DATA_DIR, "abstract_303_all_48k.wav")
     midi_path = os.path.join(DATA_DIR, "abstract_303_all.mid")
-    out_dir = os.path.join(DATA_DIR, "notes")
+    out_dir = os.path.join(DATA_DIR, "abstract_303_48k__6k__4k_min")
     extract_notes_from_midi(audio_path, midi_path, out_dir)

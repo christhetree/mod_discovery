@@ -1,8 +1,13 @@
 class_path: data_modules.AudioConfig
 init_args:
-  sr: 44100
-  buffer_size_seconds: 0.136054421769
-  note_on_duration: 0.136054421769
+#  sr: 44100
+#  buffer_size_seconds: 0.136054421769
+#  note_on_duration: 0.136054421769
+
+  sr: 48000
+  buffer_size_seconds: 0.125
+  note_on_duration: -1
+
   min_attack: 0.001
   max_attack: 0.001
   min_decay: 0.135
@@ -20,9 +25,9 @@ init_args:
   max_w_hz: 8000.0
   min_q: 0.7071
   max_q: 8.0
-  min_dist_gain: 1.0
-  max_dist_gain: 3.0
+  min_dist_gain: 0.5
+  max_dist_gain: 4.0
   min_osc_shape: 0.0
   max_osc_shape: 1.0
-  osc_audio_gain: 0.5
+  osc_audio_gain: 0.95
   stability_eps: 0.001
