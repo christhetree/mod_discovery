@@ -5,12 +5,12 @@ init_args:
   note_on_duration: 0.136054421769
   min_attack: 0.001
   max_attack: 0.001
-  min_decay: 0.136
-  max_decay: 0.136
+  min_decay: 0.135
+  max_decay: 0.135
   min_sustain: 0.5
   max_sustain: 0.5
-  min_release: 0.0
-  max_release: 0.0
+  min_release: 0.01
+  max_release: 0.01
   min_alpha: 2.0
   max_alpha: 2.0
 

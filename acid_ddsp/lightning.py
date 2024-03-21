@@ -63,21 +63,20 @@ class AcidDDSPLightingModule(pl.LightningModule):
     def on_train_start(self) -> None:
         self.global_n = 0
 
-    def step(self, batch: Dict[str, T], stage: str) -> Dict[str, T]:
-        batch_size = self.batch_size
-        if stage == "train":
-            self.global_n = (
-                self.global_step * self.trainer.accumulate_grad_batches * batch_size
-            )
-        # TODO(cm): check if this works for DDP
-        self.log(f"global_n", float(self.global_n), sync_dist=True)
-
+    def preprocess_batch(self, batch: Dict[str, T]) -> Dict[str, T]:
         f0_hz = batch["f0_hz"]
         note_on_duration = batch["note_on_duration"]
         mod_sig = batch["mod_sig"]
         q_norm = batch["q_norm"]
         dist_gain_norm = batch["dist_gain_norm"]
         osc_shape_norm = batch["osc_shape_norm"]
+        batch_size = f0_hz.size(0)
+        assert f0_hz.shape == (batch_size,)
+        assert note_on_duration.shape == (batch_size,)
+        assert mod_sig.shape == (batch_size, self.ac.n_samples)
+        assert q_norm.shape == (batch_size,)
+        assert dist_gain_norm.shape == (batch_size,)
+        assert osc_shape_norm.shape == (batch_size,)
 
         q = q_norm * (self.ac.max_q - self.ac.min_q) + self.ac.min_q
         dist_gain = (
@@ -89,14 +88,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             + self.ac.min_osc_shape
         )
 
-        assert f0_hz.shape == (batch_size,)
-        assert osc_shape.shape == (batch_size,)
-        assert note_on_duration.shape == (batch_size,)
-        assert mod_sig.shape == (batch_size, self.ac.n_samples)
-        assert q_norm.shape == (batch_size,)
-        assert dist_gain_norm.shape == (batch_size,)
-
-        # Generate ground truth audio x
+        # Generate ground truth wet audio
         with tr.no_grad():
             q_mod_sig = q_norm.unsqueeze(-1)
             filter_args = {
@@ -106,7 +98,38 @@ class AcidDDSPLightingModule(pl.LightningModule):
             dry, wet, envelope = self.synth(
                 f0_hz, osc_shape, note_on_duration, filter_args, dist_gain
             )
-            assert dry.shape == wet.shape == (self.batch_size, self.ac.n_samples)
+            assert dry.shape == wet.shape == (batch_size, self.ac.n_samples)
+
+        batch["q"] = q
+        batch["dist_gain"] = dist_gain
+        batch["osc_shape"] = osc_shape
+        batch["dry"] = dry
+        batch["wet"] = wet
+        batch["envelope"] = envelope
+        return batch
+
+    def step(self, batch: Dict[str, T], stage: str) -> Dict[str, T]:
+        batch_size = self.batch_size
+        if stage == "train":
+            self.global_n = (
+                self.global_step * self.trainer.accumulate_grad_batches * batch_size
+            )
+        # TODO(cm): check if this works for DDP
+        self.log(f"global_n", float(self.global_n), sync_dist=True)
+
+        batch = self.preprocess_batch(batch)
+        f0_hz = batch["f0_hz"]
+        note_on_duration = batch["note_on_duration"]
+        mod_sig = batch.get("mod_sig")
+        q_norm = batch.get("q_norm")
+        q = batch.get("q")
+        dist_gain_norm = batch.get("dist_gain_norm")
+        dist_gain = batch.get("dist_gain")
+        osc_shape_norm = batch.get("osc_shape_norm")
+        osc_shape = batch.get("osc_shape")
+        dry = batch.get("dry")
+        wet = batch.get("wet")
+        envelope = batch.get("envelope")
 
         # Perform model forward pass
         model_in = wet.unsqueeze(1)
@@ -114,15 +137,15 @@ class AcidDDSPLightingModule(pl.LightningModule):
         filter_args_hat = {}
 
         # Postprocess mod_sig_hat
-        mod_sig_hat = model_out.get("mod_sig_hat", None)
+        mod_sig_hat = model_out.get("mod_sig_hat")
         if mod_sig_hat is not None:
             filter_args_hat["w_mod_sig"] = mod_sig_hat
 
         # Postprocess q_hat
-        q_norm_hat = model_out.get("q_norm_hat", None)
+        q_norm_hat = model_out.get("q_norm_hat")
         q_hat = None
         if q_norm_hat is not None:
-            if self.is_q_learnable:
+            if self.is_q_learnable and q_norm is not None:
                 with tr.no_grad():
                     q_norm_l1 = self.l1(q_norm_hat, q_norm)
                 self.log(f"{stage}/q_l1", q_norm_l1, prog_bar=False, sync_dist=True)
@@ -136,7 +159,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             dist_gain_norm_hat * (self.ac.max_dist_gain - self.ac.min_dist_gain)
             + self.ac.min_dist_gain
         )
-        if self.is_dist_gain_learnable:
+        if self.is_dist_gain_learnable and dist_gain_norm is not None:
             with tr.no_grad():
                 dist_gain_norm_l1 = self.l1(dist_gain_norm_hat, dist_gain_norm)
             self.log(
@@ -149,7 +172,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             osc_shape_norm_hat * (self.ac.max_osc_shape - self.ac.min_osc_shape)
             + self.ac.min_osc_shape
         )
-        if self.is_osc_shape_learnable:
+        if self.is_osc_shape_learnable and osc_shape_norm is not None:
             with tr.no_grad():
                 osc_shape_norm_l1 = self.l1(osc_shape_norm_hat, osc_shape_norm)
             self.log(
@@ -157,14 +180,14 @@ class AcidDDSPLightingModule(pl.LightningModule):
             )
 
         # Postprocess log_spec
-        log_spec = model_out.get("log_spec", None)
+        log_spec = model_out.get("log_spec")
         if log_spec is None:
             log_spec = self.spectral_visualizer(model_in)
         assert log_spec.ndim == 4
         log_spec_x = log_spec[:, 0, :, :]
 
         # Postprocess logits
-        logits = model_out.get("logits", None)
+        logits = model_out.get("logits")
         if logits is not None:
             filter_args_hat["logits"] = logits
 
@@ -179,6 +202,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # Compute loss
         if self.use_p_loss:
+            assert mod_sig is not None
             assert mod_sig_hat is not None
             if mod_sig_hat.shape != mod_sig.shape:
                 assert mod_sig_hat.ndim == mod_sig.ndim
@@ -230,7 +254,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.log(f"{stage}/audio_mss", mss_loss, prog_bar=True, sync_dist=True)
 
         # Log mod_sig_hat metrics
-        if mod_sig_hat is not None:
+        if mod_sig is not None and mod_sig_hat is not None:
             if mod_sig_hat.shape != mod_sig.shape:
                 assert mod_sig_hat.ndim == mod_sig.ndim
                 mod_sig_hat = util.linear_interpolate_last_dim(
@@ -268,3 +292,17 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
     def test_step(self, batch: Dict[str, T], stage: str) -> Dict[str, T]:
         return self.step(batch, stage="test")
+
+
+class PreprocLightningModule(AcidDDSPLightingModule):
+    def preprocess_batch(self, batch: Dict[str, T]) -> Dict[str, T]:
+        wet = batch["wet"]
+        f0_hz = batch["f0_hz"]
+        note_on_duration = batch["note_on_duration"]
+        assert wet.ndim == 2
+        assert wet.size(1) == self.ac.n_samples
+        batch_size = wet.size(0)
+        assert f0_hz.shape == (batch_size,)
+        assert note_on_duration.shape == (batch_size,)
+        batch["wet"] = wet
+        return batch

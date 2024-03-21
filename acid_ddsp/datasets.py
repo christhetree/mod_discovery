@@ -63,8 +63,8 @@ class PreprocDataset(Dataset):
 
         audio_f0_hz = []
         for audio_path in audio_paths:
-            midi_f0 = int(audio_path.split("_")[-1].split(".")[0])
-            f0_hz = librosa.midi_to_hz(midi_f0)
+            midi_f0 = tr.tensor(int(audio_path.split("_")[-1].split(".")[0])).int()
+            f0_hz = tr.tensor(librosa.midi_to_hz(midi_f0)).float()
             audio_f0_hz.append(f0_hz)
         self.audio_f0_hz = audio_f0_hz
 
@@ -78,6 +78,8 @@ class PreprocDataset(Dataset):
         n_samples = audio.size(1)
         assert sr == self.ac.sr
         assert n_samples == self.ac.n_samples
+        audio = audio.squeeze(0)
+        # TODO(cm): peak normalize?
 
         return {
             "wet": audio,

@@ -92,6 +92,7 @@ class SquareSawVCOLite(nn.Module):
             osc_shape = osc_shape.expand(-1, n_samples)
 
         phase = (self.phase.uniform_() * 2 * tr.pi) - tr.pi
+        phase = phase[:bs, ...]
         arg = tr.cumsum(2 * tr.pi * f0_hz / self.sr, dim=1)
         arg += phase
 

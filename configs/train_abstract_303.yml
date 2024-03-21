@@ -9,22 +9,22 @@ custom:
 #  model_name: cnn_mss_pole_zero
 #  model_name: cnn_mss_lstm64
   dataset_name: abstract_303__6k__4k_min
-  cpu_batch_size: 3
+  cpu_batch_size: 40
   use_wandb_cpu: false
   use_wandb_gpu: true
 
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [1]
-  max_epochs: 20
+  devices: [4]
+  max_epochs: 200
   num_sanity_val_steps: 0
   accumulate_grad_batches: 1
 
 data:
-  class_path: acid_ddsp.data_modules.PreprocDataModule
+  class_path: data_modules.PreprocDataModule
   init_args:
-    batch_size: 16
+    batch_size: 10
     ac: ../configs/audio_config_abstract_303.yml
     data_dir: ../data/abstract_303__6k__4k_min
     ext: .wav
@@ -34,9 +34,9 @@ data:
     num_workers: 4
 
 model:
-  class_path: acid_ddsp.lightning.AcidDDSPLightingModule
+  class_path: lightning.PreprocLightningModule
   init_args:
-    ac: ../configs/audio_config.yml
+    ac: ../configs/audio_config_abstract_303.yml
     model: ../configs/spectral_2dcnn.yml
     synth_hat_type: AcidSynth
 #    model: ../configs/spectral_2dcnn.yml
@@ -62,7 +62,7 @@ model:
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
     use_p_loss: false
 
-    log_envelope: false
+    log_envelope: true
     spectral_visualizer: ../configs/log_mel_spec_44100.yml
 
 optimizer: ../configs/adam_w.yml

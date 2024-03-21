@@ -97,7 +97,6 @@ class AcidSynthBase(ABC, nn.Module):
             == osc_shape.shape
             == note_on_duration.shape
             == dist_gain.shape
-            == (self.batch_size,)
         )
         dry_audio = self.vco(f0_hz, osc_shape, n_samples=self.ac.n_samples)
         dry_audio *= self.ac.osc_audio_gain

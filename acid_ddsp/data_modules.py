@@ -101,7 +101,9 @@ class PreprocDataModule(pl.LightningDataModule):
         self.save_hyperparameters(ignore=["ac"])
         log.info(f"\n{self.hparams}")
 
-        assert os.path.isdir(data_dir)
+        assert os.path.isdir(
+            data_dir
+        ), f"Data directory {os.path.abspath(data_dir)} does not exist."
         self.batch_size = batch_size
         self.ac = ac
         self.data_dir = data_dir
@@ -133,6 +135,9 @@ class PreprocDataModule(pl.LightningDataModule):
         self.train_ds = PreprocDataset(ac, train_paths)
         self.val_ds = PreprocDataset(ac, val_paths)
         self.test_ds = PreprocDataset(ac, test_paths)
+        log.info(f"Train n: {len(self.train_ds)}")
+        log.info(f"Val   n: {len(self.val_ds)}")
+        log.info(f"Test  n: {len(self.test_ds)}")
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
@@ -149,7 +154,7 @@ class PreprocDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            drop_last=False,
+            drop_last=True,
         )
 
     def test_dataloader(self) -> DataLoader:
@@ -158,5 +163,5 @@ class PreprocDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            drop_last=False,
+            drop_last=True,
         )
