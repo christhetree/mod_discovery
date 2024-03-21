@@ -192,13 +192,16 @@ class AcidDDSPLightingModule(pl.LightningModule):
             filter_args_hat["logits"] = logits
 
         # Generate audio x_hat
-        _, wet_hat, _ = self.synth_hat(
+        _, wet_hat, envelope_hat = self.synth_hat(
             f0_hz,
             osc_shape_hat,
             note_on_duration,
             filter_args_hat,
             dist_gain_hat,
         )
+        # TODO(cm): refactor
+        if envelope is None:
+            envelope = envelope_hat
 
         # Compute loss
         if self.use_p_loss:

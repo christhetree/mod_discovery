@@ -8,7 +8,7 @@ custom:
   model_name: cnn_mss_coeff
 #  model_name: cnn_mss_pole_zero
 #  model_name: cnn_mss_lstm64
-  dataset_name: abstract_303__6k__4k_min
+  dataset_name: abstract_303_48k__6k__4k_min
   cpu_batch_size: 10
   use_wandb_cpu: false
   use_wandb_gpu: true
@@ -26,8 +26,8 @@ data:
   init_args:
     batch_size: 10
     ac: ../configs/audio_config_abstract_303.yml
-    data_dir: ../data/abstract_303_48k__6k__4k_min
-#    data_dir: data/abstract_303_48k__6k__4k_min
+#    data_dir: ../data/abstract_303_48k__6k__4k_min
+    data_dir: data/abstract_303_48k__6k__4k_min
     ext: .wav
     val_split: 0.15
     test_split: 0.15
