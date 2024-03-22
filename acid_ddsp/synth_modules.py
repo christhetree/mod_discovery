@@ -77,7 +77,13 @@ class SquareSawVCOLite(nn.Module):
         n_partials = 12000 / (max_f0_hz * tr.log10(max_f0_hz))
         return n_partials
 
-    def forward(self, f0_hz: T, osc_shape: T, n_samples: Optional[int] = None) -> T:
+    def forward(
+        self,
+        f0_hz: T,
+        osc_shape: T,
+        n_samples: Optional[int] = None,
+        phase: Optional[T] = None,
+    ) -> T:
         assert 1 <= f0_hz.ndim <= 2
         assert 1 <= osc_shape.ndim <= 2
         bs = f0_hz.size(0)
@@ -91,8 +97,12 @@ class SquareSawVCOLite(nn.Module):
             osc_shape = osc_shape.unsqueeze(1)
             osc_shape = osc_shape.expand(-1, n_samples)
 
-        phase = (self.phase.uniform_() * 2 * tr.pi) - tr.pi
-        phase = phase[:bs, ...]
+        if phase is None:
+            assert False  # TODO(cm): tmp
+            phase = (self.phase.uniform_() * 2 * tr.pi) - tr.pi
+            phase = phase[:bs, ...]
+        else:
+            assert phase.shape == (bs, 1)
         arg = tr.cumsum(2 * tr.pi * f0_hz / self.sr, dim=1)
         arg += phase
 

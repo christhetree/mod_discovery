@@ -40,6 +40,8 @@ class AcidSynthDataset(Dataset):
         q_norm = tr.rand((1,)).squeeze(0)
         dist_gain_norm = tr.rand((1,)).squeeze(0)
         osc_shape_norm = tr.rand((1,)).squeeze(0)
+        phase = (tr.rand((1,)) * 2 * tr.pi) - tr.pi
+        phase_hat = (tr.rand((1,)) * 2 * tr.pi) - tr.pi
         return {
             "f0_hz": f0_hz,
             "note_on_duration": self.note_on_duration,
@@ -47,6 +49,8 @@ class AcidSynthDataset(Dataset):
             "q_norm": q_norm,
             "dist_gain_norm": dist_gain_norm,
             "osc_shape_norm": osc_shape_norm,
+            "phase": phase,
+            "phase_hat": phase_hat,
         }
 
 
@@ -85,10 +89,14 @@ class PreprocDataset(Dataset):
         assert sr == self.ac.sr
         assert n_samples == self.ac.n_samples
         audio = audio.squeeze(0)
+        phase = (tr.rand((1,)) * 2 * tr.pi) - tr.pi
+        phase_hat = (tr.rand((1,)) * 2 * tr.pi) - tr.pi
         # TODO(cm): peak normalize?
 
         return {
             "wet": audio,
             "f0_hz": f0_hz,
             "note_on_duration": note_on_duration,
+            "phase": phase,
+            "phase_hat": phase_hat,
         }

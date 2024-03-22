@@ -37,6 +37,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         super().__init__()
         if synth_hat_kwargs is None:
             synth_hat_kwargs = {}
+        if synth_eval_kwargs is None:
+            synth_eval_kwargs = {}
         self.save_hyperparameters(
             ignore=["ac", "model", "loss_func", "spectral_visualizer"]
         )
@@ -75,6 +77,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
     def preprocess_batch(self, batch: Dict[str, T]) -> Dict[str, T]:
         f0_hz = batch["f0_hz"]
         note_on_duration = batch["note_on_duration"]
+        phase = batch["phase"]
         mod_sig = batch["mod_sig"]
         q_norm = batch["q_norm"]
         dist_gain_norm = batch["dist_gain_norm"]
@@ -84,6 +87,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         batch_size = f0_hz.size(0)
         assert f0_hz.shape == (batch_size,)
         assert note_on_duration.shape == (batch_size,)
+        assert phase.shape == (batch_size,)
         assert mod_sig.shape == (batch_size, self.ac.n_samples)
         assert q_norm.shape == (batch_size,)
         assert dist_gain_norm.shape == (batch_size,)
@@ -124,6 +128,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 filter_args,
                 dist_gain,
                 learned_alpha,
+                phase,
             )
             assert dry.shape == wet.shape == (batch_size, self.ac.n_samples)
 
@@ -149,6 +154,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         batch = self.preprocess_batch(batch)
         f0_hz = batch["f0_hz"]
         note_on_duration = batch["note_on_duration"]
+        phase_hat = batch["phase_hat"]
+
         mod_sig = batch.get("mod_sig")
         q_norm = batch.get("q_norm")
         q = batch.get("q")
@@ -261,6 +268,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             filter_args_hat,
             dist_gain_hat,
             learned_alpha_hat,
+            phase_hat,
         )
         # TODO(cm): refactor
         if envelope is None:

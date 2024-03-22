@@ -74,5 +74,6 @@ model:
 
     log_envelope: true
     spectral_visualizer: ../configs/log_mel_spec.yml
+    synth_eval_type: AcidSynthLearnedBiquadCoeff
 
 optimizer: ../configs/adam_w.yml

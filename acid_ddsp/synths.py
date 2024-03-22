@@ -96,6 +96,7 @@ class AcidSynthBase(ABC, nn.Module):
         filter_args: Dict[str, T],
         dist_gain: T,
         learned_alpha: T,
+        phase: T,
     ) -> (T, T, T):
         assert (
             f0_hz.shape
@@ -105,7 +106,7 @@ class AcidSynthBase(ABC, nn.Module):
             == dist_gain.shape
             == learned_alpha.shape
         )
-        dry_audio = self.vco(f0_hz, osc_shape, n_samples=self.ac.n_samples)
+        dry_audio = self.vco(f0_hz, osc_shape, n_samples=self.ac.n_samples, phase=phase)
         dry_audio *= osc_gain.unsqueeze(-1)
         envelope = self.adsr(note_on_duration)  # TODO(cm): swap out with ADSRLite
         envelope = tr.clamp(envelope, 0.001, 0.999)  # TODO(cm): document
