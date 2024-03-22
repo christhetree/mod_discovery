@@ -84,6 +84,8 @@ class LogModSigAndSpecCallback(Callback):
             osc_shape_hat = out_dict.get("osc_shape_hat", [-1])
             osc_gain = out_dict.get("osc_gain", [-1])
             osc_gain_hat = out_dict.get("osc_gain_hat", [-1])
+            learned_alpha = out_dict.get("learned_alpha", [-1])
+            learned_alpha_hat = out_dict.get("learned_alpha_hat", [-1])
             mod_sig_esr = -1
             mod_sig_l1 = -1
 
@@ -167,7 +169,8 @@ class LogModSigAndSpecCallback(Callback):
                 f"env (blue), mod_sig (black), mod_sig_hat (orange)\n"
                 f"ms_l1: {mod_sig_l1:.3f}, ms_esr: {mod_sig_esr:.3f}\n"
                 f"q: {q[0]:.2f}, q': {q_hat[0]:.2f}, "
-                f"dg: {dist_gain[0]:.2f}, dg': {dist_gain_hat[0]:.2f}\n"
+                f"dg: {dist_gain[0]:.2f}, dg': {dist_gain_hat[0]:.2f},"
+                f"la: {learned_alpha[0]:.2f}, la': {learned_alpha_hat[0]:.2f}\n"
                 f"os: {osc_shape[0]:.2f}, os': {osc_shape_hat[0]:.2f},"
                 f"og: {osc_gain[0]:.2f}, og': {osc_gain_hat[0]:.2f}"
             )

@@ -303,14 +303,14 @@ class TimeVaryingLPBiquadFSM(TimeVaryingLPBiquad):
 
 
 if __name__ == "__main__":
-    sr = 48000
-    win_len_sec = 0.1
-    filter = TimeVaryingIIRFSM(sr, win_len_sec)
-    audio = tr.rand(1, sr)
-    a = tr.rand(1, 41, 3)
-    b = tr.rand(1, 41, 3)
-    y = filter(audio, a, b)
-    exit()
+    # sr = 48000
+    # win_len_sec = 0.1
+    # filter = TimeVaryingIIRFSM(sr, win_len_sec)
+    # audio = tr.rand(1, sr)
+    # a = tr.rand(1, 41, 3)
+    # b = tr.rand(1, 41, 3)
+    # y = filter(audio, a, b)
+    # exit()
 
     os.environ["CUDA_VISIBLE_DEVICES"] = "6"
     if tr.cuda.is_available():
@@ -323,28 +323,31 @@ if __name__ == "__main__":
     tr.manual_seed(42)
     sr = 16000
     bs = 1
-    min_f = 100.0
-    max_f = 500.0
-    min_q = 4.7071
-    max_q = 4.7071
+    # min_f = 100.0
+    # max_f = 500.0
+    # min_q = 4.7071
+    # max_q = 4.7071
 
-    min_w = 2 * tr.pi * min_f / sr
-    max_w = 2 * tr.pi * max_f / sr
-    tvb = TimeVaryingBiquad(min_w, max_w, min_q, max_q)
-    tvb.to(device)
+    # min_w = 2 * tr.pi * min_f / sr
+    # max_w = 2 * tr.pi * max_f / sr
+    # tvb = TimeVaryingBiquad(min_w, max_w, min_q, max_q)
+    # tvb.to(device)
 
     n_samples = sr
     white_noise = tr.rand((bs, n_samples)) * 2.0 - 1.0
-    lfo = tr.linspace(0.0, 1.0, n_samples).unsqueeze(0).repeat(bs, 1)
+    sin_wave_400hz = tr.sin(
+        2 * tr.pi * tr.linspace(0.0, 1.0, n_samples).unsqueeze(0).repeat(bs, 1) * 400
+    )
+    # lfo = tr.linspace(0.0, 1.0, n_samples).unsqueeze(0).repeat(bs, 1)
     # lfo = tr.linspace(1.0, 0.0, n_samples).unsqueeze(0).repeat(bs, 1)
     # lfo = None
 
     x = white_noise
-    log.info("start")
-    x.to(device)
-    y = tvb(x, cutoff_mod_sig=lfo, resonance_mod_sig=lfo)
-    log.info(f"y.shape: {y.shape}")
-    log.info(f"y[0, :4] = {y[0, :4]}")
+    # log.info("start")
+    # x.to(device)
+    # y = tvb(x, cutoff_mod_sig=lfo, resonance_mod_sig=lfo)
+    # log.info(f"y.shape: {y.shape}")
+    # log.info(f"y[0, :4] = {y[0, :4]}")
     # torchaudio.save("../out/tmp.wav", y, sr)
 
     # spec_transform = torchaudio.transforms.Spectrogram(n_fft=2048, hop_length=512)
@@ -375,5 +378,33 @@ if __name__ == "__main__":
     #     0.09979048504546387,
     #     -0.15301418463641955,
     # ]
-    # b_coeff = tr.tensor(b_coeff_raw).view(1, 1, -1).repeat(bs, n_samples, 1)
-    # y = time_varying_fir(white_noise, b_coeff)
+    b_coeff_raw = list(range(3))
+    b_coeff_raw = [float(x) for x in b_coeff_raw]
+    # b_coeff_raw = b_coeff_raw[::-1]
+    print(b_coeff_raw)
+    b_coeff = tr.tensor(b_coeff_raw).view(1, 1, -1).repeat(bs, n_samples, 1)
+    y = time_varying_fir(sin_wave_400hz, b_coeff)
+    print(f"y.avg = {y.mean():.4f}")
+
+    import torchaudio
+    import matplotlib.pyplot as plt
+    spec_transform = torchaudio.transforms.Spectrogram(n_fft=2048, hop_length=512)
+    spec = spec_transform(y)
+    log_spec = tr.log10(spec[0] + 1e-9)
+    plt.imshow(
+        log_spec,
+        aspect="auto",
+        origin="lower",
+        cmap="viridis",
+    )
+    plt.show()
+
+    mag_response = tr.fft.rfft(y[0]).abs()
+    log.info(f"mag_response.mean() = {mag_response.mean()}")
+    log.info(f"mag_response.std() = {mag_response.std()}")
+    mag_response = mag_response / mag_response.max()
+    # plt.plot(mag_response.numpy())
+    mag_response_db = 20 * tr.log10(mag_response)
+    plt.plot(mag_response_db.numpy())
+    plt.ylim(-60, 0)
+    plt.show()

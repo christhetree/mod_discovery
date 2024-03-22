@@ -53,10 +53,13 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.l1 = nn.L1Loss()
         self.mss = auraloss.freq.MultiResolutionSTFTLoss()
         self.global_n = 0
+
+        # TODO(cm): refactor this to reduce duplicate code
         self.is_q_learnable = ac.min_q != ac.max_q
         self.is_dist_gain_learnable = ac.min_dist_gain != ac.max_dist_gain
         self.is_osc_shape_learnable = ac.min_osc_shape != ac.max_osc_shape
         self.is_osc_gain_learnable = ac.min_osc_gain != ac.max_osc_gain
+        self.is_alpha_learnable = ac.min_learned_alpha != ac.max_learned_alpha
 
         self.synth = AcidSynth(ac, batch_size)
         self.synth_hat = make_synth(synth_hat_type, ac, batch_size, **synth_hat_kwargs)
@@ -72,6 +75,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         dist_gain_norm = batch["dist_gain_norm"]
         osc_shape_norm = batch["osc_shape_norm"]
         osc_gain_norm = batch["osc_gain_norm"]
+        learned_alpha_norm = batch["learned_alpha_norm"]
         batch_size = f0_hz.size(0)
         assert f0_hz.shape == (batch_size,)
         assert note_on_duration.shape == (batch_size,)
@@ -80,6 +84,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         assert dist_gain_norm.shape == (batch_size,)
         assert osc_shape_norm.shape == (batch_size,)
         assert osc_gain_norm.shape == (batch_size,)
+        assert learned_alpha_norm.shape == (batch_size,)
 
         q = q_norm * (self.ac.max_q - self.ac.min_q) + self.ac.min_q
         dist_gain = (
@@ -94,6 +99,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
             osc_gain_norm * (self.ac.max_osc_gain - self.ac.min_osc_gain)
             + self.ac.min_osc_gain
         )
+        learned_alpha = (
+            learned_alpha_norm * (self.ac.max_learned_alpha - self.ac.min_learned_alpha)
+            + self.ac.min_learned_alpha
+        )
 
         # Generate ground truth wet audio
         with tr.no_grad():
@@ -103,7 +112,13 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 "q_mod_sig": q_mod_sig,
             }
             dry, wet, envelope = self.synth(
-                f0_hz, osc_shape, osc_gain, note_on_duration, filter_args, dist_gain
+                f0_hz,
+                osc_shape,
+                osc_gain,
+                note_on_duration,
+                filter_args,
+                dist_gain,
+                learned_alpha,
             )
             assert dry.shape == wet.shape == (batch_size, self.ac.n_samples)
 
@@ -111,6 +126,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         batch["dist_gain"] = dist_gain
         batch["osc_shape"] = osc_shape
         batch["osc_gain"] = osc_gain
+        batch["learned_alpha"] = learned_alpha
         batch["dry"] = dry
         batch["wet"] = wet
         batch["envelope"] = envelope
@@ -137,6 +153,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         osc_shape = batch.get("osc_shape")
         osc_gain_norm = batch.get("osc_gain_norm")
         osc_gain = batch.get("osc_gain")
+        learned_alpha_norm = batch.get("learned_alpha_norm")
+        learned_alpha = batch.get("learned_alpha")
         dry = batch.get("dry")
         wet = batch.get("wet")
         envelope = batch.get("envelope")
@@ -198,8 +216,20 @@ class AcidDDSPLightingModule(pl.LightningModule):
         if self.is_osc_gain_learnable and osc_gain_norm is not None:
             with tr.no_grad():
                 osc_gain_norm_l1 = self.l1(osc_gain_norm_hat, osc_gain_norm)
+            self.log(f"{stage}/og_l1", osc_gain_norm_l1, prog_bar=False, sync_dist=True)
+
+        # Postprocess learned_alpha_hat
+        learned_alpha_norm_hat = model_out["learned_alpha_norm_hat"]
+        learned_alpha_hat = (
+            learned_alpha_norm_hat
+            * (self.ac.max_learned_alpha - self.ac.min_learned_alpha)
+            + self.ac.min_learned_alpha
+        )
+        if self.is_alpha_learnable and learned_alpha_norm is not None:
+            with tr.no_grad():
+                learned_alpha_norm_l1 = self.l1(learned_alpha_norm_hat, learned_alpha_norm)
             self.log(
-                f"{stage}/og_l1", osc_gain_norm_l1, prog_bar=False, sync_dist=True
+                f"{stage}/la_l1", learned_alpha_norm_l1, prog_bar=False, sync_dist=True
             )
 
         # Postprocess log_spec
@@ -222,6 +252,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             note_on_duration,
             filter_args_hat,
             dist_gain_hat,
+            learned_alpha_hat,
         )
         # TODO(cm): refactor
         if envelope is None:
@@ -273,6 +304,17 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     sync_dist=True,
                 )
                 loss += osc_gain_loss
+            if self.is_alpha_learnable:
+                learned_alpha_loss = self.loss_func(
+                    learned_alpha_norm_hat, learned_alpha_norm
+                )
+                self.log(
+                    f"{stage}/ploss_{self.loss_name}_la",
+                    learned_alpha_loss,
+                    prog_bar=False,
+                    sync_dist=True,
+                )
+                loss += learned_alpha_loss
             self.log(
                 f"{stage}/ploss_{self.loss_name}", loss, prog_bar=False, sync_dist=True
             )
@@ -319,6 +361,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "osc_shape_hat": osc_shape_hat,
             "osc_gain": osc_gain,
             "osc_gain_hat": osc_gain_hat,
+            "learned_alpha": learned_alpha,
+            "learned_alpha_hat": learned_alpha_hat,
         }
         return out_dict
 

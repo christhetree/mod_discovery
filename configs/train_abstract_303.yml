@@ -5,7 +5,7 @@ custom:
 #  model_name: testing
 #  model_name: cnn_mss
 #  model_name: cnn_mss_fsm_4096_32_1
-  model_name: cnn_mss_coeff_og
+  model_name: cnn_mss_coeff_og_la_0_sus
 #  model_name: cnn_mss_pole_zero
 #  model_name: cnn_mss_lstm64
   dataset_name: abstract_303_48k__6k__4k_min

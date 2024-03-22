@@ -125,6 +125,14 @@ class Spectral2DCNN(nn.Module):
             nn.Sigmoid(),
         )
 
+        self.out_learned_alpha = nn.Sequential(
+            nn.Linear(out_channels[-1], out_channels[-1] // 2),
+            nn.Dropout(p=dropout),
+            nn.PReLU(num_parameters=out_channels[-1] // 2),
+            nn.Linear(out_channels[-1] // 2, 1),
+            nn.Sigmoid(),
+        )
+
     def forward(self, x: T) -> Dict[str, T]:
         assert x.ndim == 3
         log_spec = self.fe(x)
@@ -151,6 +159,7 @@ class Spectral2DCNN(nn.Module):
         dist_gain_norm_hat = self.out_dist_gain(x).squeeze(-1)
         osc_shape_norm_hat = self.out_osc_shape(x).squeeze(-1)
         osc_gain_norm_hat = self.out_osc_gain(x).squeeze(-1)
+        learned_alpha_norm_hat = self.out_learned_alpha(x).squeeze(-1)
 
         return {
             "mod_sig_hat": ms_hat,
@@ -158,6 +167,7 @@ class Spectral2DCNN(nn.Module):
             "dist_gain_norm_hat": dist_gain_norm_hat,
             "osc_shape_norm_hat": osc_shape_norm_hat,
             "osc_gain_norm_hat": osc_gain_norm_hat,
+            "learned_alpha_norm_hat": learned_alpha_norm_hat,
             "latent": latent,
             "log_spec": log_spec,
             "logits": logits,
