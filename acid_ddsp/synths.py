@@ -15,6 +15,7 @@ from filters import (
     time_varying_fir,
     calc_logits_to_biquad_coeff_pole_zero,
     TimeVaryingLPBiquadFSM,
+    TimeVaryingIIRFSM,
 )
 from torchlpc import sample_wise_lpc
 
@@ -32,6 +33,8 @@ def make_synth(
         synth_class = AcidSynthLPBiquadFSM
     elif synth_type == "AcidSynthLearnedBiquadCoeff":
         synth_class = AcidSynthLearnedBiquadCoeff
+    elif synth_type == "AcidSynthLearnedBiquadCoeffFSM":
+        synth_class = AcidSynthLearnedBiquadCoeffFSM
     elif synth_type == "AcidSynthLearnedBiquadPoleZero":
         synth_class = AcidSynthLearnedBiquadPoleZero
     elif synth_type == "AcidSynthLSTM":
@@ -194,6 +197,47 @@ class AcidSynthLearnedBiquadCoeff(AcidSynthBase):
         assert not tr.isnan(y_a).any()
         y_ab = time_varying_fir(y_a, b)
         return y_ab
+
+
+class AcidSynthLearnedBiquadCoeffFSM(AcidSynthBase):
+    def __init__(
+        self,
+        ac: AudioConfig,
+        batch_size: int,
+        win_len: Optional[int] = None,
+        win_len_sec: Optional[float] = None,
+        overlap: float = 0.75,
+        oversampling_factor: int = 1,
+    ):
+        super().__init__(ac, batch_size)
+        self.filter = TimeVaryingIIRFSM(
+            win_len=win_len,
+            win_len_sec=win_len_sec,
+            sr=ac.sr,
+            overlap=overlap,
+            oversampling_factor=oversampling_factor,
+        )
+
+    def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> T:
+        logits = filter_args["logits"]
+        assert logits.ndim == 3
+        n_samples = x.size(1)
+        n_frames = self.filter.calc_n_frames(n_samples)
+        if logits.size(1) != x.size(1):
+            logits = logits.swapaxes(1, 2)
+            logits = util.linear_interpolate_last_dim(
+                logits, n_frames, align_corners=True
+            )
+            logits = logits.swapaxes(1, 2)
+        assert logits.shape == (x.size(0), n_frames, 5)
+        a_coeffs = logits[:, :, :2]
+        a1 = a_coeffs[:, :, 0]
+        a2 = a_coeffs[:, :, 1]
+        a0 = tr.ones_like(a1)
+        a_coeffs = tr.stack([a0, a1, a2], dim=2)
+        b_coeffs = logits[:, :, 2:]
+        y = self.filter(x, a_coeffs, b_coeffs)
+        return y
 
 
 class AcidSynthLearnedBiquadPoleZero(AcidSynthBase):

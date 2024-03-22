@@ -12,6 +12,7 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 from pytorch_lightning.loggers import WandbLogger
 from torch import Tensor as T, nn
 
+import util
 from acid_ddsp.plotting import fig2img, plot_waveforms_stacked
 from lightning import AcidDDSPLightingModule
 
@@ -149,10 +150,16 @@ class LogModSigAndSpecCallback(Callback):
                 ax[1].set_title("log_spec_x_hat")
 
             if pl_module.log_envelope and envelope is not None:
+                envelope = util.linear_interpolate_last_dim(
+                    envelope, pl_module.ac.n_samples, align_corners=True
+                )
                 ax[2].plot(envelope[0].numpy(), label="env", color="blue")
                 ax[2].set(aspect=envelope.size(1))
 
             if mod_sig is not None:
+                mod_sig = util.linear_interpolate_last_dim(
+                    mod_sig, pl_module.ac.n_samples, align_corners=True
+                )
                 mod_sig_np = mod_sig[0].numpy()
                 ax[2].plot(mod_sig_np, label="ms", color="black")
                 ax[2].set(aspect=mod_sig.size(1))
@@ -166,6 +173,9 @@ class LogModSigAndSpecCallback(Callback):
                 # )
 
             if mod_sig_hat is not None:
+                mod_sig_hat = util.linear_interpolate_last_dim(
+                    mod_sig_hat, pl_module.ac.n_samples, align_corners=True
+                )
                 ax[2].plot(mod_sig_hat[0].numpy(), label="ms_hat", color="orange")
                 ax[2].set(aspect=mod_sig_hat.size(1))
 
@@ -177,9 +187,9 @@ class LogModSigAndSpecCallback(Callback):
                 f"env (blue), mod_sig (black), mod_sig_hat (orange)\n"
                 f"ms_l1: {mod_sig_l1:.3f}, ms_esr: {mod_sig_esr:.3f}\n"
                 f"q: {q[0]:.2f}, q': {q_hat[0]:.2f}, "
-                f"dg: {dist_gain[0]:.2f}, dg': {dist_gain_hat[0]:.2f},"
+                f"dg: {dist_gain[0]:.2f}, dg': {dist_gain_hat[0]:.2f}, "
                 f"la: {learned_alpha[0]:.2f}, la': {learned_alpha_hat[0]:.2f}\n"
-                f"os: {osc_shape[0]:.2f}, os': {osc_shape_hat[0]:.2f},"
+                f"os: {osc_shape[0]:.2f}, os': {osc_shape_hat[0]:.2f}, "
                 f"og: {osc_gain[0]:.2f}, og': {osc_gain_hat[0]:.2f}"
             )
 

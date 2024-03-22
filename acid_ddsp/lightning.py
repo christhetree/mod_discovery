@@ -31,6 +31,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         log_envelope: bool = False,
         synth_hat_type: str = "AcidSynth",
         synth_hat_kwargs: Optional[Dict[str, Any]] = None,
+        synth_eval_type: str = "AcidSynth",
+        synth_eval_kwargs: Optional[Dict[str, Any]] = None,
     ):
         super().__init__()
         if synth_hat_kwargs is None:
@@ -63,6 +65,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         self.synth = AcidSynth(ac, batch_size)
         self.synth_hat = make_synth(synth_hat_type, ac, batch_size, **synth_hat_kwargs)
+        self.synth_eval = make_synth(
+            synth_eval_type, ac, batch_size, **synth_eval_kwargs
+        )
 
     def on_train_start(self) -> None:
         self.global_n = 0
@@ -163,6 +168,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         model_in = wet.unsqueeze(1)
         model_out = self.model(model_in)
         filter_args_hat = {}
+        filter_args_eval = {}
 
         # Postprocess mod_sig_hat
         mod_sig_hat = model_out.get("mod_sig_hat")
@@ -227,7 +233,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
         )
         if self.is_alpha_learnable and learned_alpha_norm is not None:
             with tr.no_grad():
-                learned_alpha_norm_l1 = self.l1(learned_alpha_norm_hat, learned_alpha_norm)
+                learned_alpha_norm_l1 = self.l1(
+                    learned_alpha_norm_hat, learned_alpha_norm
+                )
             self.log(
                 f"{stage}/la_l1", learned_alpha_norm_l1, prog_bar=False, sync_dist=True
             )
