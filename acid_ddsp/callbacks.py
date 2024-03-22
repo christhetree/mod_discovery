@@ -49,6 +49,8 @@ class LogModSigAndSpecCallback(Callback):
         batch_idx: int,
         dataloader_idx: int = 0,
     ) -> None:
+        if batch_idx != 0:  # TODO(cm): tmp
+            return
         example_idx = batch_idx // trainer.accumulate_grad_batches
         if example_idx < self.n_examples:
             if example_idx not in self.out_dicts:
@@ -59,7 +61,13 @@ class LogModSigAndSpecCallback(Callback):
                 out_dict = {
                     k: v.detach().cpu() for k, v in out_dict.items() if v is not None
                 }
-                self.out_dicts[example_idx] = out_dict
+                # TODO(cm): tmp
+                # self.out_dicts[example_idx] = out_dict
+                for idx in range(self.n_examples):
+                    idx_out_dict = {
+                        k: v[idx : idx + 1] for k, v in out_dict.items() if v.ndim > 0
+                    }
+                    self.out_dicts[idx] = idx_out_dict
 
     def on_validation_epoch_end(
         self, trainer: Trainer, pl_module: AcidDDSPLightingModule
@@ -104,7 +112,7 @@ class LogModSigAndSpecCallback(Callback):
                 mod_sig_esr = self.esr(mod_sig[0], mod_sig_hat[0]).item()
                 mod_sig_l1 = self.l1(mod_sig[0], mod_sig_hat[0]).item()
 
-            title = f"idx_{example_idx}"
+            title = f"{trainer.global_step}_idx_{example_idx}"
             fig, ax = plt.subplots(nrows=3, figsize=(6, 18), squeeze=True)
             fig.suptitle(title, fontsize=14)
 
@@ -197,6 +205,8 @@ class LogAudioCallback(Callback):
         self.n_examples = n_examples
         self.render_time_sec = render_time_sec
         self.out_dicts = {}
+        columns = [f"idx_{idx}" for idx in range(n_examples)]
+        self.table = wandb.Table(columns=columns)
 
     def on_validation_batch_end(
         self,
@@ -207,13 +217,21 @@ class LogAudioCallback(Callback):
         batch_idx: int,
         dataloader_idx: int = 0,
     ) -> None:
+        if batch_idx != 0:  # TODO(cm): tmp
+            return
         example_idx = batch_idx // trainer.accumulate_grad_batches
         if example_idx < self.n_examples:
             if example_idx not in self.out_dicts:
                 out_dict = {
                     k: v.detach().cpu() for k, v in out_dict.items() if v is not None
                 }
-                self.out_dicts[example_idx] = out_dict
+                # TODO(cm): tmp
+                # self.out_dicts[example_idx] = out_dict
+                for idx in range(self.n_examples):
+                    idx_out_dict = {
+                        k: v[idx : idx + 1] for k, v in out_dict.items() if v.ndim > 0
+                    }
+                    self.out_dicts[idx] = idx_out_dict
 
     def on_validation_epoch_end(
         self, trainer: Trainer, pl_module: AcidDDSPLightingModule
@@ -231,7 +249,7 @@ class LogAudioCallback(Callback):
                 continue
 
             out_dict = self.out_dicts[example_idx]
-            title = f"idx_{example_idx}"
+            title = f"{trainer.global_step}_idx_{example_idx}"
             osc_audio = out_dict.get("osc_audio")
             x = out_dict.get("x")
             x_hat = out_dict.get("x_hat")
@@ -276,7 +294,6 @@ class LogAudioCallback(Callback):
                     )
 
                 data = defaultdict(list)
-                columns = [f"idx_{idx}" for idx in range(len(images))]
                 for idx, curr_osc_audio in enumerate(osc_audio_waveforms):
                     data["osc_audio"].append(
                         wandb.Audio(
@@ -302,8 +319,13 @@ class LogAudioCallback(Callback):
                         )
                     )
                 data = list(data.values())
+                for row in data:
+                    self.table.add_data(*row)
                 logger.log_table(
-                    key="audio", columns=columns, data=data, step=trainer.global_step
+                    key="audio",
+                    columns=self.table.columns,
+                    data=self.table.data,
+                    step=trainer.global_step,
                 )
 
         self.out_dicts.clear()

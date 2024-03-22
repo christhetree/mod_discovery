@@ -105,7 +105,7 @@ class AcidSynthBase(ABC, nn.Module):
         dry_audio = self.vco(f0_hz, osc_shape, n_samples=self.ac.n_samples)
         dry_audio *= osc_gain.unsqueeze(-1)
         envelope = self.adsr(note_on_duration)  # TODO(cm): swap out with ADSRLite
-        envelope = tr.clamp(envelope, 0.0, 1.0)
+        envelope = tr.clamp(envelope, 0.001, 0.999)  # TODO(cm): document
         envelope = tr.pow(envelope, learned_alpha.unsqueeze(-1))
         dry_audio *= envelope
         wet_audio = self.filter_dry_audio(dry_audio, filter_args)
