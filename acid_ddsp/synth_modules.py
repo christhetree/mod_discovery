@@ -55,7 +55,7 @@ class CustomADSR(ADSR):
             sample_rate=sr,
             buffer_size_seconds=n_samples / sr,
             control_rate=int(sr),
-            reproducible=False,
+            reproducible=False,  # TODO(cm)
             no_grad=True,
             debug=False,
         )

@@ -224,14 +224,16 @@ class AcidSynthLearnedBiquadCoeffFSM(AcidSynthBase):
         assert logits.ndim == 3
         n_samples = x.size(1)
         n_frames = self.filter.calc_n_frames(n_samples)
-        if logits.size(1) != x.size(1):
+        if logits.size(1) != n_frames:
             logits = logits.swapaxes(1, 2)
             logits = util.linear_interpolate_last_dim(
                 logits, n_frames, align_corners=True
             )
             logits = logits.swapaxes(1, 2)
         assert logits.shape == (x.size(0), n_frames, 5)
-        a_coeffs = logits[:, :, :2]
+        a_logits = logits[..., :2]
+        # We need this to be consistent with the sample-wise implementation
+        a_coeffs = calc_logits_to_biquad_a_coeff_triangle(a_logits)
         a1 = a_coeffs[:, :, 0]
         a2 = a_coeffs[:, :, 1]
         a0 = tr.ones_like(a1)

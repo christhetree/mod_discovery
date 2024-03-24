@@ -116,6 +116,7 @@ class PreprocDataModule(pl.LightningDataModule):
         audio_paths = [
             os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith(ext)
         ]
+        audio_paths = sorted(audio_paths)
 
         n_files = len(audio_paths)
         n_val_files = int(val_split * n_files)

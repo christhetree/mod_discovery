@@ -56,7 +56,9 @@ class LogModSigAndSpecCallback(Callback):
         if example_idx < self.n_examples:
             if example_idx not in self.out_dicts:
                 if "x_hat" in out_dict and out_dict["x_hat"] is not None:
-                    x_hat = out_dict["x_hat"].unsqueeze(1)
+                    x_hat = out_dict["x_hat"]
+                    assert x_hat.ndim == 2
+                    x_hat = x_hat.unsqueeze(1)
                     log_spec_x_hat = pl_module.spectral_visualizer(x_hat).squeeze(1)
                     out_dict["log_spec_x_hat"] = log_spec_x_hat
                 out_dict = {

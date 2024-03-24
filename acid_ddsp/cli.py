@@ -113,6 +113,12 @@ class CustomLightningCLI(LightningCLI):
                 self.link_arguments_if_possible(src, dest, config)
 
     def before_instantiate_classes(self) -> None:
+        # TODO(cm)
+        # log.info("Setting deterministic algorithms")
+        # os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+        # tr.use_deterministic_algorithms(True)
+        # tr.backends.cudnn.deterministic = True
+
         if self.subcommand is not None:
             config = self.config[self.subcommand]
             self.update_config(config)
