@@ -11,6 +11,7 @@ from torch.utils.data import Dataset
 import util
 from acid_ddsp.audio_config import AudioConfig
 from acid_ddsp.modulations import ModSignalGenerator
+from synth_modules import SquareSawVCOLite
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -89,14 +90,16 @@ class PreprocDataset(Dataset):
         assert sr == self.ac.sr
         assert n_samples == self.ac.n_samples
         audio = audio.squeeze(0)
-        phase = (tr.rand((1,)) * 2 * tr.pi) - tr.pi
         phase_hat = (tr.rand((1,)) * 2 * tr.pi) - tr.pi
+        # TODO(cm): do at batch level
+        osc_arg_hat = SquareSawVCOLite.calc_osc_arg(
+            self.ac.sr, f0_hz.unsqueeze(0), n_samples, phase_hat.unsqueeze(0)
+        ).squeeze(0)
         # TODO(cm): peak normalize?
 
         return {
             "wet": audio,
             "f0_hz": f0_hz,
             "note_on_duration": note_on_duration,
-            "phase": phase,
-            "phase_hat": phase_hat,
+            "osc_arg_hat": osc_arg_hat,
         }

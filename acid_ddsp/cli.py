@@ -114,9 +114,9 @@ class CustomLightningCLI(LightningCLI):
 
     def before_instantiate_classes(self) -> None:
         # TODO(cm)
-        # log.info("Setting deterministic algorithms")
-        # os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-        # tr.use_deterministic_algorithms(True)
+        log.info("Setting deterministic algorithms")
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+        tr.use_deterministic_algorithms(True, warn_only=True)
         # tr.backends.cudnn.deterministic = True
 
         if self.subcommand is not None:

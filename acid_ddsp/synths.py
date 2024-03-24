@@ -64,7 +64,7 @@ class AcidSynthBase(ABC, nn.Module):
             release=ac.max_release,
             alpha=ac.max_alpha,
         )
-        self.vco = SquareSawVCOLite(ac.sr, batch_size)
+        self.vco = SquareSawVCOLite(ac.sr)
         self.adsr = CustomADSR(
             ac.sr, ac.n_samples, batch_size, min_adsr_vals, max_adsr_vals
         )
@@ -90,13 +90,13 @@ class AcidSynthBase(ABC, nn.Module):
     def forward(
         self,
         f0_hz: T,
+        osc_arg: T,
         osc_shape: T,
         osc_gain: T,
         note_on_duration: T,
         filter_args: Dict[str, T],
         dist_gain: T,
         learned_alpha: T,
-        phase: T,
     ) -> (T, T, T):
         assert (
             f0_hz.shape
@@ -106,7 +106,7 @@ class AcidSynthBase(ABC, nn.Module):
             == dist_gain.shape
             == learned_alpha.shape
         )
-        dry_audio = self.vco(f0_hz, osc_shape, n_samples=self.ac.n_samples, phase=phase)
+        dry_audio = self.vco(f0_hz, osc_arg, osc_shape)
         dry_audio *= osc_gain.unsqueeze(-1)
         envelope = self.adsr(note_on_duration)  # TODO(cm): swap out with ADSRLite
         envelope = tr.clamp(envelope, 0.001, 0.999)  # TODO(cm): document

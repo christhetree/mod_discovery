@@ -64,52 +64,63 @@ class CustomADSR(ADSR):
 
 class SquareSawVCOLite(nn.Module):
     # Based off TorchSynth's SquareSawVCO
-    def __init__(self, sr: int, batch_size: int):
+    def __init__(self, sr: int):
         super().__init__()
         self.sr = sr
-        self.batch_size = batch_size
-        self.register_buffer("phase", tr.zeros((batch_size, 1)))
 
-    def calc_n_partials(self, f0_hz: T) -> T:
+    @staticmethod
+    def calc_n_partials(f0_hz: T) -> T:
         assert f0_hz.ndim == 2
         max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
         # TODO(cm): check this calculation
         n_partials = 12000 / (max_f0_hz * tr.log10(max_f0_hz))
         return n_partials
 
-    def forward(
-        self,
-        f0_hz: T,
-        osc_shape: T,
-        n_samples: Optional[int] = None,
-        phase: Optional[T] = None,
+    @staticmethod
+    def calc_osc_arg(
+        sr: int, f0_hz: T, n_samples: Optional[int] = None, phase: Optional[T] = None
     ) -> T:
         assert 1 <= f0_hz.ndim <= 2
-        assert 1 <= osc_shape.ndim <= 2
         bs = f0_hz.size(0)
 
         if f0_hz.ndim == 1:
             assert n_samples is not None
             f0_hz = f0_hz.unsqueeze(1)
             f0_hz = f0_hz.expand(-1, n_samples)
-        if osc_shape.ndim == 1:
-            assert n_samples is not None
-            osc_shape = osc_shape.unsqueeze(1)
-            osc_shape = osc_shape.expand(-1, n_samples)
 
         if phase is None:
             assert False  # TODO(cm): tmp
-            phase = (self.phase.uniform_() * 2 * tr.pi) - tr.pi
-            phase = phase[:bs, ...]
+            phase = (tr.rand((bs, 1)) * 2 * tr.pi) - tr.pi
         else:
             assert phase.shape == (bs, 1)
-        arg = tr.cumsum(2 * tr.pi * f0_hz / self.sr, dim=1)
+        arg = tr.cumsum(2 * tr.pi * f0_hz / sr, dim=1)
         arg += phase
+        return arg
+
+    def forward(
+        self,
+        f0_hz: T,
+        osc_arg: T,
+        osc_shape: T,
+    ) -> T:
+        assert osc_arg.ndim == 2
+        bs = osc_arg.size(0)
+        n_samples = osc_arg.size(1)
+        if f0_hz.ndim == 1:
+            f0_hz = f0_hz.unsqueeze(1)
+        assert f0_hz.shape == osc_arg.shape or f0_hz.shape == (bs, 1)
+        assert 1 <= osc_shape.ndim <= 2
+
+        if osc_shape.ndim == 1:
+            osc_shape = osc_shape.unsqueeze(1)
+            osc_shape = osc_shape.expand(-1, n_samples)
 
         # TODO(cm): check how this works
         n_partials = self.calc_n_partials(f0_hz)
-        square_wave = tr.tanh(tr.pi * n_partials * tr.sin(arg) / 2)
-        out_wave = (1 - (osc_shape / 2)) * square_wave * (1 + (osc_shape * tr.cos(arg)))
+        square_wave = tr.tanh(tr.pi * n_partials * tr.sin(osc_arg) / 2)
+        out_wave = (
+            (1 - (osc_shape / 2)) * square_wave * (1 + (osc_shape * tr.cos(osc_arg)))
+        )
         return out_wave
 
 
