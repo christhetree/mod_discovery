@@ -175,7 +175,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         model_in = wet.unsqueeze(1)
         model_out = self.model(model_in)
         filter_args_hat = {}
-        filter_args_eval = {}
 
         # Postprocess mod_sig_hat
         mod_sig_hat = model_out.get("mod_sig_hat")
@@ -344,8 +343,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # Log MSS loss
         with tr.no_grad():
-            mss_loss = self.mss(wet_hat.unsqueeze(1), wet.unsqueeze(1))
-        self.log(f"{stage}/audio_mss", mss_loss, prog_bar=True, sync_dist=True)
+            audio_mss = self.mss(wet_hat.unsqueeze(1), wet.unsqueeze(1))
+        self.log(f"{stage}/audio_mss", audio_mss, prog_bar=True, sync_dist=True)
 
         # Log mod_sig_hat metrics
         if mod_sig is not None and mod_sig_hat is not None:
@@ -360,12 +359,38 @@ class AcidDDSPLightingModule(pl.LightningModule):
             self.log(f"{stage}/ms_esr", mod_sig_esr, prog_bar=False, sync_dist=True)
             self.log(f"{stage}/ms_l1", mod_sig_l1, prog_bar=True, sync_dist=True)
 
+        # Log eval synth metrics if possible
+        wet_eval = None
+        if stage != "train":
+            try:
+                _, wet_eval, _ = self.synth_eval(
+                    f0_hz,
+                    osc_shape_hat,
+                    osc_gain_hat,
+                    note_on_duration,
+                    filter_args_hat,
+                    dist_gain_hat,
+                    learned_alpha_hat,
+                    phase_hat,
+                )
+            except Exception as e:
+                log.error(f"Error in eval synth: {e}")
+            if wet_eval is not None:
+                audio_mss_eval = self.mss(wet_eval.unsqueeze(1), wet.unsqueeze(1))
+                self.log(
+                    f"{stage}/audio_mss_{self.synth_eval.__class__.__name__}",
+                    audio_mss_eval,
+                    prog_bar=False,
+                    sync_dist=True,
+                )
+
         out_dict = {
             "loss": loss,
             "mod_sig": mod_sig,
             "mod_sig_hat": mod_sig_hat,
             "x": wet,
             "x_hat": wet_hat,
+            "x_eval": wet_eval,
             "osc_audio": dry,
             "envelope": envelope,
             "log_spec_x": log_spec_x,

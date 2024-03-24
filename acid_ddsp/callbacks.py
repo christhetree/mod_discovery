@@ -253,6 +253,7 @@ class LogAudioCallback(Callback):
         osc_audio_waveforms = []
         x_waveforms = []
         x_hat_waveforms = []
+        x_eval_waveforms = []
         for example_idx in range(self.n_examples):
             if example_idx not in self.out_dicts:
                 log.warning(f"example_idx={example_idx} not in out_dicts")
@@ -263,6 +264,7 @@ class LogAudioCallback(Callback):
             osc_audio = out_dict.get("osc_audio")
             x = out_dict.get("x")
             x_hat = out_dict.get("x_hat")
+            x_eval = out_dict.get("x_eval")
             waveforms = []
             labels = []
 
@@ -284,6 +286,12 @@ class LogAudioCallback(Callback):
                 labels.append("x_hat")
                 x_hat = x_hat.repeat(1, n_repeat)
                 x_hat_waveforms.append(x_hat.swapaxes(0, 1).numpy())
+            if x_eval is not None:
+                x_eval = x_eval[0:1]
+                waveforms.append(x_eval)
+                labels.append("x_eval")
+                x_eval = x_eval.repeat(1, n_repeat)
+                x_eval_waveforms.append(x_eval.swapaxes(0, 1).numpy())
 
             fig = plot_waveforms_stacked(waveforms, pl_module.ac.sr, title, labels)
             img = fig2img(fig)
@@ -325,6 +333,14 @@ class LogAudioCallback(Callback):
                         wandb.Audio(
                             curr_x_hat_audio,
                             caption=f"x_hat_{idx}",
+                            sample_rate=int(pl_module.ac.sr),
+                        )
+                    )
+                for idx, curr_x_eval_audio in enumerate(x_eval_waveforms):
+                    data["x_eval"].append(
+                        wandb.Audio(
+                            curr_x_eval_audio,
+                            caption=f"x_eval_{idx}",
                             sample_rate=int(pl_module.ac.sr),
                         )
                     )

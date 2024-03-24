@@ -24,6 +24,7 @@ def time_varying_fir(x: T, b: T) -> T:
     x_padded = F.pad(x, (order, 0))
     x_unfolded = x_padded.unfold(dimension=1, size=order + 1, step=1)
     x_unfolded = x_unfolded.unsqueeze(3)
+    b = tr.flip(b, dims=[2])  # Go from correlation to convolution
     b = b.unsqueeze(2)
     y = b @ x_unfolded
     y = y.squeeze(3)
@@ -115,6 +116,7 @@ class TimeVaryingIIRFSM(nn.Module):
         oversampling_factor: int = 1,
     ):
         super().__init__()
+        assert 0.0 < overlap < 1.0
         self.sr = sr
         self.overlap = overlap
         self.oversampling_factor = oversampling_factor
@@ -138,7 +140,7 @@ class TimeVaryingIIRFSM(nn.Module):
         )
 
     def calc_n_frames(self, n_samples: int) -> int:
-        n_frames = math.ceil(n_samples / self.hop_len)
+        n_frames = (n_samples // self.hop_len) + 1
         return n_frames
 
     def forward(self, x: T, a: T, b: T) -> T:
@@ -164,7 +166,7 @@ class TimeVaryingIIRFSM(nn.Module):
 
         A = tr.fft.rfft(a, self.n_fft)
         B = tr.fft.rfft(b, self.n_fft)
-        H = B / A
+        H = B / A  # TODO(cm): Make more stable
         H = H.swapaxes(1, 2)
         Y = X * H
 
@@ -334,6 +336,7 @@ if __name__ == "__main__":
     # tvb.to(device)
 
     n_samples = sr
+    # n_samples = 2 ** 14
     white_noise = tr.rand((bs, n_samples)) * 2.0 - 1.0
     sin_wave_400hz = tr.sin(
         2 * tr.pi * tr.linspace(0.0, 1.0, n_samples).unsqueeze(0).repeat(bs, 1) * 400
@@ -378,16 +381,38 @@ if __name__ == "__main__":
     #     0.09979048504546387,
     #     -0.15301418463641955,
     # ]
-    b_coeff_raw = list(range(3))
-    b_coeff_raw = [float(x) for x in b_coeff_raw]
+    a_coeff_raw = list([1.0, 0.5, 0.1])
+    a_coeff_raw = [float(x) for x in a_coeff_raw]
+    a_coeff_raw[0] = 1.0
+    print(f"a_coeff_raw = {a_coeff_raw}")
+    b_coeff_raw = list([1.0, 0.3, 0.4])
+    # b_coeff_raw = list(range(3))
+    # b_coeff_raw = [float(x) for x in b_coeff_raw]
     # b_coeff_raw = b_coeff_raw[::-1]
-    print(b_coeff_raw)
+    # print(f"b_coeff_raw = {b_coeff_raw}")
+    a_coeff = tr.tensor(a_coeff_raw).view(1, 1, -1).repeat(bs, n_samples, 1)
     b_coeff = tr.tensor(b_coeff_raw).view(1, 1, -1).repeat(bs, n_samples, 1)
-    y = time_varying_fir(sin_wave_400hz, b_coeff)
-    print(f"y.avg = {y.mean():.4f}")
+    y_a = sample_wise_lpc(white_noise, a_coeff[:, :, 1:])
+    y = time_varying_fir(y_a, b_coeff)
+
+    fsm = TimeVaryingIIRFSM(
+        win_len=n_samples, sr=sr, oversampling_factor=1, overlap=0.90
+    )
+    n_frames = fsm.calc_n_frames(n_samples)
+    print(f"n_frames = {n_frames}")
+    a_coeff = tr.tensor(a_coeff_raw).view(1, 1, -1).repeat(bs, n_frames, 1)
+    # b_coeff_raw = list([1.0, 0.0, 0.0])
+    # b_coeff_raw = b_coeff_raw[::-1]
+    b_coeff = tr.tensor(b_coeff_raw).view(1, 1, -1).repeat(bs, n_frames, 1)
+    y_fsm = fsm(white_noise, a_coeff, b_coeff)
+    assert y.shape == y_fsm.shape
+    assert tr.allclose(y, y_fsm, atol=1e-3)
+    # print(f"y.avg = {y.mean():.4f}")
+    exit()
 
     import torchaudio
     import matplotlib.pyplot as plt
+
     spec_transform = torchaudio.transforms.Spectrogram(n_fft=2048, hop_length=512)
     spec = spec_transform(y)
     log_spec = tr.log10(spec[0] + 1e-9)
