@@ -113,18 +113,18 @@ class CustomLightningCLI(LightningCLI):
                 self.link_arguments_if_possible(src, dest, config)
 
     def before_instantiate_classes(self) -> None:
-        # TODO(cm)
-        # log.info("Setting deterministic algorithms")
-        # os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-        # tr.use_deterministic_algorithms(True)
-        # tr.backends.cudnn.deterministic = True
-
         if self.subcommand is not None:
             config = self.config[self.subcommand]
             self.update_config(config)
         else:
             config = self.config
             self.update_config(config)
+
+        if config.custom.is_deterministic:
+            log.info("Setting torch.use_deterministic_algorithms(True)")
+            os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+            tr.use_deterministic_algorithms(True, warn_only=True)
+            # tr.backends.cudnn.deterministic = True
 
         devices = config.trainer.devices
         if isinstance(devices, list):

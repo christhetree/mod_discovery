@@ -154,6 +154,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         batch = self.preprocess_batch(batch)
         f0_hz = batch["f0_hz"]
         note_on_duration = batch["note_on_duration"]
+        wet = batch["wet"]
         phase_hat = batch["phase_hat"]
 
         mod_sig = batch.get("mod_sig")
@@ -168,7 +169,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         learned_alpha_norm = batch.get("learned_alpha_norm")
         learned_alpha = batch.get("learned_alpha")
         dry = batch.get("dry")
-        wet = batch["wet"]
         envelope = batch.get("envelope")
 
         # Perform model forward pass

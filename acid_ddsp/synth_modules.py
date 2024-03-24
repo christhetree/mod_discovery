@@ -70,12 +70,34 @@ class SquareSawVCOLite(nn.Module):
         self.batch_size = batch_size
         self.register_buffer("phase", tr.zeros((batch_size, 1)))
 
-    def calc_n_partials(self, f0_hz: T) -> T:
+    @staticmethod
+    def calc_n_partials(f0_hz: T) -> T:
         assert f0_hz.ndim == 2
         max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
         # TODO(cm): check this calculation
         n_partials = 12000 / (max_f0_hz * tr.log10(max_f0_hz))
         return n_partials
+
+    @staticmethod
+    def calc_osc_arg(
+        sr: int, f0_hz: T, n_samples: Optional[int] = None, phase: Optional[T] = None
+    ) -> T:
+        assert 1 <= f0_hz.ndim <= 2
+        bs = f0_hz.size(0)
+
+        if f0_hz.ndim == 1:
+            assert n_samples is not None
+            f0_hz = f0_hz.unsqueeze(1)
+            f0_hz = f0_hz.expand(-1, n_samples)
+
+        if phase is None:
+            assert False  # TODO(cm): tmp
+            phase = (tr.rand((bs, 1)) * 2 * tr.pi) - tr.pi
+        else:
+            assert phase.shape == (bs, 1)
+        arg = tr.cumsum(2 * tr.pi * f0_hz / sr, dim=1)
+        arg += phase
+        return arg
 
     def forward(
         self,
@@ -86,7 +108,6 @@ class SquareSawVCOLite(nn.Module):
     ) -> T:
         assert 1 <= f0_hz.ndim <= 2
         assert 1 <= osc_shape.ndim <= 2
-        bs = f0_hz.size(0)
 
         if f0_hz.ndim == 1:
             assert n_samples is not None
@@ -97,15 +118,7 @@ class SquareSawVCOLite(nn.Module):
             osc_shape = osc_shape.unsqueeze(1)
             osc_shape = osc_shape.expand(-1, n_samples)
 
-        if phase is None:
-            assert False  # TODO(cm): tmp
-            phase = (self.phase.uniform_() * 2 * tr.pi) - tr.pi
-            phase = phase[:bs, ...]
-        else:
-            assert phase.shape == (bs, 1)
-        arg = tr.cumsum(2 * tr.pi * f0_hz / self.sr, dim=1)
-        arg += phase
-
+        arg = self.calc_osc_arg(self.sr, f0_hz, n_samples, phase)
         # TODO(cm): check how this works
         n_partials = self.calc_n_partials(f0_hz)
         square_wave = tr.tanh(tr.pi * n_partials * tr.sin(arg) / 2)
