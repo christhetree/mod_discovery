@@ -27,8 +27,8 @@ log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 def make_synth(
     synth_type: str, ac: AudioConfig, batch_size: int, **kwargs: Dict[str, Any]
 ) -> "AcidSynthBase":
-    if synth_type == "AcidSynth":
-        synth_class = AcidSynth
+    if synth_type == "AcidSynthLPBiquad":
+        synth_class = AcidSynthLPBiquad
     elif synth_type == "AcidSynthLPBiquadFSM":
         synth_class = AcidSynthLPBiquadFSM
     elif synth_type == "AcidSynthLearnedBiquadCoeff":
@@ -114,10 +114,10 @@ class AcidSynthBase(ABC, nn.Module):
         return dry_audio, wet_audio, envelope
 
 
-class AcidSynth(AcidSynthBase):
-    # TODO(cm): interp mod signal or coeff
-    def __init__(self, ac: AudioConfig, batch_size: int):
+class AcidSynthLPBiquad(AcidSynthBase):
+    def __init__(self, ac: AudioConfig, batch_size: int, interp_coeff: bool = True):
         super().__init__(ac, batch_size)
+        self.interp_coeff = interp_coeff
         self.filter = TimeVaryingLPBiquad(
             min_w=ac.min_w,
             max_w=ac.max_w,
@@ -128,13 +128,11 @@ class AcidSynth(AcidSynthBase):
     def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> T:
         w_mod_sig = filter_args["w_mod_sig"]
         q_mod_sig = filter_args["q_mod_sig"]
-        w_mod_sig, q_mod_sig = self.resize_mod_sig(x, w_mod_sig, q_mod_sig)
-        y = self.filter(x, w_mod_sig, q_mod_sig)
+        y = self.filter(x, w_mod_sig, q_mod_sig, interp_coeff=self.interp_coeff)
         return y
 
 
-class AcidSynthLPBiquadFSM(AcidSynthBase):
-    # TODO(cm): interp mod signal or coeff
+class AcidSynthLPBiquadFSM(AcidSynthLPBiquad):
     def __init__(
         self,
         ac: AudioConfig,
@@ -143,8 +141,9 @@ class AcidSynthLPBiquadFSM(AcidSynthBase):
         win_len_sec: Optional[float] = None,
         overlap: float = 0.75,
         oversampling_factor: int = 1,
+        interp_coeff: bool = True,
     ):
-        super().__init__(ac, batch_size)
+        super().__init__(ac, batch_size, interp_coeff)
         self.filter = TimeVaryingLPBiquadFSM(
             win_len=win_len,
             win_len_sec=win_len_sec,
@@ -156,22 +155,6 @@ class AcidSynthLPBiquadFSM(AcidSynthBase):
             min_q=ac.min_q,
             max_q=ac.max_q,
         )
-
-    def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> T:
-        w_mod_sig = filter_args["w_mod_sig"]
-        q_mod_sig = filter_args["q_mod_sig"]
-        n_samples = x.size(1)
-        n_frames = self.filter.filter.calc_n_frames(n_samples)
-        assert w_mod_sig.ndim == x.ndim
-        w_mod_sig = util.linear_interpolate_dim(
-            w_mod_sig, n_frames, dim=1, align_corners=True
-        )
-        assert q_mod_sig.ndim == x.ndim
-        q_mod_sig = util.linear_interpolate_dim(
-            q_mod_sig, n_frames, dim=1, align_corners=True
-        )
-        y = self.filter(x, w_mod_sig, q_mod_sig)
-        return y
 
 
 class AcidSynthLearnedBiquadCoeff(AcidSynthBase):

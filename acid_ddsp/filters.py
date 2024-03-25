@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from torch import Tensor as T
 from torch import nn
 
+import util
 from torchlpc import sample_wise_lpc
 
 logging.basicConfig()
@@ -245,10 +246,23 @@ class TimeVaryingLPBiquad(nn.Module):
         x: T,
         w_mod_sig: Optional[T] = None,
         q_mod_sig: Optional[T] = None,
+        interp_coeff: bool = False,
     ) -> T:
         w, q = self.calc_w_and_q(x, w_mod_sig, q_mod_sig)
-        assert x.shape == w.shape == q.shape
+        n_samples = x.size(1)
+        if not interp_coeff:
+            assert False  # TODO(cm): tmp
+            w = util.linear_interpolate_dim(w, n_samples, dim=1, align_corners=True)
+            q = util.linear_interpolate_dim(q, n_samples, dim=1, align_corners=True)
+            assert x.shape == w.shape == q.shape
         a_coeffs, b_coeffs = calc_lp_biquad_coeff(w, q, eps=self.eps)
+        if interp_coeff:
+            a_coeffs = util.linear_interpolate_dim(
+                a_coeffs, n_samples, dim=1, align_corners=True
+            )
+            b_coeffs = util.linear_interpolate_dim(
+                b_coeffs, n_samples, dim=1, align_corners=True
+            )
         y_a = sample_wise_lpc(x, a_coeffs)
         assert not tr.isinf(y_a).any()
         assert not tr.isnan(y_a).any()
@@ -294,9 +308,23 @@ class TimeVaryingLPBiquadFSM(TimeVaryingLPBiquad):
         x: T,
         w_mod_sig: Optional[T] = None,
         q_mod_sig: Optional[T] = None,
+        interp_coeff: bool = False,
     ) -> T:
         w, q = self.calc_w_and_q(x, w_mod_sig, q_mod_sig)
+        n_samples = x.size(1)
+        n_frames = self.filter.calc_n_frames(n_samples)
+        if not interp_coeff:
+            assert False  # TODO(cm): tmp
+            w = util.linear_interpolate_dim(w, n_frames, dim=1, align_corners=True)
+            q = util.linear_interpolate_dim(q, n_frames, dim=1, align_corners=True)
         a_coeffs, b_coeffs = calc_lp_biquad_coeff(w, q, eps=self.eps)
+        if interp_coeff:
+            a_coeffs = util.linear_interpolate_dim(
+                a_coeffs, n_frames, dim=1, align_corners=True
+            )
+            b_coeffs = util.linear_interpolate_dim(
+                b_coeffs, n_frames, dim=1, align_corners=True
+            )
         a1 = a_coeffs[:, :, 0]
         a2 = a_coeffs[:, :, 1]
         a0 = tr.ones_like(a1)

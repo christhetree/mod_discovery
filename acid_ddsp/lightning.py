@@ -13,7 +13,7 @@ import acid_ddsp.util as util
 from acid_ddsp.audio_config import AudioConfig
 from fad import save_fad_audio, calc_fad
 from feature_extraction import LogMelSpecFeatureExtractor
-from synths import AcidSynth, make_synth
+from synths import AcidSynthLPBiquad, make_synth
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.is_osc_gain_learnable = ac.min_osc_gain != ac.max_osc_gain
         self.is_alpha_learnable = ac.min_learned_alpha != ac.max_learned_alpha
 
-        self.synth = AcidSynth(ac, batch_size)
+        self.synth = AcidSynthLPBiquad(ac, batch_size)
         self.synth_hat = make_synth(synth_hat_type, ac, batch_size, **synth_hat_kwargs)
         self.synth_eval = make_synth(
             synth_eval_type, ac, batch_size, **synth_eval_kwargs

@@ -3,12 +3,12 @@ seed_everything: 42
 custom:
   project_name: acid_ddsp
 #  model_name: testing
-#  model_name: cnn_mss_coeff
-#  model_name: cnn_mss_coeff_fsm_512_32_1
-#  model_name: cnn_mss_coeff_fsm_1024_32_1
-#  model_name: cnn_mss_coeff_fsm_2048_32_1
-#  model_name: cnn_mss_coeff_fsm_4096_32_1
-  model_name: cnn_mss_lstm64
+#  model_name: cnn_mss_lp
+#  model_name: cnn_mss_lp_fsm_512_32_1
+#  model_name: cnn_mss_lp_fsm_1024_32_1
+  model_name: cnn_mss_lp_fsm_2048_32_1
+#  model_name: cnn_mss_lp_fsm_4096_32_1
+#  model_name: cnn_mss_lstm64
   dataset_name: abstract_303_48k__6k__4k_min
   cpu_batch_size: 5  # For now must be >= n_examples
 #  cpu_batch_size: 32  # For now must be >= n_examples
@@ -59,10 +59,26 @@ model:
 ##      overlap: 0.9921875  # 32 samples at 4096
 #      oversampling_factor: 1
 
+#    model: ../configs/spectral_2dcnn.yml
+#    synth_hat_type: AcidSynthLPBiquad
+
     model: ../configs/spectral_2dcnn.yml
-    synth_hat_type: AcidSynthLSTM
+    synth_hat_type: AcidSynthLPBiquadFSM
     synth_hat_kwargs:
-      n_hidden: 64
+#      win_len: 512
+#      overlap: 0.9375  # 32 samples at 512
+#      win_len: 1024
+#      overlap: 0.96875  # 32 samples at 1024
+      win_len: 2048
+      overlap: 0.984375  # 32 samples at 2048
+#      win_len: 4096
+#      overlap: 0.9921875  # 32 samples at 4096
+      oversampling_factor: 1
+
+#    model: ../configs/spectral_2dcnn.yml
+#    synth_hat_type: AcidSynthLSTM
+#    synth_hat_kwargs:
+#      n_hidden: 64
 
 #    loss_func: torch.nn.L1Loss
 #    loss_func: torch.nn.MSELoss
@@ -73,7 +89,8 @@ model:
 
     log_envelope: true
     spectral_visualizer: ../configs/log_mel_spec.yml
-    synth_eval_type: AcidSynthLearnedBiquadCoeff
+#    synth_eval_type: AcidSynthLearnedBiquadCoeff
+    synth_eval_type: AcidSynthLPBiquad
 
     fad_model_names:
       - clap-2023
