@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 import auraloss
 import pytorch_lightning as pl
@@ -11,6 +11,7 @@ from torch import nn
 
 import acid_ddsp.util as util
 from acid_ddsp.audio_config import AudioConfig
+from fad import save_fad_audio, calc_fad
 from feature_extraction import LogMelSpecFeatureExtractor
 from synths import AcidSynth, make_synth
 
@@ -33,6 +34,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         synth_hat_kwargs: Optional[Dict[str, Any]] = None,
         synth_eval_type: str = "AcidSynth",
         synth_eval_kwargs: Optional[Dict[str, Any]] = None,
+        fad_model_names: Optional[List[str]] = None,
     ):
         super().__init__()
         if synth_hat_kwargs is None:
@@ -43,6 +45,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             assert (
                 synth_hat_kwargs["interp_logits"] == synth_eval_kwargs["interp_logits"]
             )
+        if fad_model_names is None:
+            fad_model_names = []
         self.save_hyperparameters(
             ignore=["ac", "model", "loss_func", "spectral_visualizer"]
         )
@@ -55,6 +59,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.spectral_visualizer = spectral_visualizer
         self.use_p_loss = use_p_loss
         self.log_envelope = log_envelope
+        self.fad_model_names = fad_model_names
 
         self.loss_name = self.loss_func.__class__.__name__
         self.esr = ESRLoss()
@@ -387,6 +392,13 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     prog_bar=False,
                     sync_dist=True,
                 )
+            # Log FAD
+            audio_paths = batch["audio_paths"]
+            for fad_model_name in self.fad_model_names:
+                save_fad_audio(self.ac.sr, audio_paths, wet, wet_hat)
+                fad = calc_fad(fad_model_name)
+                # log.info(f"FAD score for {fad_model_name}: {fad}")
+                self.log(f"{stage}/fad_{fad_model_name}", fad, prog_bar=False)
 
         out_dict = {
             "loss": loss,

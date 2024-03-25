@@ -183,6 +183,7 @@ class AcidSynthLearnedBiquadCoeff(AcidSynthBase):
         assert logits.ndim == 3
         bs = logits.size(0)
         if self.interp_logits:
+            assert False  # TODO(cm): tmp
             logits = util.linear_interpolate_dim(
                 logits, n_frames, dim=1, align_corners=True
             )

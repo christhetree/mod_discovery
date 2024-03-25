@@ -99,4 +99,5 @@ class PreprocDataset(Dataset):
             "note_on_duration": note_on_duration,
             "phase": phase,
             "phase_hat": phase_hat,
+            "audio_paths": audio_path,
         }

@@ -3,11 +3,11 @@ seed_everything: 42
 custom:
   project_name: acid_ddsp
 #  model_name: testing
-#  model_name: cnn_mss_coeff
+  model_name: cnn_mss_coeff
 #  model_name: cnn_mss_coeff_fsm_1024_32_1
 #  model_name: cnn_mss_coeff_fsm_1024_p75_1
 #  model_name: cnn_mss_fsm_2048_p75_1
-  model_name: cnn_mss_fsm_4096_32_1
+#  model_name: cnn_mss_fsm_4096_32_1
 #  model_name: cnn_mss_lstm64
   dataset_name: abstract_303_48k__6k__4k_min
   cpu_batch_size: 5  # For now must be >= n_examples
@@ -23,6 +23,7 @@ trainer:
   accumulate_grad_batches: 1
 #  check_val_every_n_epoch: 1
   check_val_every_n_epoch: 8
+  gradient_clip_val: 0.5
 
 data:
   class_path: data_modules.PreprocDataModule
@@ -33,7 +34,7 @@ data:
     ext: .wav
     val_split: 0.2
     test_split: 0.2
-    split_seed: 33
+    split_seed: 42
     num_workers: 4
 
 model:
@@ -41,19 +42,18 @@ model:
   init_args:
     ac: ../configs/audio_config_abstract_303.yml
 
-#    model: ../configs/spectral_2dcnn_logits5.yml
-#    synth_hat_type: AcidSynthLearnedBiquadCoeff
-#    synth_hat_kwargs:
-#      interp_logits: false
-
     model: ../configs/spectral_2dcnn_logits5.yml
-    synth_hat_type: AcidSynthLearnedBiquadCoeffFSM
-    synth_hat_kwargs:
-      win_len: 4096
+    synth_hat_type: AcidSynthLearnedBiquadCoeff
+
+#    model: ../configs/spectral_2dcnn_logits5.yml
+#    synth_hat_type: AcidSynthLearnedBiquadCoeffFSM
+#    synth_hat_kwargs:
+#      win_len: 1024
 #      overlap: 0.96875  # 32 samples at 1024
-      overlap: 0.9921875  # 32 samples at 4096
-#      overlap: 0.75
-      oversampling_factor: 1
+##      win_len: 4096
+##      overlap: 0.9921875  # 32 samples at 4096
+##      overlap: 0.75
+#      oversampling_factor: 1
 
 #    model: ../configs/spectral_2dcnn.yml
 #    synth_hat_type: AcidSynth
@@ -89,6 +89,10 @@ model:
 #        #      overlap: 0.9921875  # 32 samples at 4096
 #        #      overlap: 0.75
 #        oversampling_factor: 1
-#        interp_logits: true
+
+    fad_model_names:
+      - vggish
+      - clap-2023
+      - encodec-emb
 
 optimizer: ../configs/adam_w.yml

@@ -10,3 +10,6 @@
 [submodule "ddsp-phaser"]
 	path = ddsp-phaser
 	url = git@github.com:christhetree/ddsp-phaser.git
+[submodule "fadtk"]
+	path = fadtk
+	url = git@github.com:christhetree/fadtk.git
