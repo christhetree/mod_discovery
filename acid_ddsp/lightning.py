@@ -39,6 +39,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
             synth_hat_kwargs = {}
         if synth_eval_kwargs is None:
             synth_eval_kwargs = {}
+        if "interp_logits" in synth_hat_kwargs and "interp_logits" in synth_eval_kwargs:
+            assert (
+                synth_hat_kwargs["interp_logits"] == synth_eval_kwargs["interp_logits"]
+            )
         self.save_hyperparameters(
             ignore=["ac", "model", "loss_func", "spectral_visualizer"]
         )
@@ -278,9 +282,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             assert mod_sig is not None
             assert mod_sig_hat is not None
             if mod_sig_hat.shape != mod_sig.shape:
-                assert mod_sig_hat.ndim == mod_sig.ndim
-                mod_sig_hat = util.linear_interpolate_last_dim(
-                    mod_sig_hat, mod_sig.size(-1), align_corners=True
+                assert mod_sig_hat.ndim == mod_sig.ndim == 2
+                mod_sig_hat = util.linear_interpolate_dim(
+                    mod_sig_hat, mod_sig.size(1), dim=1, align_corners=True
                 )
             loss = self.loss_func(mod_sig_hat, mod_sig)
             if self.is_q_learnable and q_norm_hat is not None:
@@ -349,9 +353,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # Log mod_sig_hat metrics
         if mod_sig is not None and mod_sig_hat is not None:
             if mod_sig_hat.shape != mod_sig.shape:
-                assert mod_sig_hat.ndim == mod_sig.ndim
-                mod_sig_hat = util.linear_interpolate_last_dim(
-                    mod_sig_hat, mod_sig.size(-1), align_corners=True
+                assert mod_sig_hat.ndim == mod_sig.ndim == 2
+                mod_sig_hat = util.linear_interpolate_dim(
+                    mod_sig_hat, mod_sig.size(1), dim=1, align_corners=True
                 )
             with tr.no_grad():
                 mod_sig_esr = self.esr(mod_sig_hat, mod_sig)

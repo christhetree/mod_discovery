@@ -74,17 +74,13 @@ class AcidSynthBase(ABC, nn.Module):
         pass
 
     def resize_mod_sig(self, x: T, w_mod_sig: T, q_mod_sig: T) -> (T, T):
-        assert x.ndim == 2
-        if w_mod_sig.shape != x.shape:
-            assert w_mod_sig.ndim == x.ndim
-            w_mod_sig = util.linear_interpolate_last_dim(
-                w_mod_sig, x.size(1), align_corners=True
-            )
-        if q_mod_sig.shape != x.shape:
-            assert q_mod_sig.ndim == x.ndim
-            q_mod_sig = util.linear_interpolate_last_dim(
-                q_mod_sig, x.size(1), align_corners=True
-            )
+        assert w_mod_sig.ndim == q_mod_sig.ndim == x.ndim == 2
+        w_mod_sig = util.linear_interpolate_dim(
+            w_mod_sig, x.size(1), align_corners=True
+        )
+        q_mod_sig = util.linear_interpolate_dim(
+            q_mod_sig, x.size(1), align_corners=True
+        )
         return w_mod_sig, q_mod_sig
 
     def forward(
@@ -119,6 +115,7 @@ class AcidSynthBase(ABC, nn.Module):
 
 
 class AcidSynth(AcidSynthBase):
+    # TODO(cm): interp mod signal or coeff
     def __init__(self, ac: AudioConfig, batch_size: int):
         super().__init__(ac, batch_size)
         self.filter = TimeVaryingLPBiquad(
@@ -137,6 +134,7 @@ class AcidSynth(AcidSynthBase):
 
 
 class AcidSynthLPBiquadFSM(AcidSynthBase):
+    # TODO(cm): interp mod signal or coeff
     def __init__(
         self,
         ac: AudioConfig,
@@ -164,43 +162,57 @@ class AcidSynthLPBiquadFSM(AcidSynthBase):
         q_mod_sig = filter_args["q_mod_sig"]
         n_samples = x.size(1)
         n_frames = self.filter.filter.calc_n_frames(n_samples)
-        if w_mod_sig.size(1) != n_frames:
-            assert w_mod_sig.ndim == x.ndim
-            w_mod_sig = util.linear_interpolate_last_dim(
-                w_mod_sig, n_frames, align_corners=True
-            )
-        if q_mod_sig.size(1) != n_frames:
-            assert q_mod_sig.ndim == x.ndim
-            q_mod_sig = util.linear_interpolate_last_dim(
-                q_mod_sig, n_frames, align_corners=True
-            )
+        assert w_mod_sig.ndim == x.ndim
+        w_mod_sig = util.linear_interpolate_dim(
+            w_mod_sig, n_frames, dim=1, align_corners=True
+        )
+        assert q_mod_sig.ndim == x.ndim
+        q_mod_sig = util.linear_interpolate_dim(
+            q_mod_sig, n_frames, dim=1, align_corners=True
+        )
         y = self.filter(x, w_mod_sig, q_mod_sig)
         return y
 
 
 class AcidSynthLearnedBiquadCoeff(AcidSynthBase):
+    def __init__(self, ac: AudioConfig, batch_size: int, interp_logits: bool = False):
+        super().__init__(ac, batch_size)
+        self.interp_logits = interp_logits
+
+    def _calc_coeff(self, logits: T, n_frames: int) -> (T, T):
+        assert logits.ndim == 3
+        bs = logits.size(0)
+        if self.interp_logits:
+            logits = util.linear_interpolate_dim(
+                logits, n_frames, dim=1, align_corners=True
+            )
+            assert logits.shape == (bs, n_frames, 5)
+        a_logits = logits[..., :2]
+        a_coeff = calc_logits_to_biquad_a_coeff_triangle(a_logits)
+        b_coeff = logits[..., 2:]
+        if not self.interp_logits:
+            a_coeff = util.linear_interpolate_dim(
+                a_coeff, n_frames, dim=1, align_corners=True
+            )
+            assert a_coeff.shape == (bs, n_frames, 2)
+            b_coeff = util.linear_interpolate_dim(
+                b_coeff, n_frames, dim=1, align_corners=True
+            )
+            assert b_coeff.shape == (bs, n_frames, 3)
+        return a_coeff, b_coeff
+
     def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> T:
         logits = filter_args["logits"]
-        assert logits.ndim == 3
-        if logits.size(1) != x.size(1):
-            logits = logits.swapaxes(1, 2)
-            logits = util.linear_interpolate_last_dim(
-                logits, x.size(1), align_corners=True
-            )
-            logits = logits.swapaxes(1, 2)
-        assert logits.shape == (x.size(0), x.size(1), 5)
-        a_logits = logits[..., :2]
-        a = calc_logits_to_biquad_a_coeff_triangle(a_logits)
-        b = logits[..., 2:]
-
-        y_a = sample_wise_lpc(x, a)
+        n_samples = x.size(1)
+        a_coeff, b_coeff = self._calc_coeff(logits, n_samples)
+        y_a = sample_wise_lpc(x, a_coeff)
         assert not tr.isinf(y_a).any()
         assert not tr.isnan(y_a).any()
-        y_ab = time_varying_fir(y_a, b)
+        y_ab = time_varying_fir(y_a, b_coeff)
         return y_ab
 
 
-class AcidSynthLearnedBiquadCoeffFSM(AcidSynthBase):
+class AcidSynthLearnedBiquadCoeffFSM(AcidSynthLearnedBiquadCoeff):
     def __init__(
         self,
         ac: AudioConfig,
@@ -209,8 +221,9 @@ class AcidSynthLearnedBiquadCoeffFSM(AcidSynthBase):
         win_len_sec: Optional[float] = None,
         overlap: float = 0.75,
         oversampling_factor: int = 1,
+        interp_logits: bool = False,
     ):
-        super().__init__(ac, batch_size)
+        super().__init__(ac, batch_size, interp_logits)
         self.filter = TimeVaryingIIRFSM(
             win_len=win_len,
             win_len_sec=win_len_sec,
@@ -224,21 +237,11 @@ class AcidSynthLearnedBiquadCoeffFSM(AcidSynthBase):
         assert logits.ndim == 3
         n_samples = x.size(1)
         n_frames = self.filter.calc_n_frames(n_samples)
-        if logits.size(1) != n_frames:
-            logits = logits.swapaxes(1, 2)
-            logits = util.linear_interpolate_last_dim(
-                logits, n_frames, align_corners=True
-            )
-            logits = logits.swapaxes(1, 2)
-        assert logits.shape == (x.size(0), n_frames, 5)
-        a_logits = logits[..., :2]
-        # We need this to be consistent with the sample-wise implementation
-        a_coeffs = calc_logits_to_biquad_a_coeff_triangle(a_logits)
+        a_coeffs, b_coeffs = self._calc_coeff(logits, n_frames)
         a1 = a_coeffs[:, :, 0]
         a2 = a_coeffs[:, :, 1]
         a0 = tr.ones_like(a1)
         a_coeffs = tr.stack([a0, a1, a2], dim=2)
-        b_coeffs = logits[:, :, 2:]
         y = self.filter(x, a_coeffs, b_coeffs)
         return y
 
@@ -248,11 +251,9 @@ class AcidSynthLearnedBiquadPoleZero(AcidSynthBase):
         logits = filter_args["logits"]
         assert logits.ndim == 3
         if logits.size(1) != x.size(1):
-            logits = logits.swapaxes(1, 2)
-            logits = util.linear_interpolate_last_dim(
-                logits, x.size(1), align_corners=True
+            logits = util.linear_interpolate_dim(
+                logits, x.size(1), dim=1, align_corners=True
             )
-            logits = logits.swapaxes(1, 2)
         assert logits.shape == (x.size(0), x.size(1), 4)
         q_real = logits[..., 0]
         q_imag = logits[..., 1]

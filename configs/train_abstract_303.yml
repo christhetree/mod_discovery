@@ -3,10 +3,11 @@ seed_everything: 42
 custom:
   project_name: acid_ddsp
 #  model_name: testing
-  model_name: cnn_mss_coeff
-#  model_name: cnn_mss_coeff_fsm_1024_32_1_logit_interp
-#  model_name: cnn_mss_coeff_fsm_512_p75_1
-#  model_name: cnn_mss_fsm_4096_32_1
+#  model_name: cnn_mss_coeff
+#  model_name: cnn_mss_coeff_fsm_1024_32_1
+#  model_name: cnn_mss_coeff_fsm_1024_p75_1
+#  model_name: cnn_mss_fsm_2048_p75_1
+  model_name: cnn_mss_fsm_4096_32_1
 #  model_name: cnn_mss_lstm64
   dataset_name: abstract_303_48k__6k__4k_min
   cpu_batch_size: 5  # For now must be >= n_examples
@@ -40,16 +41,19 @@ model:
   init_args:
     ac: ../configs/audio_config_abstract_303.yml
 
-    model: ../configs/spectral_2dcnn_logits5.yml
-    synth_hat_type: AcidSynthLearnedBiquadCoeff
 #    model: ../configs/spectral_2dcnn_logits5.yml
-#    synth_hat_type: AcidSynthLearnedBiquadCoeffFSM
+#    synth_hat_type: AcidSynthLearnedBiquadCoeff
 #    synth_hat_kwargs:
-#      win_len: 1024
+#      interp_logits: false
+
+    model: ../configs/spectral_2dcnn_logits5.yml
+    synth_hat_type: AcidSynthLearnedBiquadCoeffFSM
+    synth_hat_kwargs:
+      win_len: 4096
 #      overlap: 0.96875  # 32 samples at 1024
-##      overlap: 0.9921875  # 32 samples at 4096
-##      overlap: 0.75
-#      oversampling_factor: 1
+      overlap: 0.9921875  # 32 samples at 4096
+#      overlap: 0.75
+      oversampling_factor: 1
 
 #    model: ../configs/spectral_2dcnn.yml
 #    synth_hat_type: AcidSynth
@@ -66,6 +70,7 @@ model:
 #    synth_hat_type: AcidSynthLSTM
 #    synth_hat_kwargs:
 #      n_hidden: 64
+
 #    loss_func: torch.nn.L1Loss
 #    loss_func: torch.nn.MSELoss
 #    loss_func: auraloss.time.ESRLoss
@@ -76,6 +81,7 @@ model:
     log_envelope: true
     spectral_visualizer: ../configs/log_mel_spec.yml
     synth_eval_type: AcidSynthLearnedBiquadCoeff
+
 #    synth_eval_type: AcidSynthLearnedBiquadCoeffFSM
 #    synth_eval_kwargs:
 #        win_len: 1024
@@ -83,5 +89,6 @@ model:
 #        #      overlap: 0.9921875  # 32 samples at 4096
 #        #      overlap: 0.75
 #        oversampling_factor: 1
+#        interp_logits: true
 
 optimizer: ../configs/adam_w.yml

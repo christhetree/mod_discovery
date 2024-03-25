@@ -34,13 +34,14 @@ def time_varying_fir(x: T, b: T) -> T:
 
 def calc_logits_to_biquad_a_coeff_triangle(a_logits: T, eps: float = 1e-3) -> T:
     assert a_logits.size(-1) == 2
+    assert not tr.isnan(a_logits).any()
     stability_factor = 1.0 - eps
     a1_logits = a_logits[..., 0]
     a2_logits = a_logits[..., 1]
     a1 = 2 * tr.tanh(a1_logits) * stability_factor
     a1_abs = a1.abs()
     a2 = (((2 - a1_abs) * tr.tanh(a2_logits) * stability_factor) + a1_abs) / 2
-    assert (a1.abs() < 2.0).all()
+    assert (a1.abs() < 2.0).all(), f"a1.abs().max() = {a1.abs().max()}"
     assert (a2 < 1.0).all()
     assert (a1 < a2 + 1.0).all()
     assert (a1 > -(a2 + 1.0)).all()
