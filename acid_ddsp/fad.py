@@ -1,6 +1,7 @@
 import logging
 import os
 import shutil
+import time
 from typing import Optional, List
 
 import torch as tr
@@ -19,14 +20,18 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-def save_fad_audio(sr: int, audio_paths: List[str], wet: T, wet_hat: T) -> None:
+def save_fad_audio(
+    sr: int,
+    audio_paths: List[str],
+    wet: T,
+    wet_hat: T,
+    unique_suffix: Optional[str] = None,
+) -> (str, str):
+    if unique_suffix is None:
+        unique_suffix = f"{os.getpid()}_{int(time.time())}"
     assert len(audio_paths) == wet.size(0) == wet_hat.size(0)
-    baseline_dir = os.path.join(DATA_DIR, "fad_baseline")
-    eval_dir = os.path.join(DATA_DIR, "fad_eval")
-    if os.path.exists(baseline_dir):
-        shutil.rmtree(baseline_dir)
-    if os.path.exists(eval_dir):
-        shutil.rmtree(eval_dir)
+    baseline_dir = os.path.join(DATA_DIR, f"fad_baseline_{unique_suffix}")
+    eval_dir = os.path.join(DATA_DIR, f"fad_eval_{unique_suffix}")
     os.makedirs(baseline_dir, exist_ok=False)
     os.makedirs(eval_dir, exist_ok=False)
     all_w = []
@@ -40,18 +45,16 @@ def save_fad_audio(sr: int, audio_paths: List[str], wet: T, wet_hat: T) -> None:
     all_w_hat = tr.cat(all_w_hat, dim=1)
     torchaudio.save(os.path.join(baseline_dir, "all.wav"), all_w, sr)
     torchaudio.save(os.path.join(eval_dir, "all.wav"), all_w_hat, sr)
+    return baseline_dir, eval_dir
 
 
 def calc_fad(
     fad_model_name: str,
-    baseline_dir: Optional[str] = None,
-    eval_dir: Optional[str] = None,
-    workers: int = 1,
+    baseline_dir: str,
+    eval_dir: str,
+    clean_up: bool = True,
+    workers: int = 0,
 ) -> float:
-    if baseline_dir is None:
-        baseline_dir = os.path.join(DATA_DIR, "fad_baseline")
-    if eval_dir is None:
-        eval_dir = os.path.join(DATA_DIR, "fad_eval")
     assert os.path.isdir(baseline_dir)
     assert os.path.isdir(eval_dir)
 
@@ -60,6 +63,12 @@ def calc_fad(
     cache_embedding_files(baseline_dir, fad_model, workers)
     cache_embedding_files(eval_dir, fad_model, workers)
 
-    fad = FrechetAudioDistance(fad_model, audio_load_worker=workers, load_model=False)
+    # TODO(cm): fix workers here
+    fad = FrechetAudioDistance(
+        fad_model, audio_load_worker=min(1, workers), load_model=False
+    )
     score = fad.score(baseline_dir, eval_dir)
+    if clean_up:
+        shutil.rmtree(baseline_dir)
+        shutil.rmtree(eval_dir)
     return score

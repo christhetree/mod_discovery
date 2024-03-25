@@ -394,11 +394,31 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 )
             # Log FAD
             audio_paths = batch["audio_paths"]
+            fad_wet = wet.detach().cpu()
+            fad_wet_hat = wet_hat.detach().cpu()
+            fad_wet_eval = None
+            if wet_eval is not None:
+                fad_wet_eval = wet_eval.detach().cpu()
             for fad_model_name in self.fad_model_names:
-                save_fad_audio(self.ac.sr, audio_paths, wet, wet_hat)
-                fad = calc_fad(fad_model_name)
+                baseline_dir, eval_dir = save_fad_audio(
+                    self.ac.sr, audio_paths, fad_wet, fad_wet_hat
+                )
+                fad = calc_fad(fad_model_name, baseline_dir, eval_dir, clean_up=True)
                 # log.info(f"FAD score for {fad_model_name}: {fad}")
                 self.log(f"{stage}/fad_{fad_model_name}", fad, prog_bar=False)
+                if fad_wet_eval is not None:
+                    baseline_dir, eval_dir = save_fad_audio(
+                        self.ac.sr, audio_paths, fad_wet, fad_wet_eval
+                    )
+                    fad_eval = calc_fad(
+                        fad_model_name, baseline_dir, eval_dir, clean_up=True
+                    )
+                    # log.info(f"FAD score for {fad_model_name} (eval): {fad_eval}")
+                    self.log(
+                        f"{stage}/fad_{fad_model_name}_{self.synth_eval.__class__.__name__}",
+                        fad_eval,
+                        prog_bar=False,
+                    )
 
         out_dict = {
             "loss": loss,
