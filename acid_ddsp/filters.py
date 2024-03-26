@@ -135,6 +135,7 @@ class TimeVaryingIIRFSM(nn.Module):
             self.win_len = win_len
             self.hop_len = win_len // hops_per_frame
 
+        assert self.hop_len == 32  # TODO(cm): tmp
         self.n_fft = 2 ** (math.ceil(math.log2(self.win_len)) + oversampling_factor)
         self.register_buffer("hann", tr.hann_window(self.win_len, periodic=True))
         log.info(

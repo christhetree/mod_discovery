@@ -3,22 +3,24 @@ seed_everything: 42
 custom:
   project_name: acid_ddsp
 #  model_name: testing
-#  model_name: cnn_mss_lp
-#  model_name: cnn_mss_lp_fsm_512_32_1
-#  model_name: cnn_mss_lp_fsm_1024_32_1
-  model_name: cnn_mss_lp_fsm_2048_32_1
-#  model_name: cnn_mss_lp_fsm_4096_32_1
+#  model_name: cnn_mss_coeff
+#  model_name: cnn_mss_coeff_fsm_128_32_1
+  model_name: cnn_mss_coeff_fsm_256_32_1
+#  model_name: cnn_mss_coeff_fsm_512_32_1
+#  model_name: cnn_mss_coeff_fsm_1024_32_1
+#  model_name: cnn_mss_coeff_fsm_2048_32_1
+#  model_name: cnn_mss_coeff_fsm_4096_32_1
 #  model_name: cnn_mss_lstm64
   dataset_name: abstract_303_48k__6k__4k_min
-  cpu_batch_size: 5  # For now must be >= n_examples
-#  cpu_batch_size: 32  # For now must be >= n_examples
+#  cpu_batch_size: 5  # For now must be >= n_examples
+  cpu_batch_size: 34  # For now must be >= n_examples
   use_wandb_cpu: false
   use_wandb_gpu: true
 
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [6]
+  devices: [0]
   max_epochs: 200
   num_sanity_val_steps: 0
   accumulate_grad_batches: 1
@@ -46,34 +48,43 @@ model:
 #    model: ../configs/spectral_2dcnn_logits5.yml
 #    synth_hat_type: AcidSynthLearnedBiquadCoeff
 
-#    model: ../configs/spectral_2dcnn_logits5.yml
-#    synth_hat_type: AcidSynthLearnedBiquadCoeffFSM
-#    synth_hat_kwargs:
+    model: ../configs/spectral_2dcnn_logits5.yml
+    synth_hat_type: AcidSynthLearnedBiquadCoeffFSM
+    synth_hat_kwargs:
+#      win_len: 128
+#      overlap: 0.75  # 32 samples at 256
+      win_len: 256
+      overlap: 0.875  # 32 samples at 256
+#      win_len: 512
 #      win_len: 512
 #      overlap: 0.9375  # 32 samples at 512
-##      win_len: 1024
-##      overlap: 0.96875  # 32 samples at 1024
-##      win_len: 2048
-##      overlap: 0.984375  # 32 samples at 2048
-##      win_len: 4096
-##      overlap: 0.9921875  # 32 samples at 4096
+#      win_len: 1024
+#      overlap: 0.96875  # 32 samples at 1024
+#      win_len: 2048
+#      overlap: 0.984375  # 32 samples at 2048
+#      win_len: 4096
+#      overlap: 0.9921875  # 32 samples at 4096
 #      oversampling_factor: 1
 
 #    model: ../configs/spectral_2dcnn.yml
 #    synth_hat_type: AcidSynthLPBiquad
 
-    model: ../configs/spectral_2dcnn.yml
-    synth_hat_type: AcidSynthLPBiquadFSM
-    synth_hat_kwargs:
+#    model: ../configs/spectral_2dcnn.yml
+#    synth_hat_type: AcidSynthLPBiquadFSM
+#    synth_hat_kwargs:
+#      win_len: 128
+#      overlap: 0.75  # 32 samples at 256
+#      win_len: 256
+#      overlap: 0.875  # 32 samples at 256
 #      win_len: 512
 #      overlap: 0.9375  # 32 samples at 512
 #      win_len: 1024
 #      overlap: 0.96875  # 32 samples at 1024
-      win_len: 2048
-      overlap: 0.984375  # 32 samples at 2048
+#      win_len: 2048
+#      overlap: 0.984375  # 32 samples at 2048
 #      win_len: 4096
 #      overlap: 0.9921875  # 32 samples at 4096
-      oversampling_factor: 1
+#      oversampling_factor: 1
 
 #    model: ../configs/spectral_2dcnn.yml
 #    synth_hat_type: AcidSynthLSTM
@@ -89,12 +100,12 @@ model:
 
     log_envelope: true
     spectral_visualizer: ../configs/log_mel_spec.yml
-#    synth_eval_type: AcidSynthLearnedBiquadCoeff
-    synth_eval_type: AcidSynthLPBiquad
+    synth_eval_type: AcidSynthLearnedBiquadCoeff
+#    synth_eval_type: AcidSynthLPBiquad
 
     fad_model_names:
-      - clap-2023
-      - encodec-emb
-      - wavlm-base
+#      - clap-2023
+#      - encodec-emb
+#      - wavlm-base
 
 optimizer: ../configs/adam_w.yml

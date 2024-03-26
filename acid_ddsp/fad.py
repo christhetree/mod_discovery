@@ -65,7 +65,7 @@ def calc_fad(
 
     # TODO(cm): fix workers here
     fad = FrechetAudioDistance(
-        fad_model, audio_load_worker=min(1, workers), load_model=False
+        fad_model, audio_load_worker=workers, load_model=False
     )
     score = fad.score(baseline_dir, eval_dir)
     if clean_up:
