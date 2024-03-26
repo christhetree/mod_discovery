@@ -1,18 +1,22 @@
 import logging
 import os
+from datetime import datetime
 from typing import Dict, Any, Optional, List
 
 import auraloss
+import pandas as pd
 import pytorch_lightning as pl
 import torch as tr
 from auraloss.time import ESRLoss
 from torch import Tensor as T
 from torch import nn
+from tqdm import tqdm
 
 import acid_ddsp.util as util
 from acid_ddsp.audio_config import AudioConfig
-from fad import save_fad_audio, calc_fad
+from fad import save_and_concat_fad_audio, calc_fad
 from feature_extraction import LogMelSpecFeatureExtractor
+from paths import OUT_DIR
 from synths import AcidSynthLPBiquad, make_synth
 
 logging.basicConfig()
@@ -35,6 +39,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         synth_eval_type: str = "AcidSynth",
         synth_eval_kwargs: Optional[Dict[str, Any]] = None,
         fad_model_names: Optional[List[str]] = None,
+        run_name: Optional[str] = None,
     ):
         super().__init__()
         if synth_hat_kwargs is None:
@@ -47,6 +52,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             )
         if fad_model_names is None:
             fad_model_names = []
+        if run_name is None:
+            self.run_name = f"run__{datetime.now().strftime('%Y-%m-%d__%H-%M-%S')}"
+        log.info(f"Run name: {self.run_name}")
         self.save_hyperparameters(
             ignore=["ac", "model", "loss_func", "spectral_visualizer"]
         )
@@ -66,6 +74,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.l1 = nn.L1Loss()
         self.mss = auraloss.freq.MultiResolutionSTFTLoss()
         self.global_n = 0
+        self.test_outs = []
 
         # TODO(cm): refactor this to reduce duplicate code
         self.is_q_learnable = ac.min_q != ac.max_q
@@ -370,6 +379,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # Log eval synth metrics if possible
         wet_eval = None
+        audio_mss_eval = None
         if stage != "train":
             try:
                 _, wet_eval, _ = self.synth_eval(
@@ -392,33 +402,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     prog_bar=False,
                     sync_dist=True,
                 )
-            # Log FAD
-            audio_paths = batch["audio_paths"]
-            fad_wet = wet.detach().cpu()
-            fad_wet_hat = wet_hat.detach().cpu()
-            fad_wet_eval = None
-            if wet_eval is not None:
-                fad_wet_eval = wet_eval.detach().cpu()
-            for fad_model_name in self.fad_model_names:
-                baseline_dir, eval_dir = save_fad_audio(
-                    self.ac.sr, audio_paths, fad_wet, fad_wet_hat
-                )
-                fad = calc_fad(fad_model_name, baseline_dir, eval_dir, clean_up=True)
-                # log.info(f"FAD score for {fad_model_name}: {fad}")
-                self.log(f"{stage}/fad_{fad_model_name}", fad, prog_bar=False)
-                if fad_wet_eval is not None:
-                    baseline_dir, eval_dir = save_fad_audio(
-                        self.ac.sr, audio_paths, fad_wet, fad_wet_eval
-                    )
-                    fad_eval = calc_fad(
-                        fad_model_name, baseline_dir, eval_dir, clean_up=True
-                    )
-                    # log.info(f"FAD score for {fad_model_name} (eval): {fad_eval}")
-                    self.log(
-                        f"{stage}/fad_{fad_model_name}_{self.synth_eval.__class__.__name__}",
-                        fad_eval,
-                        prog_bar=False,
-                    )
 
         out_dict = {
             "loss": loss,
@@ -440,6 +423,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "osc_gain_hat": osc_gain_hat,
             "learned_alpha": learned_alpha,
             "learned_alpha_hat": learned_alpha_hat,
+            "audio_mss": audio_mss,
+            "audio_mss_eval": audio_mss_eval,
         }
         return out_dict
 
@@ -450,7 +435,77 @@ class AcidDDSPLightingModule(pl.LightningModule):
         return self.step(batch, stage="val")
 
     def test_step(self, batch: Dict[str, T], stage: str) -> Dict[str, T]:
-        return self.step(batch, stage="test")
+        out = self.step(batch, stage="test")
+        self.test_outs.append(out)
+        return out
+
+    def on_test_epoch_end(self) -> None:
+        loss = tr.stack([out["loss"] for out in self.test_outs], dim=0).mean()
+        audio_mss = tr.stack([out["audio_mss"] for out in self.test_outs], dim=0).mean()
+        audio_mss_eval = None
+        if self.test_outs[0].get("audio_mss_eval") is not None:
+            audio_mss_eval = tr.stack(
+                [out["audio_mss_eval"] for out in self.test_outs], dim=0
+            ).mean()
+
+        tsv_data = [
+            ["loss", loss.item()],
+            ["mss", audio_mss.item()],
+            ["mss_eval", audio_mss_eval.item() if audio_mss_eval else None],
+        ]
+
+        if self.fad_model_names:
+            wet = tr.cat([out["x"] for out in self.test_outs], dim=0).detach().cpu()
+            wet_hat = (
+                tr.cat([out["x_hat"] for out in self.test_outs], dim=0).detach().cpu()
+            )
+            wet_eval = None
+            if self.test_outs[0].get("x_eval") is not None:
+                wet_eval = (
+                    tr.cat([out["x_eval"] for out in self.test_outs], dim=0)
+                    .detach()
+                    .cpu()
+                )
+
+            fad_wet_dir = os.path.join(OUT_DIR, f"{self.run_name}__fad_wet")
+            save_and_concat_fad_audio(self.ac.sr, wet, fad_wet_dir)
+            fad_wet_hat_dir = os.path.join(OUT_DIR, f"{self.run_name}__fad_wet_hat")
+            save_and_concat_fad_audio(self.ac.sr, wet_hat, fad_wet_hat_dir)
+            fad_wet_eval_dir = os.path.join(OUT_DIR, f"{self.run_name}__fad_wet_eval")
+            if wet_eval is not None:
+                save_and_concat_fad_audio(self.ac.sr, wet_eval, fad_wet_eval_dir)
+
+            for fad_model_name in tqdm(self.fad_model_names):
+                fad_hat = calc_fad(
+                    fad_model_name,
+                    fad_wet_dir,
+                    fad_wet_hat_dir,
+                    clean_up_baseline=False,
+                    clean_up_eval=False,
+                )
+                self.log(f"test/fad_{fad_model_name}", fad_hat, prog_bar=False)
+                tsv_data.append([f"fad_{fad_model_name}", fad_hat])
+                fad_eval = None
+                if wet_eval is not None:
+                    fad_eval = calc_fad(
+                        fad_model_name,
+                        fad_wet_dir,
+                        fad_wet_eval_dir,
+                        clean_up_baseline=False,
+                        clean_up_eval=False,
+                    )
+                    self.log(
+                        f"test/fad_{fad_model_name}_{self.synth_eval.__class__.__name__}",
+                        fad_eval,
+                        prog_bar=False,
+                    )
+                tsv_data.append([f"fad_{fad_model_name}_eval", fad_eval])
+
+        tsv_path = os.path.join(OUT_DIR, f"{self.run_name}__test.tsv")
+        if os.path.exists(tsv_path):
+            log.warning(f"Overwriting existing TSV file: {tsv_path}")
+        df = pd.DataFrame(tsv_data, columns=["metric", "value"])
+        df.to_csv(tsv_path, sep="\t", index=False)
 
 
 class PreprocLightningModule(AcidDDSPLightingModule):
