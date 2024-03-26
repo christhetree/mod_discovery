@@ -1,0 +1,17 @@
+batch_size: 34
+data_dir: ../data/abstract_303_48k__6k__4k_min
+ext: .wav
+fad_model_names:
+- clap-2023
+- encodec-emb
+- wavlm-base
+log_envelope: true
+num_workers: 4
+split_seed: 42
+synth_eval_kwargs: {}
+synth_eval_type: AcidSynthLPBiquad
+synth_hat_kwargs: {}
+synth_hat_type: AcidSynthLPBiquad
+test_split: 0.2
+use_p_loss: false
+val_split: 0.2

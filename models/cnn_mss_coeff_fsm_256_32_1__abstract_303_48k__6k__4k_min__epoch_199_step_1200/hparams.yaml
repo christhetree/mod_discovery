@@ -1,0 +1,16 @@
+batch_size: 34
+data_dir: ../data/abstract_303_48k__6k__4k_min
+ext: .wav
+fad_model_names: []
+log_envelope: true
+num_workers: 4
+split_seed: 42
+synth_eval_kwargs: {}
+synth_eval_type: AcidSynthLearnedBiquadCoeff
+synth_hat_kwargs:
+  overlap: 0.875
+  win_len: 256
+synth_hat_type: AcidSynthLearnedBiquadCoeffFSM
+test_split: 0.2
+use_p_loss: false
+val_split: 0.2
