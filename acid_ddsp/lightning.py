@@ -1,7 +1,7 @@
 import logging
 import os
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Mapping
 
 import auraloss
 import pandas as pd
@@ -10,6 +10,7 @@ import torch as tr
 from auraloss.time import ESRLoss
 from torch import Tensor as T
 from torch import nn
+from torchaudio.transforms import MFCC
 from tqdm import tqdm
 
 import acid_ddsp.util as util
@@ -73,6 +74,22 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.esr = ESRLoss()
         self.l1 = nn.L1Loss()
         self.mss = auraloss.freq.MultiResolutionSTFTLoss()
+        self.mel_stft = auraloss.freq.MelSTFTLoss(
+            sample_rate=self.ac.sr,
+            fft_size=spectral_visualizer.n_fft,
+            hop_size=spectral_visualizer.hop_len,
+            win_length=spectral_visualizer.n_fft,
+            n_mels=spectral_visualizer.n_mels,
+        )
+        self.mfcc = MFCC(
+            sample_rate=self.ac.sr,
+            log_mels=True,
+            melkwargs={
+                "n_fft": spectral_visualizer.n_fft,
+                "hop_length": spectral_visualizer.hop_len,
+                "n_mels": spectral_visualizer.n_mels,
+            },
+        )
         self.global_n = 0
         self.test_outs = []
 
@@ -89,8 +106,16 @@ class AcidDDSPLightingModule(pl.LightningModule):
             synth_eval_type, ac, batch_size, **synth_eval_kwargs
         )
 
+    def load_state_dict(self, state_dict: Mapping[str, Any], **kwargs):
+        return super().load_state_dict(state_dict, strict=False)
+
     def on_train_start(self) -> None:
         self.global_n = 0
+
+    def mfcc_l1_loss(self, x: T, y: T) -> T:
+        x_mfcc = self.mfcc(x)
+        y_mfcc = self.mfcc(y)
+        return self.l1(x_mfcc, y_mfcc)
 
     def preprocess_batch(self, batch: Dict[str, T]) -> Dict[str, T]:
         f0_hz = batch["f0_hz"]
@@ -277,7 +302,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             filter_args_hat["logits"] = logits
 
         # Generate audio x_hat
-        _, wet_hat, envelope_hat = self.synth_hat(
+        _, wet_hat, envelope_hat, a_coeff, b_coeff = self.synth_hat(
             f0_hz,
             osc_shape_hat,
             osc_gain_hat,
@@ -362,7 +387,11 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # Log MSS loss
         with tr.no_grad():
             audio_mss = self.mss(wet_hat.unsqueeze(1), wet.unsqueeze(1))
+            audio_mel_stft = self.mel_stft(wet_hat.unsqueeze(1), wet.unsqueeze(1))
+            audio_mfcc = self.mfcc_l1_loss(wet_hat.unsqueeze(1), wet.unsqueeze(1))
         self.log(f"{stage}/audio_mss", audio_mss, prog_bar=True, sync_dist=True)
+        self.log(f"{stage}/audio_mel", audio_mel_stft, prog_bar=False, sync_dist=True)
+        self.log(f"{stage}/audio_mfcc", audio_mfcc, prog_bar=False, sync_dist=True)
 
         # Log mod_sig_hat metrics
         if mod_sig is not None and mod_sig_hat is not None:
@@ -380,9 +409,11 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # Log eval synth metrics if possible
         wet_eval = None
         audio_mss_eval = None
+        audio_mel_stft_eval = None
+        audio_mfcc_eval = None
         if stage != "train":
             try:
-                _, wet_eval, _ = self.synth_eval(
+                _, wet_eval, _, a_coeff_eval, b_coeff_eval = self.synth_eval(
                     f0_hz,
                     osc_shape_hat,
                     osc_gain_hat,
@@ -396,12 +427,32 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 log.error(f"Error in eval synth: {e}")
             if wet_eval is not None:
                 audio_mss_eval = self.mss(wet_eval.unsqueeze(1), wet.unsqueeze(1))
+                audio_mel_stft_eval = self.mel_stft(
+                    wet_eval.unsqueeze(1), wet.unsqueeze(1)
+                )
+                audio_mfcc_eval = self.mfcc_l1_loss(
+                    wet_eval.unsqueeze(1), wet.unsqueeze(1)
+                )
                 self.log(
                     f"{stage}/audio_mss_{self.synth_eval.__class__.__name__}",
                     audio_mss_eval,
                     prog_bar=False,
                     sync_dist=True,
                 )
+                self.log(
+                    f"{stage}/audio_mel_{self.synth_eval.__class__.__name__}",
+                    audio_mel_stft_eval,
+                    prog_bar=False,
+                    sync_dist=True,
+                )
+                self.log(
+                    f"{stage}/audio_mfcc_{self.synth_eval.__class__.__name__}",
+                    audio_mfcc_eval,
+                    prog_bar=False,
+                    sync_dist=True,
+                )
+
+        # H = util.calc_h(a_coeff, b_coeff)
 
         out_dict = {
             "loss": loss,
@@ -425,6 +476,11 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "learned_alpha_hat": learned_alpha_hat,
             "audio_mss": audio_mss,
             "audio_mss_eval": audio_mss_eval,
+            "audio_mel_stft": audio_mel_stft,
+            "audio_mel_stft_eval": audio_mel_stft_eval,
+            "audio_mfcc": audio_mfcc,
+            "audio_mfcc_eval": audio_mfcc_eval,
+            "H": H,
         }
         return out_dict
 
@@ -447,11 +503,34 @@ class AcidDDSPLightingModule(pl.LightningModule):
             audio_mss_eval = tr.stack(
                 [out["audio_mss_eval"] for out in self.test_outs], dim=0
             ).mean()
+        audio_mel_stft = tr.stack(
+            [out["audio_mel_stft"] for out in self.test_outs], dim=0
+        ).mean()
+        audio_mel_stft_eval = None
+        if self.test_outs[0].get("audio_mel_stft_eval") is not None:
+            audio_mel_stft_eval = tr.stack(
+                [out["audio_mel_stft_eval"] for out in self.test_outs], dim=0
+            ).mean()
+        audio_mfcc = tr.stack(
+            [out["audio_mfcc"] for out in self.test_outs], dim=0
+        ).mean()
+        audio_mfcc_eval = None
+        if self.test_outs[0].get("audio_mfcc_eval") is not None:
+            audio_mfcc_eval = tr.stack(
+                [out["audio_mfcc_eval"] for out in self.test_outs], dim=0
+            ).mean()
 
         tsv_data = [
             ["loss", loss.item()],
             ["mss", audio_mss.item()],
             ["mss_eval", audio_mss_eval.item() if audio_mss_eval else None],
+            ["mel_stft", audio_mel_stft.item()],
+            [
+                "mel_stft_eval",
+                audio_mel_stft_eval.item() if audio_mel_stft_eval else None,
+            ],
+            ["mfcc", audio_mfcc.item()],
+            ["mfcc_eval", audio_mfcc_eval.item() if audio_mfcc_eval else None],
         ]
 
         if self.fad_model_names:
@@ -506,6 +585,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
             log.warning(f"Overwriting existing TSV file: {tsv_path}")
         df = pd.DataFrame(tsv_data, columns=["metric", "value"])
         df.to_csv(tsv_path, sep="\t", index=False)
+
+        # H = tr.cat([out["H"] for out in self.test_outs], dim=0)
+        # H = H.detach().cpu()
+        # H_path = os.path.join(OUT_DIR, f"{self.run_name}__H.pt")
+        # tr.save(H, H_path)
+        # log.info(f"Saved H to: {H_path}")
 
 
 class PreprocLightningModule(AcidDDSPLightingModule):

@@ -63,3 +63,14 @@ def sample_log_uniform(low: float, high: float, n: int = 1) -> Union[float, T]:
     if n == 1:
         return float(x)
     return tr.from_numpy(x).float()
+
+
+def calc_h(a: T, b: T, n_frames: int = 50, n_fft: int = 1024) -> T:
+    assert a.ndim == 3
+    assert a.shape == b.shape
+    a = linear_interpolate_dim(a, n_frames, dim=1, align_corners=True)
+    b = linear_interpolate_dim(b, n_frames, dim=1, align_corners=True)
+    A = tr.fft.rfft(a, n_fft)
+    B = tr.fft.rfft(b, n_fft)
+    H = B / A  # TODO(cm): Make more stable
+    return H

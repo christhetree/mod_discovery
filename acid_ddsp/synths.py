@@ -70,7 +70,7 @@ class AcidSynthBase(ABC, nn.Module):
         )
 
     @abstractmethod
-    def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> T:
+    def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> (T, ...):
         pass
 
     def resize_mod_sig(self, x: T, w_mod_sig: T, q_mod_sig: T) -> (T, T):
@@ -93,7 +93,7 @@ class AcidSynthBase(ABC, nn.Module):
         dist_gain: T,
         learned_alpha: T,
         phase: T,
-    ) -> (T, T, T):
+    ) -> (T, T, T, T, T):
         assert (
             f0_hz.shape
             == osc_shape.shape
@@ -108,10 +108,10 @@ class AcidSynthBase(ABC, nn.Module):
         envelope = tr.clamp(envelope, 0.001, 0.999)  # TODO(cm): document
         envelope = tr.pow(envelope, learned_alpha.unsqueeze(-1))
         dry_audio *= envelope
-        wet_audio = self.filter_dry_audio(dry_audio, filter_args)
+        wet_audio, a_coeff, b_coeff = self.filter_dry_audio(dry_audio, filter_args)
         wet_audio = wet_audio * dist_gain.unsqueeze(-1)
         wet_audio = tr.tanh(wet_audio)
-        return dry_audio, wet_audio, envelope
+        return dry_audio, wet_audio, envelope, a_coeff, b_coeff
 
 
 class AcidSynthLPBiquad(AcidSynthBase):
@@ -125,11 +125,13 @@ class AcidSynthLPBiquad(AcidSynthBase):
             max_q=ac.max_q,
         )
 
-    def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> T:
+    def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> (T, T, T):
         w_mod_sig = filter_args["w_mod_sig"]
         q_mod_sig = filter_args["q_mod_sig"]
-        y = self.filter(x, w_mod_sig, q_mod_sig, interp_coeff=self.interp_coeff)
-        return y
+        y, a_coeff, b_coeff = self.filter(
+            x, w_mod_sig, q_mod_sig, interp_coeff=self.interp_coeff
+        )
+        return y, a_coeff, b_coeff
 
 
 class AcidSynthLPBiquadFSM(AcidSynthLPBiquad):
@@ -185,7 +187,7 @@ class AcidSynthLearnedBiquadCoeff(AcidSynthBase):
             assert b_coeff.shape == (bs, n_frames, 3)
         return a_coeff, b_coeff
 
-    def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> T:
+    def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> (T, T, T):
         logits = filter_args["logits"]
         n_samples = x.size(1)
         a_coeff, b_coeff = self._calc_coeff(logits, n_samples)
@@ -193,7 +195,11 @@ class AcidSynthLearnedBiquadCoeff(AcidSynthBase):
         assert not tr.isinf(y_a).any()
         assert not tr.isnan(y_a).any()
         y_ab = time_varying_fir(y_a, b_coeff)
-        return y_ab
+        a1 = a_coeff[:, :, 0]
+        a2 = a_coeff[:, :, 1]
+        a0 = tr.ones_like(a1)
+        a_coeff = tr.stack([a0, a1, a2], dim=2)
+        return y_ab, a_coeff, b_coeff
 
 
 class AcidSynthLearnedBiquadCoeffFSM(AcidSynthLearnedBiquadCoeff):
@@ -216,7 +222,7 @@ class AcidSynthLearnedBiquadCoeffFSM(AcidSynthLearnedBiquadCoeff):
             oversampling_factor=oversampling_factor,
         )
 
-    def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> T:
+    def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> (T, T, T):
         logits = filter_args["logits"]
         assert logits.ndim == 3
         n_samples = x.size(1)
@@ -227,7 +233,7 @@ class AcidSynthLearnedBiquadCoeffFSM(AcidSynthLearnedBiquadCoeff):
         a0 = tr.ones_like(a1)
         a_coeffs = tr.stack([a0, a1, a2], dim=2)
         y = self.filter(x, a_coeffs, b_coeffs)
-        return y
+        return y, a_coeffs, b_coeffs
 
 
 class AcidSynthLearnedBiquadPoleZero(AcidSynthBase):

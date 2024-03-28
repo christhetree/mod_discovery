@@ -1,0 +1,24 @@
+metric	value
+loss	1.7930406332015991
+mss	1.7930406332015991
+mss_eval	
+fad_vggish	3.3622292528474325
+fad_vggish_eval	
+fad_clap-2023	147.67861158958573
+fad_clap-2023_eval	
+fad_encodec-emb-48k	67.93631936204781
+fad_encodec-emb-48k_eval	
+fad_wavlm-base	7.007655085794369
+fad_wavlm-base_eval	
+fad_clap-laion-audio	0.17942557013777521
+fad_clap-laion-audio_eval	
+fad_clap-laion-music	0.21549781397587753
+fad_clap-laion-music_eval	
+fad_MERT-v1-95M	64.59493927277867
+fad_MERT-v1-95M_eval	
+fad_dac-44kHz	286.13976320073743
+fad_dac-44kHz_eval	
+fad_cdpam-acoustic	0.12873384379121117
+fad_cdpam-acoustic_eval	
+fad_cdpam-content	0.3031360263039324
+fad_cdpam-content_eval	

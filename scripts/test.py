@@ -14,7 +14,7 @@ log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 if __name__ == "__main__":
     model_names = [
-        # "cnn_mss_coeff__abstract_303_48k__6k__4k_min__epoch_127_step_768",
+        "cnn_mss_coeff__abstract_303_48k__6k__4k_min__epoch_127_step_768",
         # "cnn_mss_coeff_fsm_128_32_1__abstract_303_48k__6k__4k_min__epoch_183_step_1104",
         # "cnn_mss_coeff_fsm_256_32_1__abstract_303_48k__6k__4k_min__epoch_199_step_1200",
         # "cnn_mss_coeff_fsm_512_32_1__abstract_303_48k__6k__4k_min__epoch_151_step_912",
@@ -28,19 +28,19 @@ if __name__ == "__main__":
         # "cnn_mss_lp_fsm_1024_32_1__abstract_303_48k__6k__4k_min__epoch_199_step_1200",
         # "cnn_mss_lp_fsm_2048_32_1__abstract_303_48k__6k__4k_min__epoch_183_step_1104",
         # "cnn_mss_lp_fsm_4096_32_1__abstract_303_48k__6k__4k_min__epoch_199_step_1200",
-        "cnn_mss_lstm64__abstract_303_48k__6k__4k_min__epoch_199_step_1200",
+        # "cnn_mss_lstm64__abstract_303_48k__6k__4k_min__epoch_199_step_1200",
     ]
     fad_model_names = [
-        "vggish",
-        "clap-2023",
-        "encodec-emb-48k",
-        "wavlm-base",
-        "clap-laion-audio",
-        "clap-laion-music",
-        "MERT-v1-95M",
-        "dac-44kHz",
-        "cdpam-acoustic",
-        "cdpam-content",
+        # "vggish",
+        # "clap-2023",
+        # "encodec-emb-48k",
+        # "wavlm-base",
+        # "clap-laion-audio",
+        # "clap-laion-music",
+        # "MERT-v1-95M",
+        # "dac-44kHz",
+        # "cdpam-acoustic",
+        # "cdpam-content",
     ]
 
     model_dir = MODELS_DIR
