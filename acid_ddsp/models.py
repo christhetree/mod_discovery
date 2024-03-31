@@ -14,15 +14,6 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-def calc_receptive_field(kernel_size: int, dilations: List[int]) -> int:
-    """Compute the receptive field in samples."""
-    assert dilations[0] == 1  # TODO(cm): add support for >1 starting dilation
-    rf = kernel_size
-    for dil in dilations[1:]:
-        rf = rf + ((kernel_size - 1) * dil)
-    return rf
-
-
 class Spectral2DCNN(nn.Module):
     def __init__(
         self,
@@ -66,6 +57,11 @@ class Spectral2DCNN(nn.Module):
         if global_param_names is None:
             global_param_names = []
         self.global_param_names = global_param_names
+        if pool_size[1] == 1:
+            log.info(
+                f"Temporal receptive field: "
+                f"{self.calc_receptive_field(kernel_size[1], temp_dilations)}"
+            )
 
         # Define CNN
         temporal_dims = [fe.n_frames] * len(out_channels)
@@ -128,9 +124,9 @@ class Spectral2DCNN(nn.Module):
             out_temp = tr.sigmoid(x)
         elif self.temp_params_act_name == "tanh":
             out_temp = tr.tanh(x)
-        elif self.temp_params_act_name is "clamp":
+        elif self.temp_params_act_name == "clamp":
             out_temp = tr.clamp(x, min=0.0, max=1.0)
-        elif self.temp_params_act_name is "magic_clamp":
+        elif self.temp_params_act_name == "magic_clamp":
             out_temp = magic_clamp(x, min_value=0.0, max_value=1.0)
         elif self.temp_params_act_name is None:
             out_temp = x
@@ -145,6 +141,16 @@ class Spectral2DCNN(nn.Module):
             out_dict[param_name] = x
 
         return out_dict
+
+    @staticmethod
+    def calc_receptive_field(kernel_size: int, dilations: List[int]) -> int:
+        """Compute the receptive field in samples."""
+        assert dilations
+        assert dilations[0] == 1  # TODO(cm): add support for >1 starting dilation
+        rf = kernel_size
+        for dil in dilations[1:]:
+            rf = rf + ((kernel_size - 1) * dil)
+        return rf
 
 
 class AudioTCN(nn.Module):
@@ -184,15 +190,18 @@ if __name__ == "__main__":
     n_layers = 5
     temp_dilations = [2**idx for idx in range(n_layers)]
     kernel_size = 7
-    rf = calc_receptive_field(kernel_size, temp_dilations)
+    rf = Spectral2DCNN.calc_receptive_field(kernel_size, temp_dilations)
     log.info(
         f"Receptive field: {rf}, "
         f"kernel_size: {kernel_size}, "
         f"temp_dilations: {temp_dilations}"
     )
 
-    model = Spectral2DCNN()
-    audio = tr.randn(1, 2, 6000)
+    fe = LogMelSpecFeatureExtractor()
+    model = Spectral2DCNN(fe)
+    audio = tr.randn(1, 1, 6000)
     log.info(f"audio.shape: {audio.shape}")
-    out, latent, _ = model(audio)
+    out_dict = model(audio)
+    out = out_dict["mod_sig"]
+    latent = out_dict["latent"]
     log.info(f"out.shape: {out.shape}, latent.shape: {latent.shape}")
