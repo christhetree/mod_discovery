@@ -132,6 +132,7 @@ class PreprocDataModule(pl.LightningDataModule):
         train_paths = audio_paths[:n_train_files]
         val_paths = audio_paths[n_train_files : n_train_files + n_val_files]
         test_paths = audio_paths[n_train_files + n_val_files :]
+        # test_paths = test_paths * 20
 
         self.train_ds = PreprocDataset(ac, train_paths)
         self.val_ds = PreprocDataset(ac, val_paths)

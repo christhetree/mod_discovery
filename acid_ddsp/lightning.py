@@ -4,8 +4,10 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List, Mapping
 
 import auraloss
+import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
+import scipy
 import torch as tr
 from auraloss.time import ESRLoss
 from torch import Tensor as T
@@ -480,7 +482,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "audio_mel_stft_eval": audio_mel_stft_eval,
             "audio_mfcc": audio_mfcc,
             "audio_mfcc_eval": audio_mfcc_eval,
-            "H": H,
+            # "H": H,
         }
         return out_dict
 
@@ -533,6 +535,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             ["mfcc_eval", audio_mfcc_eval.item() if audio_mfcc_eval else None],
         ]
 
+        # TODO(cm): refactor
         if self.fad_model_names:
             wet = tr.cat([out["x"] for out in self.test_outs], dim=0).detach().cpu()
             wet_hat = (
@@ -545,40 +548,81 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     .detach()
                     .cpu()
                 )
-
-            fad_wet_dir = os.path.join(OUT_DIR, f"{self.run_name}__fad_wet")
-            save_and_concat_fad_audio(self.ac.sr, wet, fad_wet_dir)
-            fad_wet_hat_dir = os.path.join(OUT_DIR, f"{self.run_name}__fad_wet_hat")
-            save_and_concat_fad_audio(self.ac.sr, wet_hat, fad_wet_hat_dir)
-            fad_wet_eval_dir = os.path.join(OUT_DIR, f"{self.run_name}__fad_wet_eval")
-            if wet_eval is not None:
-                save_and_concat_fad_audio(self.ac.sr, wet_eval, fad_wet_eval_dir)
-
-            for fad_model_name in tqdm(self.fad_model_names):
-                fad_hat = calc_fad(
-                    fad_model_name,
-                    fad_wet_dir,
-                    fad_wet_hat_dir,
-                    clean_up_baseline=False,
-                    clean_up_eval=False,
-                )
-                self.log(f"test/fad_{fad_model_name}", fad_hat, prog_bar=False)
-                tsv_data.append([f"fad_{fad_model_name}", fad_hat])
-                fad_eval = None
+            fad_values = []
+            fad_eval_values = []
+            epoch_n = 68
+            for idx in range(0, wet.size(0), epoch_n):
+                curr_wet = wet[idx : idx + epoch_n, :]
+                curr_wet_hat = wet_hat[idx : idx + epoch_n, :]
+                curr_wet_eval = None
                 if wet_eval is not None:
-                    fad_eval = calc_fad(
+                    curr_wet_eval = wet_eval[idx : idx + epoch_n, :]
+                fad_wet_dir = os.path.join(OUT_DIR, f"{self.run_name}__fad_wet")
+                save_and_concat_fad_audio(
+                    self.ac.sr,
+                    curr_wet,
+                    fad_wet_dir,
+                    fade_n_samples=self.spectral_visualizer.hop_len,
+                )
+
+                fad_wet_hat_dir = os.path.join(OUT_DIR, f"{self.run_name}__fad_wet_hat")
+                save_and_concat_fad_audio(
+                    self.ac.sr,
+                    curr_wet_hat,
+                    fad_wet_hat_dir,
+                    fade_n_samples=self.spectral_visualizer.hop_len,
+                )
+                fad_wet_eval_dir = os.path.join(
+                    OUT_DIR, f"{self.run_name}__fad_wet_eval"
+                )
+                if wet_eval is not None:
+                    save_and_concat_fad_audio(
+                        self.ac.sr,
+                        curr_wet_eval,
+                        fad_wet_eval_dir,
+                        fade_n_samples=self.spectral_visualizer.hop_len,
+                    )
+
+                for fad_model_name in tqdm(self.fad_model_names):
+                    fad_hat = calc_fad(
                         fad_model_name,
                         fad_wet_dir,
-                        fad_wet_eval_dir,
+                        fad_wet_hat_dir,
                         clean_up_baseline=False,
-                        clean_up_eval=False,
+                        clean_up_eval=True,
                     )
-                    self.log(
-                        f"test/fad_{fad_model_name}_{self.synth_eval.__class__.__name__}",
-                        fad_eval,
-                        prog_bar=False,
-                    )
-                tsv_data.append([f"fad_{fad_model_name}_eval", fad_eval])
+                    fad_values.append(fad_hat)
+                    # self.log(
+                    #     f"test/fad_{fad_model_name}_eval_{idx}", fad_hat, prog_bar=False
+                    # )
+                    tsv_data.append([f"fad_{fad_model_name}", fad_hat])
+                    fad_eval = None
+                    if wet_eval is not None:
+                        fad_eval = calc_fad(
+                            fad_model_name,
+                            fad_wet_dir,
+                            fad_wet_eval_dir,
+                            clean_up_baseline=True,
+                            clean_up_eval=True,
+                        )
+                        fad_eval_values.append(fad_eval)
+                        # self.log(
+                        #     f"test/fad_{fad_model_name}_{self.synth_eval.__class__.__name__}",
+                        #     fad_eval,
+                        #     prog_bar=False,
+                        # )
+                    tsv_data.append([f"fad_{fad_model_name}_eval_{idx}", fad_eval])
+
+            log.info(f"Test FAD hat values: {fad_values}")
+            log.info(f"Test FAD eval values: {fad_eval_values}")
+            ci_hat = 1.96 * scipy.stats.sem(fad_values)
+            ci_eval = 1.96 * scipy.stats.sem(fad_eval_values)
+            tsv_data.append([f"fad_{fad_model_name}_mean", np.mean(fad_values)])
+            tsv_data.append([f"fad_{fad_model_name}_std", np.std(fad_values)])
+            tsv_data.append([f"fad_{fad_model_name}_ci95", ci_hat])
+            tsv_data.append([f"fad_{fad_model_name}_eval_mean", np.mean(fad_eval_values)])
+            tsv_data.append([f"fad_{fad_model_name}_eval_std", np.std(fad_eval_values)])
+            tsv_data.append([f"fad_{fad_model_name}_eval_ci95", ci_eval])
 
         tsv_path = os.path.join(OUT_DIR, f"{self.run_name}__test.tsv")
         if os.path.exists(tsv_path):

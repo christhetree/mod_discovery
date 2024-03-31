@@ -31,7 +31,7 @@ if __name__ == "__main__":
         # "cnn_mss_lstm64__abstract_303_48k__6k__4k_min__epoch_199_step_1200",
     ]
     fad_model_names = [
-        # "vggish",
+        "vggish",
         # "clap-2023",
         # "encodec-emb-48k",
         # "wavlm-base",
@@ -57,6 +57,7 @@ if __name__ == "__main__":
         # assert config["model"]["init_args"]["fad_model_names"] is None
         config["custom"]["cpu_batch_size"] = 34
         config["model"]["init_args"]["fad_model_names"] = fad_model_names
+        # config["seed_everything"] = 48
         # config["model"]["init_args"]["run_name"] = model_name
 
         # Save tmp modified config
