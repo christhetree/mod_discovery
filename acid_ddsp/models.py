@@ -1,13 +1,13 @@
 import logging
 import os
 from typing import Optional, List, Tuple, Dict
-from magic_clamp import magic_clamp
+
 import torch as tr
+from magic_clamp import magic_clamp
 from torch import Tensor as T
 from torch import nn
 
 from feature_extraction import LogMelSpecFeatureExtractor
-from tcn import TCN
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -153,39 +153,6 @@ class Spectral2DCNN(nn.Module):
         return rf
 
 
-class AudioTCN(nn.Module):
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: List[int],
-        kernel_size: int,
-        dilations: List[int],
-        padding: str = "same",
-        padding_mode: str = "zeros",
-        act_name: str = "prelu",
-    ) -> None:
-        super().__init__()
-        self.tcn = TCN(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=kernel_size,
-            dilations=dilations,
-            padding=padding,
-            padding_mode=padding_mode,
-            causal=False,
-            cached=False,
-            act_name=act_name,
-        )
-        log.info(f"TCN receptive field: {self.tcn.calc_receptive_field()}")
-        self.output = nn.Conv1d(out_channels[-1], out_channels=1, kernel_size=1)
-
-    def forward(self, x: T) -> (T, T, Optional[T]):
-        latent = self.tcn(x)
-        x = self.output(latent)
-        x = tr.sigmoid(x)
-        return x, latent, None
-
-
 if __name__ == "__main__":
     n_layers = 5
     temp_dilations = [2**idx for idx in range(n_layers)]
@@ -199,9 +166,9 @@ if __name__ == "__main__":
 
     fe = LogMelSpecFeatureExtractor()
     model = Spectral2DCNN(fe)
-    audio = tr.randn(1, 1, 6000)
+    audio = tr.randn(3, 1, 6000)
     log.info(f"audio.shape: {audio.shape}")
     out_dict = model(audio)
-    out = out_dict["mod_sig"]
+    mod_sig = out_dict["mod_sig"]
     latent = out_dict["latent"]
-    log.info(f"out.shape: {out.shape}, latent.shape: {latent.shape}")
+    log.info(f"mod_sig.shape: {mod_sig.shape}, latent.shape: {latent.shape}")

@@ -67,6 +67,7 @@ class PreprocDataset(Dataset):
         audio_f0_hz = []
         note_on_durations = []
         for audio_path in audio_paths:
+            # TODO(cm): modularize this
             tokens = audio_path.split("__")
             midi_f0 = int(tokens[-3])
             f0_hz = tr.tensor(librosa.midi_to_hz(midi_f0)).float()
