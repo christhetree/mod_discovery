@@ -620,7 +620,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             tsv_data.append([f"fad_{fad_model_name}_mean", np.mean(fad_values)])
             tsv_data.append([f"fad_{fad_model_name}_std", np.std(fad_values)])
             tsv_data.append([f"fad_{fad_model_name}_ci95", ci_hat])
-            tsv_data.append([f"fad_{fad_model_name}_eval_mean", np.mean(fad_eval_values)])
+            tsv_data.append(
+                [f"fad_{fad_model_name}_eval_mean", np.mean(fad_eval_values)]
+            )
             tsv_data.append([f"fad_{fad_model_name}_eval_std", np.std(fad_eval_values)])
             tsv_data.append([f"fad_{fad_model_name}_eval_ci95", ci_eval])
 

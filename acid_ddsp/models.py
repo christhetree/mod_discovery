@@ -27,15 +27,18 @@ class Spectral2DCNN(nn.Module):
     def __init__(
         self,
         fe: LogMelSpecFeatureExtractor,
-        in_ch: int = 2,
+        in_ch: int = 1,
         kernel_size: Tuple[int, int] = (5, 7),
         out_channels: Optional[List[int]] = None,
         bin_dilations: Optional[List[int]] = None,
         temp_dilations: Optional[List[int]] = None,
         pool_size: Tuple[int, int] = (2, 1),
         use_ln: bool = True,
+        n_temp_params: int = 1,
+        temp_params_name: str = "mod_sig",
+        temp_params_act_name: Optional[str] = "sigmoid",
+        global_param_names: Optional[List[str]] = None,
         dropout: float = 0.25,
-        n_logits: int = 0,
     ) -> None:
         super().__init__()
         self.fe = fe
@@ -44,9 +47,12 @@ class Spectral2DCNN(nn.Module):
         assert pool_size[1] == 1
         self.pool_size = pool_size
         self.use_ln = use_ln
+        self.n_temporal_params = n_temp_params
+        self.temporal_params_name = temp_params_name
+        self.temp_params_act_name = temp_params_act_name
         self.dropout = dropout
-        self.n_logits = n_logits
 
+        # Define default params
         if out_channels is None:
             out_channels = [64] * 5
         self.out_channels = out_channels
@@ -57,9 +63,12 @@ class Spectral2DCNN(nn.Module):
             temp_dilations = [2**idx for idx in range(len(out_channels))]
         self.temp_dilations = temp_dilations
         assert len(out_channels) == len(bin_dilations) == len(temp_dilations)
+        if global_param_names is None:
+            global_param_names = []
+        self.global_param_names = global_param_names
 
+        # Define CNN
         temporal_dims = [fe.n_frames] * len(out_channels)
-
         layers = []
         curr_n_bins = fe.n_bins
         for out_ch, b_dil, t_dil, temp_dim in zip(
@@ -83,17 +92,15 @@ class Spectral2DCNN(nn.Module):
             layers.append(nn.PReLU(num_parameters=out_ch))
             in_ch = out_ch
             curr_n_bins = curr_n_bins // pool_size[0]
-
         self.cnn = nn.Sequential(*layers)
 
-        if n_logits:
-            self.out_frame_wise = nn.Linear(out_channels[-1], n_logits)
-        else:
-            self.out_frame_wise = nn.Linear(out_channels[-1], 1)
+        # Define temporal params
+        self.out_temp = nn.Linear(out_channels[-1], n_temp_params)
 
-        self.out_q = None
-        if not n_logits:
-            self.out_q = nn.Sequential(
+        # Define global params
+        self.out_global = nn.ModuleDict()
+        for param_name in global_param_names:
+            self.out_global[param_name] = nn.Sequential(
                 nn.Linear(out_channels[-1], out_channels[-1] // 2),
                 nn.Dropout(p=dropout),
                 nn.PReLU(num_parameters=out_channels[-1] // 2),
@@ -101,77 +108,43 @@ class Spectral2DCNN(nn.Module):
                 nn.Sigmoid(),
             )
 
-        self.out_dist_gain = nn.Sequential(
-            nn.Linear(out_channels[-1], out_channels[-1] // 2),
-            nn.Dropout(p=dropout),
-            nn.PReLU(num_parameters=out_channels[-1] // 2),
-            nn.Linear(out_channels[-1] // 2, 1),
-            nn.Sigmoid(),
-        )
-
-        self.out_osc_shape = nn.Sequential(
-            nn.Linear(out_channels[-1], out_channels[-1] // 2),
-            nn.Dropout(p=dropout),
-            nn.PReLU(num_parameters=out_channels[-1] // 2),
-            nn.Linear(out_channels[-1] // 2, 1),
-            nn.Sigmoid(),
-        )
-
-        self.out_osc_gain = nn.Sequential(
-            nn.Linear(out_channels[-1], out_channels[-1] // 2),
-            nn.Dropout(p=dropout),
-            nn.PReLU(num_parameters=out_channels[-1] // 2),
-            nn.Linear(out_channels[-1] // 2, 1),
-            nn.Sigmoid(),
-        )
-
-        self.out_learned_alpha = nn.Sequential(
-            nn.Linear(out_channels[-1], out_channels[-1] // 2),
-            nn.Dropout(p=dropout),
-            nn.PReLU(num_parameters=out_channels[-1] // 2),
-            nn.Linear(out_channels[-1] // 2, 1),
-            nn.Sigmoid(),
-        )
-
     def forward(self, x: T) -> Dict[str, T]:
         assert x.ndim == 3
-        log_spec = self.fe(x)
+        out_dict = {}
 
+        # Extract features
+        log_spec = self.fe(x)
+        out_dict["log_spec"] = log_spec
+
+        # Calc latent
         x = self.cnn(log_spec)
         x = tr.mean(x, dim=-2)
         latent = x.swapaxes(1, 2)
+        out_dict["latent"] = latent
 
-        x = self.out_frame_wise(latent)
-
-        ms_hat = None
-        logits = None
-        if self.n_logits:
-            logits = x
+        # Calc temporal params
+        x = self.out_temp(latent)
+        if self.temp_params_act_name == "sigmoid":
+            out_temp = tr.sigmoid(x)
+        elif self.temp_params_act_name == "tanh":
+            out_temp = tr.tanh(x)
+        elif self.temp_params_act_name is "clamp":
+            out_temp = tr.clamp(x, min=0.0, max=1.0)
+        elif self.temp_params_act_name is "magic_clamp":
+            out_temp = magic_clamp(x, min_value=0.0, max_value=1.0)
+        elif self.temp_params_act_name is None:
+            out_temp = x
         else:
-            x = tr.sigmoid(x)
-            # x = magic_clamp(x, min_value=0.0, max_value=1.0)
-            ms_hat = x.squeeze(-1)
+            raise ValueError(f"Unknown activation: {self.temp_params_act_name}")
+        out_dict[self.temporal_params_name] = out_temp
 
+        # Calc global params
         x = tr.mean(latent, dim=-2)
-        q_norm_hat = None
-        if not self.n_logits:
-            q_norm_hat = self.out_q(x).squeeze(-1)
-        dist_gain_norm_hat = self.out_dist_gain(x).squeeze(-1)
-        osc_shape_norm_hat = self.out_osc_shape(x).squeeze(-1)
-        osc_gain_norm_hat = self.out_osc_gain(x).squeeze(-1)
-        learned_alpha_norm_hat = self.out_learned_alpha(x).squeeze(-1)
+        for param_name in self.global_param_names:
+            x = self.out_global[param_name](x).squeeze(-1)
+            out_dict[param_name] = x
 
-        return {
-            "mod_sig_hat": ms_hat,
-            "q_norm_hat": q_norm_hat,
-            "dist_gain_norm_hat": dist_gain_norm_hat,
-            "osc_shape_norm_hat": osc_shape_norm_hat,
-            "osc_gain_norm_hat": osc_gain_norm_hat,
-            "learned_alpha_norm_hat": learned_alpha_norm_hat,
-            "latent": latent,
-            "log_spec": log_spec,
-            "logits": logits,
-        }
+        return out_dict
 
 
 class AudioTCN(nn.Module):
