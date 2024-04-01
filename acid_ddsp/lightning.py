@@ -206,12 +206,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     p_val_l1 = self.l1(p_val_0to1_hat, p_val_0to1)
                 self.log(f"{stage}/{p_name}_l1", p_val_l1, prog_bar=False)
 
-        # Postprocess log_spec
-        log_spec = model_out.get("log_spec")
-        if log_spec is None:
-            log_spec = self.spectral_visualizer(model_in)
-        assert log_spec.ndim == 4
-        log_spec_wet = log_spec[:, 0, :, :]
+        # Postprocess log_spec_wet
+        log_spec_wet = model_out.get("log_spec_wet")
+        if log_spec_wet is None:
+            log_spec_wet = self.spectral_visualizer(model_in)
+        assert log_spec_wet.ndim == 4
+        log_spec_wet = log_spec_wet.squeeze(1)
 
         # Postprocess q_hat TODO(cm): generalize
         if "q" in self.global_param_names:
@@ -228,6 +228,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             global_params_hat,
         )
         wet_hat = synth_out_hat["wet"]
+        with tr.no_grad():
+            log_spec_wet_hat = self.spectral_visualizer(wet_hat.unsqueeze(1)).squeeze(1)
 
         # TODO(cm): refactor
         if envelope is None:
@@ -319,6 +321,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "wet_eval": wet_eval,
             "envelope": envelope,
             "log_spec_wet": log_spec_wet,
+            "log_spec_wet_hat": log_spec_wet_hat,
             "temp_params": temp_params,
             "temp_params_hat": temp_params_hat,
             "global_params": global_params,

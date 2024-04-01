@@ -82,23 +82,35 @@ class LogModSigAndSpecCallback(Callback):
                 continue
 
             out_dict = self.out_dicts[example_idx]
-            log_spec_x = out_dict.get("log_spec_x")
-            log_spec_x_hat = out_dict.get("log_spec_x_hat")
             envelope = out_dict.get("envelope")
-            mod_sig = out_dict.get("mod_sig")
-            mod_sig_hat = out_dict.get("mod_sig_hat")
-            q = out_dict.get("q", [-1])
-            q_hat = out_dict.get("q_hat", [-1])
-            dist_gain = out_dict.get("dist_gain", [-1])
-            dist_gain_hat = out_dict.get("dist_gain_hat", [-1])
-            osc_shape = out_dict.get("osc_shape", [-1])
-            osc_shape_hat = out_dict.get("osc_shape_hat", [-1])
-            osc_gain = out_dict.get("osc_gain", [-1])
-            osc_gain_hat = out_dict.get("osc_gain_hat", [-1])
-            learned_alpha = out_dict.get("learned_alpha", [-1])
-            learned_alpha_hat = out_dict.get("learned_alpha_hat", [-1])
+            log_spec_wet = out_dict.get("log_spec_wet")
+            log_spec_wet_hat = out_dict.get("log_spec_wet_hat")
+
+            temp_params = out_dict["temp_params"]
+            temp_params_hat = out_dict["temp_params_hat"]
             mod_sig_esr = -1
             mod_sig_l1 = -1
+            if pl_module.temp_params_name == pl_module.temp_params_name_hat:
+                if temp_params is not None and temp_params_hat is not None:
+                    if temp_params.size(2) == 1 and temp_params_hat.size(2) == 1:
+                        mod_sig_esr = self.esr(
+                            temp_params[0], temp_params_hat[0]
+                        ).item()
+                        mod_sig_l1 = self.l1(temp_params[0], temp_params_hat[0]).item()
+
+            global_params = out_dict["global_params"]
+            global_params_hat = out_dict["global_params_hat"]
+
+            q = global_params.get("q", [-1])
+            q_hat = global_params_hat.get("q_hat", [-1])
+            dist_gain = global_params.get("dist_gain", [-1])
+            dist_gain_hat = global_params_hat.get("dist_gain_hat", [-1])
+            osc_shape = global_params.get("osc_shape", [-1])
+            osc_shape_hat = global_params_hat.get("osc_shape_hat", [-1])
+            osc_gain = global_params.get("osc_gain", [-1])
+            osc_gain_hat = global_params_hat.get("osc_gain_hat", [-1])
+            learned_alpha = global_params.get("learned_alpha", [-1])
+            learned_alpha_hat = global_params_hat.get("learned_alpha_hat", [-1])
 
             y_coords = pl_module.spectral_visualizer.center_freqs
             y_ticks = [
@@ -108,22 +120,19 @@ class LogModSigAndSpecCallback(Callback):
             y_indices, y_tick_labels = zip(*y_ticks)
             vmin = None
             vmax = None
-            if log_spec_x is not None and log_spec_x_hat is not None:
-                vmin = min(log_spec_x[0].min(), log_spec_x_hat[0].min())
-                vmax = max(log_spec_x[0].max(), log_spec_x_hat[0].max())
-            if mod_sig is not None and mod_sig_hat is not None:
-                mod_sig_esr = self.esr(mod_sig[0], mod_sig_hat[0]).item()
-                mod_sig_l1 = self.l1(mod_sig[0], mod_sig_hat[0]).item()
+            if log_spec_wet is not None and log_spec_wet_hat is not None:
+                vmin = min(log_spec_wet[0].min(), log_spec_wet_hat[0].min())
+                vmax = max(log_spec_wet[0].max(), log_spec_wet_hat[0].max())
 
             title = f"{trainer.global_step}_idx_{example_idx}"
             fig, ax = plt.subplots(nrows=3, figsize=(6, 18), squeeze=True)
             fig.suptitle(title, fontsize=14)
 
-            if log_spec_x is not None:
+            if log_spec_wet is not None:
                 ax[0].imshow(
-                    log_spec_x[0].numpy(),
-                    extent=[0, log_spec_x.size(2), 0, log_spec_x.size(1)],
-                    aspect=log_spec_x.size(2) / log_spec_x.size(1),
+                    log_spec_wet[0].numpy(),
+                    extent=[0, log_spec_wet.size(2), 0, log_spec_wet.size(1)],
+                    aspect=log_spec_wet.size(2) / log_spec_wet.size(1),
                     origin="lower",
                     cmap="magma",
                     interpolation="none",
@@ -133,13 +142,13 @@ class LogModSigAndSpecCallback(Callback):
                 ax[0].set_xlabel("n_frames")
                 ax[0].set_yticks(y_indices, y_tick_labels)
                 ax[0].set_ylabel("Freq (Hz)")
-                ax[0].set_title("log_spec_x")
+                ax[0].set_title("log_spec_wet")
 
-            if log_spec_x_hat is not None:
+            if log_spec_wet_hat is not None:
                 ax[1].imshow(
-                    log_spec_x_hat[0].numpy(),
-                    extent=[0, log_spec_x_hat.size(2), 0, log_spec_x_hat.size(1)],
-                    aspect=log_spec_x_hat.size(2) / log_spec_x_hat.size(1),
+                    log_spec_wet_hat[0].numpy(),
+                    extent=[0, log_spec_wet_hat.size(2), 0, log_spec_wet_hat.size(1)],
+                    aspect=log_spec_wet_hat.size(2) / log_spec_wet_hat.size(1),
                     origin="lower",
                     cmap="magma",
                     interpolation="none",
@@ -149,7 +158,7 @@ class LogModSigAndSpecCallback(Callback):
                 ax[1].set_xlabel("n_frames")
                 ax[1].set_yticks(y_indices, y_tick_labels)
                 ax[1].set_ylabel("Freq (Hz)")
-                ax[1].set_title("log_spec_x_hat")
+                ax[1].set_title("log_spec_wet_hat")
 
             if pl_module.log_envelope and envelope is not None:
                 assert envelope.ndim == 2
@@ -159,14 +168,19 @@ class LogModSigAndSpecCallback(Callback):
                 ax[2].plot(envelope[0].numpy(), label="env", color="blue")
                 ax[2].set(aspect=envelope.size(1))
 
-            if mod_sig is not None:
-                assert mod_sig.ndim == 2
-                mod_sig = util.linear_interpolate_dim(
-                    mod_sig, pl_module.ac.n_samples, dim=1, align_corners=True
+            if temp_params is not None:
+                assert temp_params.ndim == 3
+                temp_params = util.linear_interpolate_dim(
+                    temp_params, pl_module.ac.n_samples, dim=1, align_corners=True
                 )
-                mod_sig_np = mod_sig[0].numpy()
-                ax[2].plot(mod_sig_np, label="ms", color="black")
-                ax[2].set(aspect=mod_sig.size(1))
+                temp_params_np = temp_params[0].numpy()
+                for idx in range(temp_params_np.shape[1]):
+                    ax[2].plot(
+                        temp_params_np[:, idx],
+                        label=f"{pl_module.temp_params_name}_{idx}",
+                        color="black",
+                    )
+                ax[2].set(aspect=temp_params.size(1))
                 # mod_sig_fitted = piecewise_fitting_noncontinuous(
                 #     mod_sig_np, degree=degree, n_knots=n_segments - 1
                 # )
@@ -176,13 +190,19 @@ class LogModSigAndSpecCallback(Callback):
                 #     color="red"
                 # )
 
-            if mod_sig_hat is not None:
-                assert mod_sig_hat.ndim == 2
-                mod_sig_hat = util.linear_interpolate_dim(
-                    mod_sig_hat, pl_module.ac.n_samples, dim=1, align_corners=True
+            if temp_params_hat is not None:
+                assert temp_params_hat.ndim == 3
+                temp_params_hat = util.linear_interpolate_dim(
+                    temp_params_hat, pl_module.ac.n_samples, dim=1, align_corners=True
                 )
-                ax[2].plot(mod_sig_hat[0].numpy(), label="ms_hat", color="orange")
-                ax[2].set(aspect=mod_sig_hat.size(1))
+                temp_params_hat_np = temp_params_hat[0].numpy()
+                for idx in range(temp_params_hat_np.shape[1]):
+                    ax[2].plot(
+                        temp_params_hat_np[:, idx],
+                        label=f"{pl_module.temp_params_hat_name}_{idx}",
+                        color="orange",
+                    )
+                ax[2].set(aspect=temp_params_hat.size(1))
 
             ax[2].set_xlabel("n_samples")
             ax[2].set_ylabel("Amplitude")
@@ -255,10 +275,10 @@ class LogAudioCallback(Callback):
         n_repeat = math.ceil(self.render_time_sec / sample_time_sec)
 
         images = []
-        osc_audio_waveforms = []
-        x_waveforms = []
-        x_hat_waveforms = []
-        x_eval_waveforms = []
+        dry_audio_waveforms = []
+        wet_waveforms = []
+        wet_hat_waveforms = []
+        wet_eval_waveforms = []
         for example_idx in range(self.n_examples):
             if example_idx not in self.out_dicts:
                 log.warning(f"example_idx={example_idx} not in out_dicts")
@@ -266,37 +286,37 @@ class LogAudioCallback(Callback):
 
             out_dict = self.out_dicts[example_idx]
             title = f"{trainer.global_step}_idx_{example_idx}"
-            osc_audio = out_dict.get("osc_audio")
-            x = out_dict.get("x")
-            x_hat = out_dict.get("x_hat")
-            x_eval = out_dict.get("x_eval")
+            dry = out_dict.get("dry")
+            wet = out_dict.get("wet")
+            wet_hat = out_dict.get("wet_hat")
+            wet_eval = out_dict.get("wet_eval")
             waveforms = []
             labels = []
 
-            if osc_audio is not None:
-                osc_audio = osc_audio[0:1]
-                waveforms.append(osc_audio)
-                labels.append("osc_audio")
-                osc_audio = osc_audio.repeat(1, n_repeat)
-                osc_audio_waveforms.append(osc_audio.swapaxes(0, 1).numpy())
-            if x is not None:
-                x = x[0:1]
-                waveforms.append(x)
-                labels.append("x")
-                x = x.repeat(1, n_repeat)
-                x_waveforms.append(x.swapaxes(0, 1).numpy())
-            if x_hat is not None:
-                x_hat = x_hat[0:1]
-                waveforms.append(x_hat)
-                labels.append("x_hat")
-                x_hat = x_hat.repeat(1, n_repeat)
-                x_hat_waveforms.append(x_hat.swapaxes(0, 1).numpy())
-            if x_eval is not None:
-                x_eval = x_eval[0:1]
-                waveforms.append(x_eval)
-                labels.append("x_eval")
-                x_eval = x_eval.repeat(1, n_repeat)
-                x_eval_waveforms.append(x_eval.swapaxes(0, 1).numpy())
+            if dry is not None:
+                dry = dry[0:1]
+                waveforms.append(dry)
+                labels.append("dry")
+                dry = dry.repeat(1, n_repeat)
+                dry_audio_waveforms.append(dry.swapaxes(0, 1).numpy())
+            if wet is not None:
+                wet = wet[0:1]
+                waveforms.append(wet)
+                labels.append("wet")
+                wet = wet.repeat(1, n_repeat)
+                wet_waveforms.append(wet.swapaxes(0, 1).numpy())
+            if wet_hat is not None:
+                wet_hat = wet_hat[0:1]
+                waveforms.append(wet_hat)
+                labels.append("wet_hat")
+                wet_hat = wet_hat.repeat(1, n_repeat)
+                wet_hat_waveforms.append(wet_hat.swapaxes(0, 1).numpy())
+            if wet_eval is not None:
+                wet_eval = wet_eval[0:1]
+                waveforms.append(wet_eval)
+                labels.append("wet_eval")
+                wet_eval = wet_eval.repeat(1, n_repeat)
+                wet_eval_waveforms.append(wet_eval.swapaxes(0, 1).numpy())
 
             fig = plot_waveforms_stacked(waveforms, pl_module.ac.sr, title, labels)
             img = fig2img(fig)
@@ -304,8 +324,8 @@ class LogAudioCallback(Callback):
 
         # import torchaudio
         # import torch
-        # for idx, x in enumerate(x_waveforms):
-        #     torchaudio.save(f"../out/x_{idx}_dg_{pl_module.ac.min_dist_gain}.wav", torch.tensor(x).T, pl_module.ac.sr)
+        # for idx, wet in enumerate(wet_waveforms):
+        #     torchaudio.save(f"../out/x_{idx}_dg_{pl_module.ac.min_dist_gain}.wav", torch.tensor(wet).T, pl_module.ac.sr)
         # exit()
 
         for logger in trainer.loggers:
@@ -317,35 +337,35 @@ class LogAudioCallback(Callback):
                     )
 
                 data = defaultdict(list)
-                for idx, curr_osc_audio in enumerate(osc_audio_waveforms):
-                    data["osc_audio"].append(
+                for idx, curr_dry in enumerate(dry_audio_waveforms):
+                    data["dry"].append(
                         wandb.Audio(
-                            curr_osc_audio,
-                            caption=f"osc_audio_{idx}",
+                            curr_dry,
+                            caption=f"dry_{idx}",
                             sample_rate=int(pl_module.ac.sr),
                         )
                     )
-                for idx, curr_x_audio in enumerate(x_waveforms):
-                    data["x"].append(
+                for idx, curr_wet in enumerate(wet_waveforms):
+                    data["wet"].append(
                         wandb.Audio(
-                            curr_x_audio,
-                            caption=f"x_{idx}",
+                            curr_wet,
+                            caption=f"wet_{idx}",
                             sample_rate=int(pl_module.ac.sr),
                         )
                     )
-                for idx, curr_x_hat_audio in enumerate(x_hat_waveforms):
-                    data["x_hat"].append(
+                for idx, curr_wet_hat in enumerate(wet_hat_waveforms):
+                    data["wet_hat"].append(
                         wandb.Audio(
-                            curr_x_hat_audio,
-                            caption=f"x_hat_{idx}",
+                            curr_wet_hat,
+                            caption=f"wet_hat_{idx}",
                             sample_rate=int(pl_module.ac.sr),
                         )
                     )
-                for idx, curr_x_eval_audio in enumerate(x_eval_waveforms):
-                    data["x_eval"].append(
+                for idx, curr_wet_eval in enumerate(wet_eval_waveforms):
+                    data["wet_eval"].append(
                         wandb.Audio(
-                            curr_x_eval_audio,
-                            caption=f"x_eval_{idx}",
+                            curr_wet_eval,
+                            caption=f"wet_eval_{idx}",
                             sample_rate=int(pl_module.ac.sr),
                         )
                     )
