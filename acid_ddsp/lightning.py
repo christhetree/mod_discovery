@@ -113,17 +113,19 @@ class AcidDDSPLightingModule(pl.LightningModule):
         f0_hz = batch["f0_hz"]
         note_on_duration = batch["note_on_duration"]
         phase = batch["phase"]
+        phase_hat = batch["phase_hat"]
 
         batch_size = f0_hz.size(0)
         assert f0_hz.shape == (batch_size,)
         assert note_on_duration.shape == (batch_size,)
-        assert phase.shape == (batch_size,)
+        assert phase.shape == (batch_size, 1)
+        assert phase_hat.shape == (batch_size, 1)
 
         filter_args = {}
         if self.temp_params_name is not None:
-            temp_params = batch[self.temp_params_name].squeeze(-1)
+            temp_params = batch[self.temp_params_name]
             assert temp_params.size(0) == batch_size
-            assert temp_params.ndim == 2 or temp_params.ndim == 3
+            assert temp_params.ndim == 3
             filter_args[self.temp_params_name] = temp_params
 
         global_params_0to1 = {p: batch[f"{p}_0to1"] for p in self.global_param_names}
@@ -196,6 +198,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # Postprocess temp_params_hat
         temp_params_hat = model_out[self.temp_params_name_hat]
+        assert temp_params_hat.ndim == 3
         filter_args_hat[self.temp_params_name_hat] = temp_params_hat
 
         # Postprocess global_params_hat
@@ -282,6 +285,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
             and self.temp_params_name == self.temp_params_name_hat
         ):
             with tr.no_grad():
+                temp_params_hat = util.linear_interpolate_dim(
+                    temp_params_hat, temp_params.size(1), dim=1, align_corners=True
+                )
+                assert temp_params.shape == temp_params_hat.shape
                 temp_params_l1 = self.l1(temp_params_hat, temp_params)
                 temp_params_esr = self.esr(temp_params_hat, temp_params)
             temp_param_metrics[f"{self.temp_params_name}_l1"] = temp_params_l1

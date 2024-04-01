@@ -71,10 +71,22 @@ class AcidSynthBase(ABC, nn.Module):
         filter_args: Dict[str, T],
         global_params: Dict[str, T],
     ) -> Dict[str, T]:
-        osc_shape = global_params["osc_shape"]
-        osc_gain = global_params["osc_gain"]
-        dist_gain = global_params["dist_gain"]
-        learned_alpha = global_params["learned_alpha"]
+        osc_shape = global_params.get("osc_shape")
+        if osc_shape is None:
+            assert self.ac.is_fixed("osc_shape")
+            osc_shape = tr.full_like(f0_hz, self.ac.min_osc_shape)
+        osc_gain = global_params.get("osc_gain")
+        if osc_gain is None:
+            assert self.ac.is_fixed("osc_gain")
+            osc_gain = tr.full_like(f0_hz, self.ac.min_osc_gain)
+        dist_gain = global_params.get("dist_gain")
+        if dist_gain is None:
+            assert self.ac.is_fixed("dist_gain")
+            dist_gain = tr.full_like(f0_hz, self.ac.min_dist_gain)
+        learned_alpha = global_params.get("learned_alpha")
+        if learned_alpha is None:
+            assert self.ac.is_fixed("learned_alpha")
+            learned_alpha = tr.full_like(f0_hz, self.ac.min_alpha)
         assert (
             f0_hz.shape
             == note_on_duration.shape

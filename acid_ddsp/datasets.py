@@ -36,21 +36,25 @@ class AcidSynthDataset(Dataset):
     def __getitem__(self, idx: int) -> Dict[str, T]:
         f0_hz = util.sample_log_uniform(self.ac.min_f0_hz, self.ac.max_f0_hz)
         f0_hz = tr.tensor(f0_hz)
-        mod_sig = self.mod_sig_gen(self.ac.n_samples)
-        q_norm = tr.rand((1,)).squeeze(0)
-        dist_gain_norm = tr.rand((1,)).squeeze(0)
-        osc_shape_norm = tr.rand((1,)).squeeze(0)
         phase = (tr.rand((1,)) * 2 * tr.pi) - tr.pi
         phase_hat = (tr.rand((1,)) * 2 * tr.pi) - tr.pi
+        w_mod_sig = self.mod_sig_gen(self.ac.n_samples).unsqueeze(-1)
+        q_0to1 = tr.rand((1,)).squeeze(0)
+        dist_gain_0to1 = tr.rand((1,)).squeeze(0)
+        osc_shape_0to1 = tr.rand((1,)).squeeze(0)
+        osc_gain_0to1 = tr.rand((1,)).squeeze(0)
+        learned_alpha_0to1 = tr.rand((1,)).squeeze(0)
         return {
             "f0_hz": f0_hz,
             "note_on_duration": self.note_on_duration,
-            "mod_sig": mod_sig,
-            "q_norm": q_norm,
-            "dist_gain_norm": dist_gain_norm,
-            "osc_shape_norm": osc_shape_norm,
             "phase": phase,
             "phase_hat": phase_hat,
+            "w_mod_sig": w_mod_sig,
+            "q_0to1": q_0to1,
+            "dist_gain_0to1": dist_gain_0to1,
+            "osc_shape_0to1": osc_shape_0to1,
+            "osc_gain_0to1": osc_gain_0to1,
+            "learned_alpha_0to1": learned_alpha_0to1,
         }
 
 

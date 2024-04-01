@@ -92,6 +92,7 @@ class LogModSigAndSpecCallback(Callback):
             mod_sig_l1 = -1
             if pl_module.temp_params_name == pl_module.temp_params_name_hat:
                 if temp_params is not None and temp_params_hat is not None:
+                    assert temp_params.ndim == 3 and temp_params_hat.ndim == 3
                     if temp_params.size(2) == 1 and temp_params_hat.size(2) == 1:
                         mod_sig_esr = self.esr(
                             temp_params[0], temp_params_hat[0]

@@ -1,0 +1,4 @@
+class_path: synths.AcidSynthLearnedBiquadCoeff
+init_args:
+  ac: audio_config.yml
+  batch_size: 64

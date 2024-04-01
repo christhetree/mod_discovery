@@ -1,4 +1,4 @@
-class_path: acid_ddsp.modulations.ModSignalGeneratorPointy
+class_path: modulations.ModSignalGeneratorPointy
 init_args:
   min_diff: 0.2
   max_diff: 1.0
