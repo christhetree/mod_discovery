@@ -1,7 +1,7 @@
 class_path: synths.AcidSynthLPBiquadFSM
 init_args:
-  ac: ../configs/audio_config_abstract_303.yml
+  ac: audio_config.yml
   batch_size: 34
-  win_len: 128
-  overlap: 0.75
+  win_len: 4096
+  overlap: 0.9921875
   oversampling_factor: 1

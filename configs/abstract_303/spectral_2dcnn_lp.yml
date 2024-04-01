@@ -1,6 +1,6 @@
 class_path: models.Spectral2DCNN
 init_args:
-  fe: ../configs/log_mel_spec.yml
+  fe: log_mel_spec.yml
   kernel_size: [5, 7]
   out_channels: [64, 64, 64, 64, 64, 64]
   temp_dilations: [1, 1, 2, 4, 8, 16]

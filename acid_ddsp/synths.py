@@ -267,6 +267,10 @@ class AcidSynthLSTM(AcidSynthBase):
         self.out_lstm = nn.Linear(n_hidden, n_ch)
 
     def filter_dry_audio(self, x: T, w_mod_sig: T, q_mod_sig: T) -> (T, Dict[str, T]):
+        if w_mod_sig.ndim == 3:
+            w_mod_sig = w_mod_sig.squeeze(2)
+        if q_mod_sig.ndim == 3:
+            q_mod_sig = q_mod_sig.squeeze(2)
         w_mod_sig, q_mod_sig = self.resize_mod_sig(x, w_mod_sig, q_mod_sig)
         x_orig = x
         x = tr.stack([x, w_mod_sig, q_mod_sig], dim=2)
