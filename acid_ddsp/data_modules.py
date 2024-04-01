@@ -30,8 +30,6 @@ class AcidDDSPDataModule(pl.LightningDataModule):
             test_n_per_epoch = val_n_per_epoch
 
         super().__init__()
-        self.save_hyperparameters(ignore=["ac", "mod_sig_gen"])
-        log.info(f"\n{self.hparams}")
 
         self.batch_size = batch_size
         self.ac = ac
@@ -99,9 +97,6 @@ class PreprocDataModule(pl.LightningDataModule):
         num_workers: int = 0,
     ):
         super().__init__()
-        self.save_hyperparameters(ignore=["ac"])
-        log.info(f"\n{self.hparams}")
-
         assert os.path.isdir(
             data_dir
         ), f"Data directory {os.path.abspath(data_dir)} does not exist."

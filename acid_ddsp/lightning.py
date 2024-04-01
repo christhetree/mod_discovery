@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import suppress
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Mapping
 
@@ -12,15 +13,15 @@ import torch as tr
 from auraloss.time import ESRLoss
 from torch import Tensor as T
 from torch import nn
-from torchaudio.transforms import MFCC
 from tqdm import tqdm
 
 import acid_ddsp.util as util
 from acid_ddsp.audio_config import AudioConfig
 from fad import save_and_concat_fad_audio, calc_fad
 from feature_extraction import LogMelSpecFeatureExtractor
+from losses import MFCCL1
 from paths import OUT_DIR
-from synths import AcidSynthLPBiquad, make_synth
+from synths import AcidSynthLPBiquad, AcidSynthBase
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -35,39 +36,45 @@ class AcidDDSPLightingModule(pl.LightningModule):
         model: nn.Module,
         loss_func: nn.Module,
         spectral_visualizer: LogMelSpecFeatureExtractor,
+        synth: Optional[AcidSynthBase] = None,
+        synth_hat: Optional[AcidSynthBase] = None,
+        synth_eval: Optional[AcidSynthBase] = None,
+        temp_params_name: Optional[str] = None,
+        temp_params_name_hat: str = "mod_sig",
+        global_param_names: Optional[List[str]] = None,
         use_p_loss: bool = False,
-        log_envelope: bool = False,
-        synth_hat_type: str = "AcidSynth",
-        synth_hat_kwargs: Optional[Dict[str, Any]] = None,
-        synth_eval_type: str = "AcidSynth",
-        synth_eval_kwargs: Optional[Dict[str, Any]] = None,
+        log_envelope: bool = True,
         fad_model_names: Optional[List[str]] = None,
         run_name: Optional[str] = None,
     ):
         super().__init__()
-        if synth_hat_kwargs is None:
-            synth_hat_kwargs = {}
-        if synth_eval_kwargs is None:
-            synth_eval_kwargs = {}
-        if "interp_logits" in synth_hat_kwargs and "interp_logits" in synth_eval_kwargs:
-            assert (
-                synth_hat_kwargs["interp_logits"] == synth_eval_kwargs["interp_logits"]
-            )
+        if synth is None:
+            synth = AcidSynthLPBiquad(ac, batch_size)
+        if synth_hat is None:
+            synth_hat = AcidSynthLPBiquad(ac, batch_size)
+        with suppress(Exception):
+            assert synth_hat.interp_logits == synth_eval.interp_logits
+        with suppress(Exception):
+            assert synth_hat.interp_coeff == synth.interp_coeff
+        if global_param_names is None:
+            global_param_names = []
         if fad_model_names is None:
             fad_model_names = []
         if run_name is None:
             self.run_name = f"run__{datetime.now().strftime('%Y-%m-%d__%H-%M-%S')}"
         log.info(f"Run name: {self.run_name}")
-        self.save_hyperparameters(
-            ignore=["ac", "model", "loss_func", "spectral_visualizer"]
-        )
-        log.info(f"\n{self.hparams}")
 
         self.batch_size = batch_size
         self.ac = ac
         self.model = model
         self.loss_func = loss_func
         self.spectral_visualizer = spectral_visualizer
+        self.synth = synth
+        self.synth_hat = synth_hat
+        self.synth_eval = synth_eval
+        self.temp_params_name = temp_params_name
+        self.temp_params_name_hat = temp_params_name_hat
+        self.global_param_names = global_param_names
         self.use_p_loss = use_p_loss
         self.log_envelope = log_envelope
         self.fad_model_names = fad_model_names
@@ -75,38 +82,26 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.loss_name = self.loss_func.__class__.__name__
         self.esr = ESRLoss()
         self.l1 = nn.L1Loss()
-        self.mss = auraloss.freq.MultiResolutionSTFTLoss()
-        self.mel_stft = auraloss.freq.MelSTFTLoss(
+
+        self.audio_metrics = nn.ModuleDict()
+        self.audio_metrics["mss"] = auraloss.freq.MultiResolutionSTFTLoss()
+        self.audio_metrics["mel_stft"] = auraloss.freq.MelSTFTLoss(
             sample_rate=self.ac.sr,
             fft_size=spectral_visualizer.n_fft,
             hop_size=spectral_visualizer.hop_len,
             win_length=spectral_visualizer.n_fft,
             n_mels=spectral_visualizer.n_mels,
         )
-        self.mfcc = MFCC(
-            sample_rate=self.ac.sr,
+        self.audio_metrics["mfcc"] = MFCCL1(
+            sr=self.ac.sr,
             log_mels=True,
-            melkwargs={
-                "n_fft": spectral_visualizer.n_fft,
-                "hop_length": spectral_visualizer.hop_len,
-                "n_mels": spectral_visualizer.n_mels,
-            },
+            n_fft=spectral_visualizer.n_fft,
+            hop_len=spectral_visualizer.hop_len,
+            n_mels=spectral_visualizer.n_mels,
         )
+
         self.global_n = 0
-        self.test_outs = []
-
-        # TODO(cm): refactor this to reduce duplicate code
-        self.is_q_learnable = ac.min_q != ac.max_q
-        self.is_dist_gain_learnable = ac.min_dist_gain != ac.max_dist_gain
-        self.is_osc_shape_learnable = ac.min_osc_shape != ac.max_osc_shape
-        self.is_osc_gain_learnable = ac.min_osc_gain != ac.max_osc_gain
-        self.is_alpha_learnable = ac.min_learned_alpha != ac.max_learned_alpha
-
-        self.synth = AcidSynthLPBiquad(ac, batch_size)
-        self.synth_hat = make_synth(synth_hat_type, ac, batch_size, **synth_hat_kwargs)
-        self.synth_eval = make_synth(
-            synth_eval_type, ac, batch_size, **synth_eval_kwargs
-        )
+        self.test_out_dicts = []
 
     def load_state_dict(self, state_dict: Mapping[str, Any], **kwargs):
         return super().load_state_dict(state_dict, strict=False)
@@ -114,375 +109,223 @@ class AcidDDSPLightingModule(pl.LightningModule):
     def on_train_start(self) -> None:
         self.global_n = 0
 
-    def mfcc_l1_loss(self, x: T, y: T) -> T:
-        x_mfcc = self.mfcc(x)
-        y_mfcc = self.mfcc(y)
-        return self.l1(x_mfcc, y_mfcc)
-
     def preprocess_batch(self, batch: Dict[str, T]) -> Dict[str, T]:
         f0_hz = batch["f0_hz"]
         note_on_duration = batch["note_on_duration"]
         phase = batch["phase"]
-        mod_sig = batch["mod_sig"]
-        q_norm = batch["q_norm"]
-        dist_gain_norm = batch["dist_gain_norm"]
-        osc_shape_norm = batch["osc_shape_norm"]
-        osc_gain_norm = batch["osc_gain_norm"]
-        learned_alpha_norm = batch["learned_alpha_norm"]
+
         batch_size = f0_hz.size(0)
         assert f0_hz.shape == (batch_size,)
         assert note_on_duration.shape == (batch_size,)
         assert phase.shape == (batch_size,)
-        assert mod_sig.shape == (batch_size, self.ac.n_samples)
-        assert q_norm.shape == (batch_size,)
-        assert dist_gain_norm.shape == (batch_size,)
-        assert osc_shape_norm.shape == (batch_size,)
-        assert osc_gain_norm.shape == (batch_size,)
-        assert learned_alpha_norm.shape == (batch_size,)
 
-        q = q_norm * (self.ac.max_q - self.ac.min_q) + self.ac.min_q
-        dist_gain = (
-            dist_gain_norm * (self.ac.max_dist_gain - self.ac.min_dist_gain)
-            + self.ac.min_dist_gain
-        )
-        osc_shape = (
-            osc_shape_norm * (self.ac.max_osc_shape - self.ac.min_osc_shape)
-            + self.ac.min_osc_shape
-        )
-        osc_gain = (
-            osc_gain_norm * (self.ac.max_osc_gain - self.ac.min_osc_gain)
-            + self.ac.min_osc_gain
-        )
-        learned_alpha = (
-            learned_alpha_norm * (self.ac.max_learned_alpha - self.ac.min_learned_alpha)
-            + self.ac.min_learned_alpha
-        )
+        filter_args = {}
+        if self.temp_params_name is not None:
+            temp_params = batch[self.temp_params_name].squeeze(-1)
+            assert temp_params.size(0) == batch_size
+            assert temp_params.ndim == 2 or temp_params.ndim == 3
+            filter_args[self.temp_params_name] = temp_params
+
+        global_params_0to1 = {p: batch[f"{p}_0to1"] for p in self.global_param_names}
+        global_params = {
+            k: self.ac.convert_from_0to1(k, v) for k, v in global_params_0to1.items()
+        }
+        # TODO(cm): generalize
+        if "q" in self.global_param_names:
+            q_0to1 = batch["q_0to1"]
+            q_mod_sig = q_0to1.unsqueeze(-1)
+            filter_args["q_mod_sig"] = q_mod_sig
 
         # Generate ground truth wet audio
         with tr.no_grad():
-            q_mod_sig = q_norm.unsqueeze(-1)
-            filter_args = {
-                "w_mod_sig": mod_sig,
-                "q_mod_sig": q_mod_sig,
-            }
-            dry, wet, envelope = self.synth(
+            synth_out = self.synth(
                 f0_hz,
-                osc_shape,
-                osc_gain,
                 note_on_duration,
-                filter_args,
-                dist_gain,
-                learned_alpha,
                 phase,
+                filter_args,
+                global_params,
             )
+            dry = synth_out["dry"]
+            wet = synth_out["wet"]
+            envelope = synth_out["envelope"]
             assert dry.shape == wet.shape == (batch_size, self.ac.n_samples)
 
-        batch["q"] = q
-        batch["dist_gain"] = dist_gain
-        batch["osc_shape"] = osc_shape
-        batch["osc_gain"] = osc_gain
-        batch["learned_alpha"] = learned_alpha
+        batch.update(global_params)
         batch["dry"] = dry
         batch["wet"] = wet
         batch["envelope"] = envelope
         return batch
 
     def step(self, batch: Dict[str, T], stage: str) -> Dict[str, T]:
-        batch_size = self.batch_size
+        batch_size = self.batch_size  # TODO(cm): remove fixed batch size
         if stage == "train":
             self.global_n = (
                 self.global_step * self.trainer.accumulate_grad_batches * batch_size
             )
-        # TODO(cm): check if this works for DDP
         self.log(f"global_n", float(self.global_n), sync_dist=True)
 
         batch = self.preprocess_batch(batch)
+
+        # Get mandatory params
         f0_hz = batch["f0_hz"]
         note_on_duration = batch["note_on_duration"]
         wet = batch["wet"]
         phase_hat = batch["phase_hat"]
+        global_params_0to1 = {
+            p_name: batch[f"{p_name}_0to1"] for p_name in self.global_param_names
+        }
+        global_params = {p_name: batch[p_name] for p_name in self.global_param_names}
 
-        mod_sig = batch.get("mod_sig")
-        q_norm = batch.get("q_norm")
-        q = batch.get("q")
-        dist_gain_norm = batch.get("dist_gain_norm")
-        dist_gain = batch.get("dist_gain")
-        osc_shape_norm = batch.get("osc_shape_norm")
-        osc_shape = batch.get("osc_shape")
-        osc_gain_norm = batch.get("osc_gain_norm")
-        osc_gain = batch.get("osc_gain")
-        learned_alpha_norm = batch.get("learned_alpha_norm")
-        learned_alpha = batch.get("learned_alpha")
+        # Get optional params
         dry = batch.get("dry")
         envelope = batch.get("envelope")
+        temp_params = None
+        if self.temp_params_name is not None:
+            temp_params = batch[self.temp_params_name]
 
         # Perform model forward pass
         model_in = wet.unsqueeze(1)
         model_out = self.model(model_in)
         filter_args_hat = {}
 
-        # Postprocess mod_sig_hat
-        mod_sig_hat = model_out.get("mod_sig_hat")
-        if mod_sig_hat is not None:
-            filter_args_hat["w_mod_sig"] = mod_sig_hat
+        # Postprocess temp_params_hat
+        temp_params_hat = model_out[self.temp_params_name_hat]
+        filter_args_hat[self.temp_params_name_hat] = temp_params_hat
 
-        # Postprocess q_hat
-        q_norm_hat = model_out.get("q_norm_hat")
-        q_hat = None
-        if q_norm_hat is not None:
-            if self.is_q_learnable and q_norm is not None:
+        # Postprocess global_params_hat
+        global_params_0to1_hat = {}
+        global_params_hat = {}
+        for p_name in self.global_param_names:
+            p_val_0to1_hat = model_out[f"{p_name}_0to1"]
+            p_val_hat = self.ac.convert_from_0to1(p_name, p_val_0to1_hat)
+            global_params_0to1_hat[p_name] = p_val_0to1_hat
+            global_params_hat[p_name] = p_val_hat
+            if not self.ac.is_fixed(p_name):
+                p_val_0to1 = global_params_0to1[p_name]
                 with tr.no_grad():
-                    q_norm_l1 = self.l1(q_norm_hat, q_norm)
-                self.log(f"{stage}/q_l1", q_norm_l1, prog_bar=False, sync_dist=True)
-            q_mod_sig_hat = q_norm_hat.unsqueeze(-1)
-            filter_args_hat["q_mod_sig"] = q_mod_sig_hat
-            q_hat = q_norm_hat * (self.ac.max_q - self.ac.min_q) + self.ac.min_q
-
-        # Postprocess dist_gain_hat
-        dist_gain_norm_hat = model_out["dist_gain_norm_hat"]
-        dist_gain_hat = (
-            dist_gain_norm_hat * (self.ac.max_dist_gain - self.ac.min_dist_gain)
-            + self.ac.min_dist_gain
-        )
-        if self.is_dist_gain_learnable and dist_gain_norm is not None:
-            with tr.no_grad():
-                dist_gain_norm_l1 = self.l1(dist_gain_norm_hat, dist_gain_norm)
-            self.log(
-                f"{stage}/dg_l1", dist_gain_norm_l1, prog_bar=False, sync_dist=True
-            )
-
-        # Postprocess osc_shape_hat
-        osc_shape_norm_hat = model_out["osc_shape_norm_hat"]
-        osc_shape_hat = (
-            osc_shape_norm_hat * (self.ac.max_osc_shape - self.ac.min_osc_shape)
-            + self.ac.min_osc_shape
-        )
-        if self.is_osc_shape_learnable and osc_shape_norm is not None:
-            with tr.no_grad():
-                osc_shape_norm_l1 = self.l1(osc_shape_norm_hat, osc_shape_norm)
-            self.log(
-                f"{stage}/os_l1", osc_shape_norm_l1, prog_bar=False, sync_dist=True
-            )
-
-        # Postprocess osc_gain_hat
-        osc_gain_norm_hat = model_out["osc_gain_norm_hat"]
-        osc_gain_hat = (
-            osc_gain_norm_hat * (self.ac.max_osc_gain - self.ac.min_osc_gain)
-            + self.ac.min_osc_gain
-        )
-        if self.is_osc_gain_learnable and osc_gain_norm is not None:
-            with tr.no_grad():
-                osc_gain_norm_l1 = self.l1(osc_gain_norm_hat, osc_gain_norm)
-            self.log(f"{stage}/og_l1", osc_gain_norm_l1, prog_bar=False, sync_dist=True)
-
-        # Postprocess learned_alpha_hat
-        learned_alpha_norm_hat = model_out["learned_alpha_norm_hat"]
-        learned_alpha_hat = (
-            learned_alpha_norm_hat
-            * (self.ac.max_learned_alpha - self.ac.min_learned_alpha)
-            + self.ac.min_learned_alpha
-        )
-        if self.is_alpha_learnable and learned_alpha_norm is not None:
-            with tr.no_grad():
-                learned_alpha_norm_l1 = self.l1(
-                    learned_alpha_norm_hat, learned_alpha_norm
-                )
-            self.log(
-                f"{stage}/la_l1", learned_alpha_norm_l1, prog_bar=False, sync_dist=True
-            )
+                    p_val_l1 = self.l1(p_val_0to1_hat, p_val_0to1)
+                self.log(f"{stage}/{p_name}_l1", p_val_l1, prog_bar=False)
 
         # Postprocess log_spec
         log_spec = model_out.get("log_spec")
         if log_spec is None:
             log_spec = self.spectral_visualizer(model_in)
         assert log_spec.ndim == 4
-        log_spec_x = log_spec[:, 0, :, :]
+        log_spec_wet = log_spec[:, 0, :, :]
 
-        # Postprocess logits
-        logits = model_out.get("logits")
-        if logits is not None:
-            filter_args_hat["logits"] = logits
+        # Postprocess q_hat TODO(cm): generalize
+        if "q" in self.global_param_names:
+            q_0to1_hat = global_params_0to1_hat["q"]
+            q_mod_sig_hat = q_0to1_hat.unsqueeze(-1)
+            filter_args_hat["q_mod_sig"] = q_mod_sig_hat
 
         # Generate audio x_hat
-        _, wet_hat, envelope_hat, a_coeff, b_coeff = self.synth_hat(
+        synth_out_hat = self.synth_hat(
             f0_hz,
-            osc_shape_hat,
-            osc_gain_hat,
             note_on_duration,
-            filter_args_hat,
-            dist_gain_hat,
-            learned_alpha_hat,
             phase_hat,
+            filter_args_hat,
+            global_params_hat,
         )
+        wet_hat = synth_out_hat["wet"]
+
         # TODO(cm): refactor
         if envelope is None:
-            envelope = envelope_hat
+            envelope = synth_out_hat.get("envelope")
 
         # Compute loss
         if self.use_p_loss:
-            assert mod_sig is not None
-            assert mod_sig_hat is not None
-            if mod_sig_hat.shape != mod_sig.shape:
-                assert mod_sig_hat.ndim == mod_sig.ndim == 2
-                mod_sig_hat = util.linear_interpolate_dim(
-                    mod_sig_hat, mod_sig.size(1), dim=1, align_corners=True
-                )
-            loss = self.loss_func(mod_sig_hat, mod_sig)
-            if self.is_q_learnable and q_norm_hat is not None:
-                q_loss = self.loss_func(q_norm_hat, q_norm)
-                self.log(
-                    f"{stage}/ploss_{self.loss_name}_q",
-                    q_loss,
-                    prog_bar=False,
-                    sync_dist=True,
-                )
-                loss += q_loss
-            if self.is_dist_gain_learnable:
-                dist_gain_loss = self.loss_func(dist_gain_norm_hat, dist_gain_norm)
-                self.log(
-                    f"{stage}/ploss_{self.loss_name}_dg",
-                    dist_gain_loss,
-                    prog_bar=False,
-                    sync_dist=True,
-                )
-                loss += dist_gain_loss
-            if self.is_osc_shape_learnable:
-                osc_shape_loss = self.loss_func(osc_shape_norm_hat, osc_shape_norm)
-                self.log(
-                    f"{stage}/ploss_{self.loss_name}_os",
-                    osc_shape_loss,
-                    prog_bar=False,
-                    sync_dist=True,
-                )
-                loss += osc_shape_loss
-            if self.is_osc_gain_learnable:
-                osc_gain_loss = self.loss_func(osc_gain_norm_hat, osc_gain_norm)
-                self.log(
-                    f"{stage}/ploss_{self.loss_name}_og",
-                    osc_gain_loss,
-                    prog_bar=False,
-                    sync_dist=True,
-                )
-                loss += osc_gain_loss
-            if self.is_alpha_learnable:
-                learned_alpha_loss = self.loss_func(
-                    learned_alpha_norm_hat, learned_alpha_norm
-                )
-                self.log(
-                    f"{stage}/ploss_{self.loss_name}_la",
-                    learned_alpha_loss,
-                    prog_bar=False,
-                    sync_dist=True,
-                )
-                loss += learned_alpha_loss
-            self.log(
-                f"{stage}/ploss_{self.loss_name}", loss, prog_bar=False, sync_dist=True
+            temp_params_hat = util.linear_interpolate_dim(
+                temp_params_hat, temp_params.size(1), dim=1, align_corners=True
             )
+            assert temp_params.shape == temp_params_hat.shape
+            loss = self.loss_func(temp_params, temp_params)
+
+            for p_name in self.global_param_names:
+                if not self.ac.is_fixed(p_name):
+                    p_val = global_params_0to1[p_name]
+                    p_val_hat = global_params_0to1_hat[p_name]
+                    p_loss = self.loss_func(p_val_hat, p_val)
+                    self.log(
+                        f"{stage}/ploss_{self.loss_name}_{p_name}",
+                        p_loss,
+                        prog_bar=False,
+                    )
+                    loss += p_loss
+            self.log(f"{stage}/ploss_{self.loss_name}", loss, prog_bar=False)
         else:
             loss = self.loss_func(wet_hat.unsqueeze(1), wet.unsqueeze(1))
+            self.log(f"{stage}/audio_{self.loss_name}", loss, prog_bar=False)
+
+        self.log(f"{stage}/loss", loss, prog_bar=False)
+
+        # Log audio metrics
+        audio_metrics_hat = {}
+        for metric_name, metric in self.audio_metrics.items():
+            with tr.no_grad():
+                audio_metric = metric(wet_hat.unsqueeze(1), wet.unsqueeze(1))
+            audio_metrics_hat[metric_name] = audio_metric
+            self.log(f"{stage}/audio_{metric_name}", audio_metric, prog_bar=False)
+
+        # Log temp_params metrics
+        temp_param_metrics = {}
+        if (
+            self.temp_params_name is not None
+            and self.temp_params_name == self.temp_params_name_hat
+        ):
+            with tr.no_grad():
+                temp_params_l1 = self.l1(temp_params_hat, temp_params)
+                temp_params_esr = self.esr(temp_params_hat, temp_params)
+            temp_param_metrics[f"{self.temp_params_name}_l1"] = temp_params_l1
+            temp_param_metrics[f"{self.temp_params_name}_esr"] = temp_params_esr
             self.log(
-                f"{stage}/audio_{self.loss_name}", loss, prog_bar=False, sync_dist=True
+                f"{stage}/{self.temp_params_name}_l1", temp_params_l1, prog_bar=False
+            )
+            self.log(
+                f"{stage}/{self.temp_params_name}_esr", temp_params_esr, prog_bar=False
             )
 
-        self.log(f"{stage}/loss", loss, prog_bar=False, sync_dist=True)
-
-        # Log MSS loss
-        with tr.no_grad():
-            audio_mss = self.mss(wet_hat.unsqueeze(1), wet.unsqueeze(1))
-            audio_mel_stft = self.mel_stft(wet_hat.unsqueeze(1), wet.unsqueeze(1))
-            audio_mfcc = self.mfcc_l1_loss(wet_hat.unsqueeze(1), wet.unsqueeze(1))
-        self.log(f"{stage}/audio_mss", audio_mss, prog_bar=True, sync_dist=True)
-        self.log(f"{stage}/audio_mel", audio_mel_stft, prog_bar=False, sync_dist=True)
-        self.log(f"{stage}/audio_mfcc", audio_mfcc, prog_bar=False, sync_dist=True)
-
-        # Log mod_sig_hat metrics
-        if mod_sig is not None and mod_sig_hat is not None:
-            if mod_sig_hat.shape != mod_sig.shape:
-                assert mod_sig_hat.ndim == mod_sig.ndim == 2
-                mod_sig_hat = util.linear_interpolate_dim(
-                    mod_sig_hat, mod_sig.size(1), dim=1, align_corners=True
-                )
-            with tr.no_grad():
-                mod_sig_esr = self.esr(mod_sig_hat, mod_sig)
-                mod_sig_l1 = self.l1(mod_sig_hat, mod_sig)
-            self.log(f"{stage}/ms_esr", mod_sig_esr, prog_bar=False, sync_dist=True)
-            self.log(f"{stage}/ms_l1", mod_sig_l1, prog_bar=True, sync_dist=True)
-
-        # Log eval synth metrics if possible
+        # Log eval synth metrics if applicable
         wet_eval = None
-        audio_mss_eval = None
-        audio_mel_stft_eval = None
-        audio_mfcc_eval = None
-        if stage != "train":
+        audio_metrics_eval = {}
+        if stage != "train" and self.synth_eval is not None:
+            # Generate audio x_eval
             try:
-                _, wet_eval, _, a_coeff_eval, b_coeff_eval = self.synth_eval(
+                synth_out_eval = self.synth_eval(
                     f0_hz,
-                    osc_shape_hat,
-                    osc_gain_hat,
                     note_on_duration,
-                    filter_args_hat,
-                    dist_gain_hat,
-                    learned_alpha_hat,
                     phase_hat,
+                    filter_args_hat,
+                    global_params_hat,
                 )
+                wet_eval = synth_out_eval["wet"]
+                for metric_name, metric in self.audio_metrics.items():
+                    with tr.no_grad():
+                        audio_metric = metric(wet_eval.unsqueeze(1), wet.unsqueeze(1))
+                    audio_metrics_eval[metric_name] = audio_metric
+                    self.log(
+                        f"{stage}/audio_{metric_name}_eval",
+                        audio_metric,
+                        prog_bar=False,
+                    )
             except Exception as e:
                 log.error(f"Error in eval synth: {e}")
-            if wet_eval is not None:
-                audio_mss_eval = self.mss(wet_eval.unsqueeze(1), wet.unsqueeze(1))
-                audio_mel_stft_eval = self.mel_stft(
-                    wet_eval.unsqueeze(1), wet.unsqueeze(1)
-                )
-                audio_mfcc_eval = self.mfcc_l1_loss(
-                    wet_eval.unsqueeze(1), wet.unsqueeze(1)
-                )
-                self.log(
-                    f"{stage}/audio_mss_{self.synth_eval.__class__.__name__}",
-                    audio_mss_eval,
-                    prog_bar=False,
-                    sync_dist=True,
-                )
-                self.log(
-                    f"{stage}/audio_mel_{self.synth_eval.__class__.__name__}",
-                    audio_mel_stft_eval,
-                    prog_bar=False,
-                    sync_dist=True,
-                )
-                self.log(
-                    f"{stage}/audio_mfcc_{self.synth_eval.__class__.__name__}",
-                    audio_mfcc_eval,
-                    prog_bar=False,
-                    sync_dist=True,
-                )
-
-        # H = util.calc_h(a_coeff, b_coeff)
 
         out_dict = {
             "loss": loss,
-            "mod_sig": mod_sig,
-            "mod_sig_hat": mod_sig_hat,
-            "x": wet,
-            "x_hat": wet_hat,
-            "x_eval": wet_eval,
-            "osc_audio": dry,
+            "dry": dry,
+            "wet": wet,
+            "wet_hat": wet_hat,
+            "wet_eval": wet_eval,
             "envelope": envelope,
-            "log_spec_x": log_spec_x,
-            "q": q,
-            "q_hat": q_hat,
-            "dist_gain": dist_gain,
-            "dist_gain_hat": dist_gain_hat,
-            "osc_shape": osc_shape,
-            "osc_shape_hat": osc_shape_hat,
-            "osc_gain": osc_gain,
-            "osc_gain_hat": osc_gain_hat,
-            "learned_alpha": learned_alpha,
-            "learned_alpha_hat": learned_alpha_hat,
-            "audio_mss": audio_mss,
-            "audio_mss_eval": audio_mss_eval,
-            "audio_mel_stft": audio_mel_stft,
-            "audio_mel_stft_eval": audio_mel_stft_eval,
-            "audio_mfcc": audio_mfcc,
-            "audio_mfcc_eval": audio_mfcc_eval,
-            # "H": H,
+            "log_spec_wet": log_spec_wet,
+            "temp_params": temp_params,
+            "temp_params_hat": temp_params_hat,
+            "global_params": global_params,
+            "global_params_hat": global_params_hat,
+            "audio_metrics_hat": audio_metrics_hat,
+            "audio_metrics_eval": audio_metrics_eval,
+            "temp_param_metrics": temp_param_metrics,
         }
         return out_dict
 
@@ -494,32 +337,34 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
     def test_step(self, batch: Dict[str, T], stage: str) -> Dict[str, T]:
         out = self.step(batch, stage="test")
-        self.test_outs.append(out)
+        self.test_out_dicts.append(out)
         return out
 
     def on_test_epoch_end(self) -> None:
-        loss = tr.stack([out["loss"] for out in self.test_outs], dim=0).mean()
-        audio_mss = tr.stack([out["audio_mss"] for out in self.test_outs], dim=0).mean()
+        loss = tr.stack([out["loss"] for out in self.test_out_dicts], dim=0).mean()
+        audio_mss = tr.stack(
+            [out["audio_mss"] for out in self.test_out_dicts], dim=0
+        ).mean()
         audio_mss_eval = None
-        if self.test_outs[0].get("audio_mss_eval") is not None:
+        if self.test_out_dicts[0].get("audio_mss_eval") is not None:
             audio_mss_eval = tr.stack(
-                [out["audio_mss_eval"] for out in self.test_outs], dim=0
+                [out["audio_mss_eval"] for out in self.test_out_dicts], dim=0
             ).mean()
         audio_mel_stft = tr.stack(
-            [out["audio_mel_stft"] for out in self.test_outs], dim=0
+            [out["audio_mel_stft"] for out in self.test_out_dicts], dim=0
         ).mean()
         audio_mel_stft_eval = None
-        if self.test_outs[0].get("audio_mel_stft_eval") is not None:
+        if self.test_out_dicts[0].get("audio_mel_stft_eval") is not None:
             audio_mel_stft_eval = tr.stack(
-                [out["audio_mel_stft_eval"] for out in self.test_outs], dim=0
+                [out["audio_mel_stft_eval"] for out in self.test_out_dicts], dim=0
             ).mean()
         audio_mfcc = tr.stack(
-            [out["audio_mfcc"] for out in self.test_outs], dim=0
+            [out["audio_mfcc"] for out in self.test_out_dicts], dim=0
         ).mean()
         audio_mfcc_eval = None
-        if self.test_outs[0].get("audio_mfcc_eval") is not None:
+        if self.test_out_dicts[0].get("audio_mfcc_eval") is not None:
             audio_mfcc_eval = tr.stack(
-                [out["audio_mfcc_eval"] for out in self.test_outs], dim=0
+                [out["audio_mfcc_eval"] for out in self.test_out_dicts], dim=0
             ).mean()
 
         tsv_data = [
@@ -537,14 +382,18 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # TODO(cm): refactor
         if self.fad_model_names:
-            wet = tr.cat([out["x"] for out in self.test_outs], dim=0).detach().cpu()
+            wet = (
+                tr.cat([out["x"] for out in self.test_out_dicts], dim=0).detach().cpu()
+            )
             wet_hat = (
-                tr.cat([out["x_hat"] for out in self.test_outs], dim=0).detach().cpu()
+                tr.cat([out["x_hat"] for out in self.test_out_dicts], dim=0)
+                .detach()
+                .cpu()
             )
             wet_eval = None
-            if self.test_outs[0].get("x_eval") is not None:
+            if self.test_out_dicts[0].get("x_eval") is not None:
                 wet_eval = (
-                    tr.cat([out["x_eval"] for out in self.test_outs], dim=0)
+                    tr.cat([out["x_eval"] for out in self.test_out_dicts], dim=0)
                     .detach()
                     .cpu()
                 )
@@ -649,5 +498,4 @@ class PreprocLightningModule(AcidDDSPLightingModule):
         batch_size = wet.size(0)
         assert f0_hz.shape == (batch_size,)
         assert note_on_duration.shape == (batch_size,)
-        batch["wet"] = wet
         return batch

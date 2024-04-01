@@ -2,6 +2,7 @@ import logging
 import os
 
 import torch as tr
+from torch import Tensor as T
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -73,5 +74,53 @@ class AudioConfig:
         self.min_w = self.calc_w(min_w_hz)
         self.max_w = self.calc_w(max_w_hz)
 
+        self.min_vals = {
+            "f0_hz": min_f0_hz,
+            "attack": min_attack,
+            "decay": min_decay,
+            "sustain": min_sustain,
+            "release": min_release,
+            "alpha": min_alpha,
+            "w_hz": min_w_hz,
+            "w": self.min_w,
+            "q": min_q,
+            "dist_gain": min_dist_gain,
+            "osc_shape": min_osc_shape,
+            "osc_gain": min_osc_gain,
+            "learned_alpha": min_learned_alpha,
+        }
+        self.max_vals = {
+            "f0_hz": max_f0_hz,
+            "attack": max_attack,
+            "decay": max_decay,
+            "sustain": max_sustain,
+            "release": max_release,
+            "alpha": max_alpha,
+            "w_hz": max_w_hz,
+            "w": self.max_w,
+            "q": max_q,
+            "dist_gain": max_dist_gain,
+            "osc_shape": max_osc_shape,
+            "osc_gain": max_osc_gain,
+            "learned_alpha": max_learned_alpha,
+        }
+        for param_name in self.min_vals.keys():
+            assert self.min_vals[param_name] <= self.max_vals[param_name]
+
     def calc_w(self, w_hz: float) -> float:
         return 2 * tr.pi * w_hz / self.sr
+
+    def is_fixed(self, param_name: str) -> bool:
+        return self.min_vals[param_name] == self.max_vals[param_name]
+
+    def convert_from_0to1(self, param_name: str, val: T) -> T:
+        assert 0.0 <= val <= 1.0
+        return ((val * (self.max_vals[param_name] - self.min_vals[param_name]))
+                + self.min_vals[param_name])
+
+    def convert_to_0to1(self, param_name: str, val: T) -> T:
+        assert self.min_vals[param_name] <= val <= self.max_vals[param_name]
+        if self.is_fixed(param_name):
+            return tr.zeros_like(val)
+        return ((val - self.min_vals[param_name])
+                / (self.max_vals[param_name] - self.min_vals[param_name]))
