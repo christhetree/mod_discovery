@@ -52,7 +52,7 @@ model:
 
     model: spectral_2dcnn_coeff.yml
     temp_params_name_hat: logits
-    global_param_names: [ osc_shape, osc_gain, dist_gain, learned_alpha ]
+    global_param_names_hat: [ osc_shape, osc_gain, dist_gain, learned_alpha ]
 #    synth_hat: synth_coeff_td.yml
     synth_hat: synth_coeff_fs_128.yml
 #    synth_hat: synth_coeff_fs_256.yml
@@ -64,7 +64,7 @@ model:
 
 #    model: spectral_2dcnn_lp.yml
 #    temp_params_name_hat: w_mod_sig
-#    global_param_names: [ q, osc_shape, osc_gain, dist_gain, learned_alpha ]
+#    global_param_names_hat: [ q, osc_shape, osc_gain, dist_gain, learned_alpha ]
 #    synth_hat: synth_lp_td.yml
 #    synth_hat: synth_lp_fs_128.yml
 #    synth_hat: synth_lp_fs_256.yml

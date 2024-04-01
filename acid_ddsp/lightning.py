@@ -42,6 +42,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         temp_params_name: Optional[str] = None,
         temp_params_name_hat: str = "mod_sig",
         global_param_names: Optional[List[str]] = None,
+        global_param_names_hat: Optional[List[str]] = None,
         use_p_loss: bool = False,
         log_envelope: bool = True,
         fad_model_names: Optional[List[str]] = None,
@@ -58,6 +59,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             assert synth_hat.interp_coeff == synth.interp_coeff
         if global_param_names is None:
             global_param_names = []
+        if global_param_names_hat is None:
+            global_param_names_hat = []
         if fad_model_names is None:
             fad_model_names = []
         if run_name is None:
@@ -75,6 +78,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.temp_params_name = temp_params_name
         self.temp_params_name_hat = temp_params_name_hat
         self.global_param_names = global_param_names
+        self.global_param_names_hat = global_param_names_hat
         self.use_p_loss = use_p_loss
         self.log_envelope = log_envelope
         self.fad_model_names = fad_model_names
@@ -204,7 +208,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # Postprocess global_params_hat
         global_params_0to1_hat = {}
         global_params_hat = {}
-        for p_name in self.global_param_names:
+        for p_name in self.global_param_names_hat:
             p_val_0to1_hat = model_out[f"{p_name}_0to1"]
             p_val_hat = self.ac.convert_from_0to1(p_name, p_val_0to1_hat)
             global_params_0to1_hat[p_name] = p_val_0to1_hat
@@ -223,7 +227,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         log_spec_wet = log_spec_wet.squeeze(1)
 
         # Postprocess q_hat TODO(cm): generalize
-        if "q" in self.global_param_names:
+        if "q" in self.global_param_names_hat:
             q_0to1_hat = global_params_0to1_hat["q"]
             q_mod_sig_hat = q_0to1_hat.unsqueeze(-1)
             filter_args_hat["q_mod_sig"] = q_mod_sig_hat
