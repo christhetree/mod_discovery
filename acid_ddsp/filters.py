@@ -252,27 +252,26 @@ class TimeVaryingLPBiquad(nn.Module):
         w, q = self.calc_w_and_q(x, w_mod_sig, q_mod_sig)
         n_samples = x.size(1)
         if not interp_coeff:
-            assert False  # TODO(cm): tmp
             w = util.linear_interpolate_dim(w, n_samples, dim=1, align_corners=True)
             q = util.linear_interpolate_dim(q, n_samples, dim=1, align_corners=True)
             assert x.shape == w.shape == q.shape
-        a_coeffs, b_coeffs = calc_lp_biquad_coeff(w, q, eps=self.eps)
+        a_coeff, b_coeff = calc_lp_biquad_coeff(w, q, eps=self.eps)
         if interp_coeff:
-            a_coeffs = util.linear_interpolate_dim(
-                a_coeffs, n_samples, dim=1, align_corners=True
+            a_coeff = util.linear_interpolate_dim(
+                a_coeff, n_samples, dim=1, align_corners=True
             )
-            b_coeffs = util.linear_interpolate_dim(
-                b_coeffs, n_samples, dim=1, align_corners=True
+            b_coeff = util.linear_interpolate_dim(
+                b_coeff, n_samples, dim=1, align_corners=True
             )
-        y_a = sample_wise_lpc(x, a_coeffs)
+        y_a = sample_wise_lpc(x, a_coeff)
         assert not tr.isinf(y_a).any()
         assert not tr.isnan(y_a).any()
-        y_ab = time_varying_fir(y_a, b_coeffs)
-        a1 = a_coeffs[:, :, 0]
-        a2 = a_coeffs[:, :, 1]
+        y_ab = time_varying_fir(y_a, b_coeff)
+        a1 = a_coeff[:, :, 0]
+        a2 = a_coeff[:, :, 1]
         a0 = tr.ones_like(a1)
-        a_coeffs = tr.stack([a0, a1, a2], dim=2)
-        return y_ab, a_coeffs, b_coeffs
+        a_coeff = tr.stack([a0, a1, a2], dim=2)
+        return y_ab, a_coeff, b_coeff
 
 
 class TimeVaryingLPBiquadFSM(TimeVaryingLPBiquad):
@@ -319,20 +318,19 @@ class TimeVaryingLPBiquadFSM(TimeVaryingLPBiquad):
         n_samples = x.size(1)
         n_frames = self.filter.calc_n_frames(n_samples)
         if not interp_coeff:
-            assert False  # TODO(cm): tmp
             w = util.linear_interpolate_dim(w, n_frames, dim=1, align_corners=True)
             q = util.linear_interpolate_dim(q, n_frames, dim=1, align_corners=True)
-        a_coeffs, b_coeffs = calc_lp_biquad_coeff(w, q, eps=self.eps)
+        a_coeff, b_coeff = calc_lp_biquad_coeff(w, q, eps=self.eps)
         if interp_coeff:
-            a_coeffs = util.linear_interpolate_dim(
-                a_coeffs, n_frames, dim=1, align_corners=True
+            a_coeff = util.linear_interpolate_dim(
+                a_coeff, n_frames, dim=1, align_corners=True
             )
-            b_coeffs = util.linear_interpolate_dim(
-                b_coeffs, n_frames, dim=1, align_corners=True
+            b_coeff = util.linear_interpolate_dim(
+                b_coeff, n_frames, dim=1, align_corners=True
             )
-        a1 = a_coeffs[:, :, 0]
-        a2 = a_coeffs[:, :, 1]
+        a1 = a_coeff[:, :, 0]
+        a2 = a_coeff[:, :, 1]
         a0 = tr.ones_like(a1)
-        a_coeffs = tr.stack([a0, a1, a2], dim=2)
-        y = self.filter(x, a_coeffs, b_coeffs)
-        return y, a_coeffs, b_coeffs
+        a_coeff = tr.stack([a0, a1, a2], dim=2)
+        y = self.filter(x, a_coeff, b_coeff)
+        return y, a_coeff, b_coeff
