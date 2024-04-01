@@ -86,7 +86,7 @@ class LogModSigAndSpecCallback(Callback):
             log_spec_wet = out_dict.get("log_spec_wet")
             log_spec_wet_hat = out_dict.get("log_spec_wet_hat")
 
-            temp_params = out_dict["temp_params"]
+            temp_params = out_dict.get("temp_params")
             temp_params_hat = out_dict["temp_params_hat"]
             mod_sig_esr = -1
             mod_sig_l1 = -1
@@ -98,19 +98,16 @@ class LogModSigAndSpecCallback(Callback):
                         ).item()
                         mod_sig_l1 = self.l1(temp_params[0], temp_params_hat[0]).item()
 
-            global_params = out_dict["global_params"]
-            global_params_hat = out_dict["global_params_hat"]
-
-            q = global_params.get("q", [-1])
-            q_hat = global_params_hat.get("q_hat", [-1])
-            dist_gain = global_params.get("dist_gain", [-1])
-            dist_gain_hat = global_params_hat.get("dist_gain_hat", [-1])
-            osc_shape = global_params.get("osc_shape", [-1])
-            osc_shape_hat = global_params_hat.get("osc_shape_hat", [-1])
-            osc_gain = global_params.get("osc_gain", [-1])
-            osc_gain_hat = global_params_hat.get("osc_gain_hat", [-1])
-            learned_alpha = global_params.get("learned_alpha", [-1])
-            learned_alpha_hat = global_params_hat.get("learned_alpha_hat", [-1])
+            q = out_dict.get("q", [-1])
+            q_hat = out_dict.get("q_hat", [-1])
+            dist_gain = out_dict.get("dist_gain", [-1])
+            dist_gain_hat = out_dict.get("dist_gain_hat", [-1])
+            osc_shape = out_dict.get("osc_shape", [-1])
+            osc_shape_hat = out_dict.get("osc_shape_hat", [-1])
+            osc_gain = out_dict.get("osc_gain", [-1])
+            osc_gain_hat = out_dict.get("osc_gain_hat", [-1])
+            learned_alpha = out_dict.get("learned_alpha", [-1])
+            learned_alpha_hat = out_dict.get("learned_alpha_hat", [-1])
 
             y_coords = pl_module.spectral_visualizer.center_freqs
             y_ticks = [
@@ -199,7 +196,7 @@ class LogModSigAndSpecCallback(Callback):
                 for idx in range(temp_params_hat_np.shape[1]):
                     ax[2].plot(
                         temp_params_hat_np[:, idx],
-                        label=f"{pl_module.temp_params_hat_name}_{idx}",
+                        label=f"{pl_module.temp_params_name_hat}_{idx}",
                         color="orange",
                     )
                 ax[2].set(aspect=temp_params_hat.size(1))

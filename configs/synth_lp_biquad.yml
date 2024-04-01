@@ -1,0 +1,4 @@
+class_path: synths.AcidSynthLPBiquad
+init_args:
+  ac: ../configs/audio_config_abstract_303.yml
+  batch_size: 34

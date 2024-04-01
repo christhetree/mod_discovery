@@ -90,7 +90,6 @@ class PreprocDataset(Dataset):
         assert sr == self.ac.sr
         assert n_samples == self.ac.n_samples
         audio = audio.squeeze(0)
-        phase = (tr.rand((1,)) * 2 * tr.pi) - tr.pi
         phase_hat = (tr.rand((1,)) * 2 * tr.pi) - tr.pi
         # TODO(cm): peak normalize?
 
@@ -98,7 +97,6 @@ class PreprocDataset(Dataset):
             "wet": audio,
             "f0_hz": f0_hz,
             "note_on_duration": note_on_duration,
-            "phase": phase,
             "phase_hat": phase_hat,
             "audio_paths": audio_path,
         }

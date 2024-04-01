@@ -114,12 +114,14 @@ class AudioConfig:
         return self.min_vals[param_name] == self.max_vals[param_name]
 
     def convert_from_0to1(self, param_name: str, val: T) -> T:
-        assert 0.0 <= val <= 1.0
+        assert val.min() >= 0.0
+        assert val.max() <= 1.0
         return ((val * (self.max_vals[param_name] - self.min_vals[param_name]))
                 + self.min_vals[param_name])
 
     def convert_to_0to1(self, param_name: str, val: T) -> T:
-        assert self.min_vals[param_name] <= val <= self.max_vals[param_name]
+        assert val.min() >= self.min_vals[param_name]
+        assert val.max() <= self.max_vals[param_name]
         if self.is_fixed(param_name):
             return tr.zeros_like(val)
         return ((val - self.min_vals[param_name])

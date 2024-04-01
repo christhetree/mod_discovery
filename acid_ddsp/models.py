@@ -110,7 +110,7 @@ class Spectral2DCNN(nn.Module):
 
         # Extract features
         log_spec = self.fe(x)
-        out_dict["log_spec"] = log_spec
+        out_dict["log_spec_wet"] = log_spec
 
         # Calc latent
         x = self.cnn(log_spec)
@@ -137,8 +137,8 @@ class Spectral2DCNN(nn.Module):
         # Calc global params
         x = tr.mean(latent, dim=-2)
         for param_name in self.global_param_names:
-            x = self.out_global[param_name](x).squeeze(-1)
-            out_dict[param_name] = x
+            p_val_hat = self.out_global[param_name](x).squeeze(-1)
+            out_dict[param_name] = p_val_hat
 
         return out_dict
 

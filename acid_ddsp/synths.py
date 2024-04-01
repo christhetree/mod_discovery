@@ -93,8 +93,8 @@ class AcidSynthBase(ABC, nn.Module):
         wet_audio = wet_audio * dist_gain.unsqueeze(-1)
         wet_audio = tr.tanh(wet_audio)
         synth_out = {
-            "dry_audio": dry_audio,
-            "wet_audio": wet_audio,
+            "dry": dry_audio,
+            "wet": wet_audio,
             "envelope": envelope,
         }
         synth_out.update(filter_out)
@@ -113,6 +113,10 @@ class AcidSynthLPBiquad(AcidSynthBase):
         )
 
     def filter_dry_audio(self, x: T, w_mod_sig: T, q_mod_sig: T) -> (T, Dict[str, T]):
+        if w_mod_sig.ndim == 3:
+            w_mod_sig = w_mod_sig.squeeze(2)
+        if q_mod_sig.ndim == 3:
+            q_mod_sig = q_mod_sig.squeeze(2)
         y, a_coeff, b_coeff = self.filter(
             x, w_mod_sig, q_mod_sig, interp_coeff=self.interp_coeff
         )

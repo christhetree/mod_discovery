@@ -4,8 +4,8 @@ custom:
   project_name: acid_ddsp
 #  model_name: testing
 #  model_name: cnn_mss_coeff
-#  model_name: cnn_mss_coeff_fsm_128_32_1
-  model_name: cnn_mss_coeff_fsm_256_32_1
+  model_name: cnn_mss_coeff_fsm_128_32_1
+#  model_name: cnn_mss_coeff_fsm_256_32_1
 #  model_name: cnn_mss_coeff_fsm_512_32_1
 #  model_name: cnn_mss_coeff_fsm_1024_32_1
 #  model_name: cnn_mss_coeff_fsm_2048_32_1
@@ -22,10 +22,10 @@ trainer:
   benchmark: false
   devices: [0]
   max_epochs: 200
-  num_sanity_val_steps: 0
+  num_sanity_val_steps: 1
   accumulate_grad_batches: 1
-#  check_val_every_n_epoch: 1
-  check_val_every_n_epoch: 8
+  check_val_every_n_epoch: 1
+#  check_val_every_n_epoch: 8
   gradient_clip_val: 0.5
 
 data:
@@ -38,23 +38,33 @@ data:
     val_split: 0.2
     test_split: 0.2
     split_seed: 42
+    n_phases_per_file: 1
     num_workers: 4
 
 model:
   class_path: lightning.PreprocLightningModule
   init_args:
     ac: ../configs/audio_config_abstract_303.yml
+    model: ../configs/spectral_2dcnn_lp_biquad.yml
+    loss_func: auraloss.freq.MultiResolutionSTFTLoss
+    spectral_visualizer: ../configs/log_mel_spec.yml
+    synth_hat: ../configs/synth_lp_biquad_fsm_128.yml
+    synth_eval: ../configs/synth_lp_biquad.yml
+    temp_params_name_hat: w_mod_sig
+    global_param_names: [q, osc_shape, osc_gain, dist_gain, learned_alpha]
+    use_p_loss: false
+    log_envelope: true
 
 #    model: ../configs/spectral_2dcnn_logits5.yml
 #    synth_hat_type: AcidSynthLearnedBiquadCoeff
 
-    model: ../configs/spectral_2dcnn_logits5.yml
-    synth_hat_type: AcidSynthLearnedBiquadCoeffFSM
-    synth_hat_kwargs:
+#    model: ../configs/spectral_2dcnn_logits5.yml
+#    synth_hat_type: AcidSynthLearnedBiquadCoeffFSM
+#    synth_hat_kwargs:
 #      win_len: 128
 #      overlap: 0.75  # 32 samples at 256
-      win_len: 256
-      overlap: 0.875  # 32 samples at 256
+#      win_len: 256
+#      overlap: 0.875  # 32 samples at 256
 #      win_len: 512
 #      win_len: 512
 #      overlap: 0.9375  # 32 samples at 512
@@ -95,15 +105,15 @@ model:
 #    loss_func: torch.nn.MSELoss
 #    loss_func: auraloss.time.ESRLoss
 #    loss_func: ../configs/rand_mss.yml
-    loss_func: auraloss.freq.MultiResolutionSTFTLoss
-    use_p_loss: false
+#    loss_func: auraloss.freq.MultiResolutionSTFTLoss
+#    use_p_loss: false
 
-    log_envelope: true
-    spectral_visualizer: ../configs/log_mel_spec.yml
-    synth_eval_type: AcidSynthLearnedBiquadCoeff
+#    log_envelope: true
+#    spectral_visualizer: ../configs/log_mel_spec.yml
+#    synth_eval_type: AcidSynthLearnedBiquadCoeff
 #    synth_eval_type: AcidSynthLPBiquad
 
-    fad_model_names:
+#    fad_model_names:
 #      - clap-2023
 #      - encodec-emb
 #      - wavlm-base

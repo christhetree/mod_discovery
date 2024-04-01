@@ -6,9 +6,9 @@ import numpy as np
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 
-from acid_ddsp.audio_config import AudioConfig
-from acid_ddsp.datasets import AcidSynthDataset, PreprocDataset
-from acid_ddsp.modulations import ModSignalGenerator
+from audio_config import AudioConfig
+from datasets import AcidSynthDataset, PreprocDataset
+from modulations import ModSignalGenerator
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -90,8 +90,8 @@ class PreprocDataModule(pl.LightningDataModule):
         ac: AudioConfig,
         data_dir: str,
         ext: str = "wav",
-        val_split: float = 0.15,
-        test_split: float = 0.15,
+        val_split: float = 0.2,
+        test_split: float = 0.2,
         split_seed: int = 42,
         n_phases_per_file: int = 1,
         num_workers: int = 0,

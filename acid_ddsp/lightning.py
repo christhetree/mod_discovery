@@ -15,8 +15,8 @@ from torch import Tensor as T
 from torch import nn
 from tqdm import tqdm
 
-import acid_ddsp.util as util
-from acid_ddsp.audio_config import AudioConfig
+import util
+from audio_config import AudioConfig
 from fad import save_and_concat_fad_audio, calc_fad
 from feature_extraction import LogMelSpecFeatureExtractor
 from losses import MFCCL1
@@ -172,9 +172,15 @@ class AcidDDSPLightingModule(pl.LightningModule):
         wet = batch["wet"]
         phase_hat = batch["phase_hat"]
         global_params_0to1 = {
-            p_name: batch[f"{p_name}_0to1"] for p_name in self.global_param_names
+            p_name: batch[f"{p_name}_0to1"]
+            for p_name in self.global_param_names
+            if f"{p_name}_0to1" in batch
         }
-        global_params = {p_name: batch[p_name] for p_name in self.global_param_names}
+        global_params = {
+            p_name: batch[p_name]
+            for p_name in self.global_param_names
+            if p_name in batch
+        }
 
         # Get optional params
         dry = batch.get("dry")
@@ -200,7 +206,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             p_val_hat = self.ac.convert_from_0to1(p_name, p_val_0to1_hat)
             global_params_0to1_hat[p_name] = p_val_0to1_hat
             global_params_hat[p_name] = p_val_hat
-            if not self.ac.is_fixed(p_name):
+            if not self.ac.is_fixed(p_name) and p_name in global_params_0to1:
                 p_val_0to1 = global_params_0to1[p_name]
                 with tr.no_grad():
                     p_val_l1 = self.l1(p_val_0to1_hat, p_val_0to1)
@@ -313,6 +319,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             except Exception as e:
                 log.error(f"Error in eval synth: {e}")
 
+        global_params_hat = {f"{k}_hat": v for k, v in global_params_hat.items()}
+        audio_metrics_hat = {f"{k}_hat": v for k, v in audio_metrics_hat.items()}
+        audio_metrics_eval = {f"{k}_eval": v for k, v in audio_metrics_eval.items()}
         out_dict = {
             "loss": loss,
             "dry": dry,
@@ -324,12 +333,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "log_spec_wet_hat": log_spec_wet_hat,
             "temp_params": temp_params,
             "temp_params_hat": temp_params_hat,
-            "global_params": global_params,
-            "global_params_hat": global_params_hat,
-            "audio_metrics_hat": audio_metrics_hat,
-            "audio_metrics_eval": audio_metrics_eval,
-            "temp_param_metrics": temp_param_metrics,
         }
+        out_dict.update(temp_param_metrics)
+        out_dict.update(global_params)
+        out_dict.update(global_params_hat)
+        out_dict.update(audio_metrics_hat)
+        out_dict.update(audio_metrics_eval)
         return out_dict
 
     def training_step(self, batch: Dict[str, T], batch_idx: int) -> Dict[str, T]:
