@@ -28,7 +28,7 @@ class ADSRLite(nn.Module):
         alpha: T,
         n_samples: int,
         start_sec: Optional[T] = None,
-        inverse: Optional[bool] = False,
+        inverse: bool = False,
     ) -> T:
         assert duration_sec.ndim == 1
         assert alpha.shape == duration_sec.shape

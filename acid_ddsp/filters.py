@@ -1,7 +1,7 @@
 import logging
 import math
 import os
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch as tr
 import torch.nn.functional as F
@@ -33,6 +33,33 @@ def time_varying_fir(x: T, b: T) -> T:
     return y
 
 
+def sample_wise_lpc_scriptable(x: T, a: T, zi: Optional[T] = None) -> T:
+    assert x.ndim == 2
+    assert a.ndim == 3
+    assert x.size(0) == a.size(0)
+    assert x.size(1) == a.size(1)
+
+    B, T, order = a.shape
+    if zi is None:
+        zi = a.new_zeros(B, order)
+    else:
+        assert zi.shape == (B, order)
+
+    padded_y = tr.empty((B, T + order), dtype=x.dtype)
+    zi = tr.flip(zi, dims=[1])
+    padded_y[:, :order] = zi
+    padded_y[:, order:] = x
+
+    for b in range(B):
+        for t in range(T):
+            ref = padded_y[b, t + order]
+            for i in range(order):
+                ref -= a[b, t, i] * padded_y[b, t + order - i - 1]
+            padded_y[b, t + order] = ref
+
+    return padded_y[:, order:]
+
+
 def calc_logits_to_biquad_a_coeff_triangle(a_logits: T, eps: float = 1e-3) -> T:
     assert a_logits.size(-1) == 2
     assert not tr.isnan(a_logits).any()
@@ -52,7 +79,7 @@ def calc_logits_to_biquad_a_coeff_triangle(a_logits: T, eps: float = 1e-3) -> T:
 
 def calc_logits_to_biquad_coeff_pole_zero(
     q_real: T, q_imag: T, p_real: T, p_imag: T, eps: float = 1e-3
-) -> (T, T):
+) -> Tuple[T, T]:
     assert q_real.ndim == 2
     assert q_real.shape == q_imag.shape == p_real.shape == p_imag.shape
     stability_factor = 1.0 - eps
@@ -77,7 +104,7 @@ def calc_logits_to_biquad_coeff_pole_zero(
     return a, b
 
 
-def calc_lp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T):
+def calc_lp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> Tuple[T, T]:
     assert w.ndim == 2
     assert q.ndim == 2
     assert 0.0 <= w.min()
@@ -196,6 +223,7 @@ class TimeVaryingLPBiquad(nn.Module):
         eps: float = 1e-3,
         modulate_log_w: bool = True,
         modulate_log_q: bool = True,
+        make_scriptable: bool = False,
     ):
         super().__init__()
         assert 0.0 <= min_w <= max_w <= tr.pi
@@ -211,10 +239,14 @@ class TimeVaryingLPBiquad(nn.Module):
         self.eps = eps
         self.modulate_log_w = modulate_log_w
         self.modulate_log_q = modulate_log_q
+        if make_scriptable:
+            self.lpc_func = sample_wise_lpc_scriptable
+        else:
+            self.lpc_func = sample_wise_lpc
 
     def calc_w_and_q(
         self, x: T, w_mod_sig: Optional[T] = None, q_mod_sig: Optional[T] = None
-    ) -> (T, T):
+    ) -> Tuple[T, T]:
         if w_mod_sig is None:
             w_mod_sig = tr.zeros_like(x)
         if q_mod_sig is None:
@@ -248,7 +280,7 @@ class TimeVaryingLPBiquad(nn.Module):
         w_mod_sig: Optional[T] = None,
         q_mod_sig: Optional[T] = None,
         interp_coeff: bool = False,
-    ) -> (T, T, T):
+    ) -> Tuple[T, T, T]:
         w, q = self.calc_w_and_q(x, w_mod_sig, q_mod_sig)
         n_samples = x.size(1)
         if not interp_coeff:
@@ -263,7 +295,7 @@ class TimeVaryingLPBiquad(nn.Module):
             b_coeff = util.linear_interpolate_dim(
                 b_coeff, n_samples, dim=1, align_corners=True
             )
-        y_a = sample_wise_lpc(x, a_coeff)
+        y_a = self.lpc_func(x, a_coeff)
         assert not tr.isinf(y_a).any()
         assert not tr.isnan(y_a).any()
         y_ab = time_varying_fir(y_a, b_coeff)
@@ -313,7 +345,7 @@ class TimeVaryingLPBiquadFSM(TimeVaryingLPBiquad):
         w_mod_sig: Optional[T] = None,
         q_mod_sig: Optional[T] = None,
         interp_coeff: bool = False,
-    ) -> (T, T, T):
+    ) -> Tuple[T, T, T]:
         w, q = self.calc_w_and_q(x, w_mod_sig, q_mod_sig)
         n_samples = x.size(1)
         n_frames = self.filter.calc_n_frames(n_samples)
