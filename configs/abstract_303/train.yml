@@ -2,17 +2,18 @@ seed_everything: 42
 
 custom:
   project_name: acid_ddsp
-  #  model_name: testing
-  #  model_name: cnn_mss_coeff
-  model_name: cnn_mss_coeff_fsm_128_32_1
-  #  model_name: cnn_mss_coeff_fsm_256_32_1
-  #  model_name: cnn_mss_coeff_fsm_512_32_1
-  #  model_name: cnn_mss_coeff_fsm_1024_32_1
-  #  model_name: cnn_mss_coeff_fsm_2048_32_1
-  #  model_name: cnn_mss_coeff_fsm_4096_32_1
+#  model_name: testing
+#  model_name: cnn_mss_coeff
+  model_name: cnn_mss_adapter2
+#  model_name: cnn_mss_coeff_fsm_128_32_1
+#  model_name: cnn_mss_coeff_fsm_256_32_1
+#  model_name: cnn_mss_coeff_fsm_512_32_1
+#  model_name: cnn_mss_coeff_fsm_1024_32_1
+#  model_name: cnn_mss_coeff_fsm_2048_32_1
+#  model_name: cnn_mss_coeff_fsm_4096_32_1
 #  model_name: cnn_mss_lstm64
   dataset_name: abstract_303_48k__6k__4k_min
-  #  cpu_batch_size: 5  # For now must be >= n_examples
+#  cpu_batch_size: 5  # For now must be >= n_examples
   cpu_batch_size: 34  # For now must be >= n_examples
   use_wandb_cpu: false
   use_wandb_gpu: true
@@ -20,7 +21,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [ 0 ]
+  devices: [0]
   max_epochs: 200
   num_sanity_val_steps: 0
   accumulate_grad_batches: 1
@@ -53,14 +54,14 @@ model:
     model: spectral_2dcnn_coeff.yml
     temp_params_name_hat: logits
     global_param_names_hat: [ osc_shape, osc_gain, dist_gain, learned_alpha ]
-#    synth_hat: synth_coeff_td.yml
-    synth_hat: synth_coeff_fs_128.yml
+    synth_hat: synth_coeff_td.yml
+#    synth_hat: synth_coeff_fs_128.yml
 #    synth_hat: synth_coeff_fs_256.yml
 #    synth_hat: synth_coeff_fs_512.yml
 #    synth_hat: synth_coeff_fs_1024.yml
 #    synth_hat: synth_coeff_fs_2048.yml
 #    synth_hat: synth_coeff_fs_4096.yml
-    synth_eval: synth_coeff_td.yml
+#    synth_eval: synth_coeff_td.yml
 
 #    model: spectral_2dcnn_lp.yml
 #    temp_params_name_hat: w_mod_sig

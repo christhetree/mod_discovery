@@ -54,10 +54,10 @@ class LogMelSpecFeatureExtractor(nn.Module):
         ).tolist()
         self.n_bins = n_mels
         self.n_frames = n_samples // hop_len + 1
-        self.freq_mask = FrequencyMasking(
+        self.freq_masking = FrequencyMasking(
             freq_mask_param=int(freq_mask_amount * self.n_bins)
         )
-        self.time_mask = TimeMasking(
+        self.time_masking = TimeMasking(
             time_mask_param=int(time_mask_amount * self.n_frames)
         )
 

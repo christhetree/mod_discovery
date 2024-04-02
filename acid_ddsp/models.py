@@ -15,6 +15,8 @@ log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
 class Spectral2DCNN(nn.Module):
+    global_param_names: List[str]
+
     def __init__(
         self,
         fe: LogMelSpecFeatureExtractor,
@@ -136,8 +138,8 @@ class Spectral2DCNN(nn.Module):
 
         # Calc global params
         x = tr.mean(latent, dim=-2)
-        for param_name in self.global_param_names:
-            p_val_hat = self.out_global[param_name](x).squeeze(-1)
+        for param_name, mlp in self.out_global.items():
+            p_val_hat = mlp(x).squeeze(-1)
             out_dict[param_name] = p_val_hat
 
         return out_dict
@@ -151,6 +153,36 @@ class Spectral2DCNN(nn.Module):
         for dil in dilations[1:]:
             rf = rf + ((kernel_size - 1) * dil)
         return rf
+
+
+class TemporalAdapter(nn.Module):
+    def __init__(
+        self,
+        n_temp_params: int,
+        n_logits: int,
+        hidden_sizes: List[int],
+        dropout: float = 0.0,
+    ) -> None:
+        super().__init__()
+        self.n_temp_params = n_temp_params
+        self.n_logits = n_logits
+        self.hidden_sizes = hidden_sizes
+        self.dropout = dropout
+        layers = []
+        curr_in_ch = n_temp_params
+        hidden_sizes = hidden_sizes + [n_logits]
+        for n_hidden in hidden_sizes:
+            layers.append(nn.Linear(curr_in_ch, n_hidden))
+            layers.append(nn.Dropout(p=dropout))
+            layers.append(nn.PReLU())
+            curr_in_ch = n_hidden
+        self.adapter = nn.Sequential(*layers)
+
+    def forward(self, x: T) -> Dict[str, T]:
+        assert x.ndim == 3
+        assert x.size(2) == self.n_temp_params
+        x = self.adapter(x)
+        return x
 
 
 if __name__ == "__main__":
@@ -172,3 +204,5 @@ if __name__ == "__main__":
     mod_sig = out_dict["mod_sig"]
     latent = out_dict["latent"]
     log.info(f"mod_sig.shape: {mod_sig.shape}, latent.shape: {latent.shape}")
+
+    tr.jit.script(model)

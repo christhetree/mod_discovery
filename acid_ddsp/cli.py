@@ -2,7 +2,6 @@ import logging
 import os
 from typing import Optional, Dict, Any
 
-import torch as tr
 import yaml
 from jsonargparse import lazy_instance
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
@@ -120,12 +119,6 @@ class CustomLightningCLI(LightningCLI):
             config = self.config
             self.update_config(config)
 
-        if config.custom.is_deterministic:
-            log.info("Setting torch.use_deterministic_algorithms(True)")
-            os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-            tr.use_deterministic_algorithms(True, warn_only=True)
-            # tr.backends.cudnn.deterministic = True
-
         devices = config.trainer.devices
         if isinstance(devices, list):
             cuda_flag = f'{",".join([str(d) for d in devices])}'
@@ -133,9 +126,17 @@ class CustomLightningCLI(LightningCLI):
             os.environ["CUDA_VISIBLE_DEVICES"] = f"{cuda_flag}"
             config.trainer.devices = len(devices)
 
+        import torch as tr  # This prevents a bug when setting CUDA_VISIBLE_DEVICES
+
         if config.trainer.devices < 2:
             log.info("Disabling strategy")
             config.trainer.strategy = "auto"
+
+        if config.custom.is_deterministic:
+            log.info("Setting torch.use_deterministic_algorithms(True)")
+            os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+            tr.use_deterministic_algorithms(True, warn_only=True)
+            # tr.backends.cudnn.deterministic = True
 
         if not tr.cuda.is_available():
             config.trainer.accelerator = "auto"
@@ -165,6 +166,7 @@ class CustomLightningCLI(LightningCLI):
                 )
                 log.info(f"Setting checkpoint name to: {cb.filename}")
 
+        import torch as tr
         use_gpu = tr.cuda.is_available()
         if (use_gpu and self.config.fit.custom.use_wandb_gpu) or (
             not use_gpu and self.config.fit.custom.use_wandb_cpu
