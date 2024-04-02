@@ -62,6 +62,131 @@ class CustomADSR(ADSR):
         super().__init__(sc, **kwargs)
 
 
+class ADSRLite(nn.Module):
+    # Based off TorchSynth's ADSR
+    def __init__(self, sr: int, eps: float = 1e-7):
+        super().__init__()
+        self.sr = sr
+        self.eps = eps
+        self.register_buffer("zero", tr.tensor(0.0))
+        self.register_buffer("one", tr.tensor(1.0))
+
+    def seconds_to_samples(self, seconds: T) -> T:
+        return seconds * self.sr
+
+    def ramp(
+        self,
+        duration_sec: T,
+        alpha: T,
+        n_samples: int,
+        start_sec: Optional[T] = None,
+        inverse: Optional[bool] = False,
+    ) -> T:
+        assert duration_sec.ndim == 1
+        assert alpha.shape == duration_sec.shape
+        bs = duration_sec.size(0)
+        duration = self.seconds_to_samples(duration_sec).unsqueeze(1)
+        assert duration.min() >= 1.0
+        assert duration.max() <= n_samples
+
+        # Convert to number of samples.
+        start = self.zero
+        if start_sec is not None:
+            assert start_sec.shape == duration_sec.shape
+            start = self.seconds_to_samples(start_sec).unsqueeze(1)
+        assert start.min() >= 0.0
+        assert start.max() < n_samples
+
+        # Build ramps template.
+        range_ = tr.arange(n_samples, dtype=duration.dtype, device=duration.device)
+        ramp = range_.expand((bs, range_.size(0)))
+
+        # Shape ramps.
+        ramp = ramp - start
+        ramp = tr.maximum(ramp, self.zero)
+        ramp = (ramp + self.eps) / duration + self.eps
+        ramp = tr.minimum(ramp, self.one)
+
+        # The following is a workaround. In inverse mode, a ramp with 0 duration
+        # (that is all 1's) becomes all 0's, which is a problem for the
+        # ultimate calculation of the ADSR signal (a * d * r => 0's). So this
+        # replaces only rows who sum to 0 (i.e., all components are zero).
+        if inverse:
+            ramp = tr.where(duration > 0.0, 1.0 - ramp, ramp)
+
+        # Apply scaling factor.
+        ramp = tr.pow(ramp, alpha.unsqueeze(1))
+        return ramp
+
+    def make_attack(self, attack: T, alpha: T, n_samples: int) -> T:
+        return self.ramp(attack, alpha, n_samples)
+
+    def make_decay(
+        self, attack: T, decay: T, sustain: T, alpha: T, n_samples: int
+    ) -> T:
+        assert attack.ndim == 1
+        assert attack.shape == decay.shape == sustain.shape == alpha.shape
+        sustain = sustain.unsqueeze(1)
+        a = 1.0 - sustain
+        b = self.ramp(decay, alpha, n_samples, start_sec=attack, inverse=True)
+        out = a * b + sustain
+        out = out.squeeze(1)
+        return out
+
+    def make_release(
+        self, release: T, alpha: T, note_on_duration: T, n_samples: int
+    ) -> T:
+        return self.ramp(
+            release, alpha, n_samples, start_sec=note_on_duration, inverse=True
+        )
+
+    def forward(
+        self,
+        attack: T,
+        decay: T,
+        sustain: T,
+        release: T,
+        alpha: T,
+        note_on_duration: T,
+        n_samples: int,
+    ) -> T:
+        assert attack.ndim == 1
+        assert (
+            attack.shape
+            == decay.shape
+            == sustain.shape
+            == release.shape
+            == alpha.shape
+            == note_on_duration.shape
+        )
+        assert alpha.min() >= 0.0
+
+        new_attack = tr.minimum(attack, note_on_duration)
+        new_decay = tr.maximum(note_on_duration - attack, self.zero)
+        new_decay = tr.minimum(new_decay, decay)
+
+        attack_signal = self.make_attack(new_attack, alpha, n_samples)
+        decay_signal = self.make_decay(new_attack, new_decay, sustain, alpha, n_samples)
+        release_signal = self.make_release(release, alpha, note_on_duration, n_samples)
+
+        envelope = attack_signal * decay_signal * release_signal
+        return envelope
+
+
+class ExpDecayEnv(ADSRLite):
+    def forward(
+        self,
+        alpha: T,
+        note_on_duration: T,
+        n_samples: int,
+    ) -> T:
+        assert alpha.ndim == 1
+        assert alpha.shape == note_on_duration.shape
+        assert alpha.min() >= 0.0
+        envelope = self.ramp(note_on_duration, alpha, n_samples, inverse=True)
+        return envelope
+
+
 class SquareSawVCOLite(nn.Module):
     # Based off TorchSynth's SquareSawVCO
     def __init__(self, sr: int, batch_size: int):
@@ -127,6 +252,25 @@ class SquareSawVCOLite(nn.Module):
 
 
 if __name__ == "__main__":
+    adsr = ADSRLite(10, eps=1e-3)
+    exp_decay = ExpDecayEnv(10, eps=1e-3)
+    attack = tr.tensor([0.1, 0.2])
+    decay = tr.tensor([0.1, 0.2])
+    sustain = tr.tensor([0.2, 0.3])
+    release = tr.tensor([0.1, 0.2])
+    alpha = tr.tensor([1.0, 2.5])
+    note_on_duration = tr.tensor([0.1, 1.0])
+    n_samples = 10
+    # envelope = adsr(attack, decay, sustain, release, alpha, note_on_duration, n_samples)
+    envelope = exp_decay(alpha, note_on_duration, n_samples)
+    import matplotlib.pyplot as plt
+
+    plt.plot(envelope[0].numpy())
+    plt.plot(envelope[1].numpy())
+    plt.show()
+    log.info(f"envelope.shape = {envelope.shape}, envelope.max(): {envelope.max()}, envelope.min(): {envelope.min()}")
+    exit()
+
     import torchaudio
 
     freq = tr.tensor([220.0, 220.0])
