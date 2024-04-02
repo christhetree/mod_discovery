@@ -1,5 +1,4 @@
 class_path: synths.AcidSynthLSTM
 init_args:
   ac: audio_config.yml
-  batch_size: 34
   n_hidden: 64

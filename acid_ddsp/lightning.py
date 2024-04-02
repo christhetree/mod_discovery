@@ -31,7 +31,6 @@ log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 class AcidDDSPLightingModule(pl.LightningModule):
     def __init__(
         self,
-        batch_size: int,
         ac: AudioConfig,
         model: nn.Module,
         loss_func: nn.Module,
@@ -50,9 +49,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
     ):
         super().__init__()
         if synth is None:
-            synth = AcidSynthLPBiquad(ac, batch_size)
+            synth = AcidSynthLPBiquad(ac)
         if synth_hat is None:
-            synth_hat = AcidSynthLPBiquad(ac, batch_size)
+            synth_hat = AcidSynthLPBiquad(ac)
         with suppress(Exception):
             assert synth_hat.interp_logits == synth_eval.interp_logits
         with suppress(Exception):
@@ -67,7 +66,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
             self.run_name = f"run__{datetime.now().strftime('%Y-%m-%d__%H-%M-%S')}"
         log.info(f"Run name: {self.run_name}")
 
-        self.batch_size = batch_size
         self.ac = ac
         self.model = model
         self.loss_func = loss_func
@@ -163,7 +161,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         return batch
 
     def step(self, batch: Dict[str, T], stage: str) -> Dict[str, T]:
-        batch_size = self.batch_size  # TODO(cm): remove fixed batch size
+        batch_size = batch["f0_hz"].size(0)
         if stage == "train":
             self.global_n = (
                 self.global_step * self.trainer.accumulate_grad_batches * batch_size

@@ -7,7 +7,10 @@ import torch as tr
 from torch import Tensor as T, nn
 
 import util
-from acid_ddsp.synth_modules import CustomADSR, ADSRValues, SquareSawVCOLite
+from acid_ddsp.synth_modules import (
+    SquareSawVCOLite,
+    ExpDecayEnv,
+)
 from audio_config import AudioConfig
 from filters import (
     TimeVaryingLPBiquad,
@@ -26,28 +29,11 @@ log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 class AcidSynthBase(ABC, nn.Module):
     # TODO(cm): switch to ADSRLite
-    def __init__(self, ac: AudioConfig, batch_size: int):
+    def __init__(self, ac: AudioConfig):
         super().__init__()
         self.ac = ac
-        self.batch_size = batch_size
-        min_adsr_vals = ADSRValues(
-            attack=ac.min_attack,
-            decay=ac.min_decay,
-            sustain=ac.min_sustain,
-            release=ac.min_release,
-            alpha=ac.min_alpha,
-        )
-        max_adsr_vals = ADSRValues(
-            attack=ac.max_attack,
-            decay=ac.max_decay,
-            sustain=ac.max_sustain,
-            release=ac.max_release,
-            alpha=ac.max_alpha,
-        )
-        self.vco = SquareSawVCOLite(ac.sr, batch_size)
-        self.adsr = CustomADSR(
-            ac.sr, ac.n_samples, batch_size, min_adsr_vals, max_adsr_vals
-        )
+        self.vco = SquareSawVCOLite(ac.sr)
+        self.env_gen = ExpDecayEnv(ac.sr, ac.stability_eps)
 
     @abstractmethod
     def filter_dry_audio(self, x: T, **kwargs: T) -> (T, Dict[str, T]):
@@ -86,7 +72,7 @@ class AcidSynthBase(ABC, nn.Module):
         learned_alpha = global_params.get("learned_alpha")
         if learned_alpha is None:
             assert self.ac.is_fixed("learned_alpha")
-            learned_alpha = tr.full_like(f0_hz, self.ac.min_alpha)
+            learned_alpha = tr.full_like(f0_hz, self.ac.min_learned_alpha)
         assert (
             f0_hz.shape
             == note_on_duration.shape
@@ -97,9 +83,7 @@ class AcidSynthBase(ABC, nn.Module):
         )
         dry_audio = self.vco(f0_hz, osc_shape, n_samples=self.ac.n_samples, phase=phase)
         dry_audio *= osc_gain.unsqueeze(-1)
-        envelope = self.adsr(note_on_duration)  # TODO(cm): swap out with ADSRLite
-        envelope = tr.clamp(envelope, 0.001, 0.999)  # TODO(cm): document
-        envelope = tr.pow(envelope, learned_alpha.unsqueeze(-1))
+        envelope = self.env_gen(learned_alpha, note_on_duration, self.ac.n_samples)
         dry_audio *= envelope
         wet_audio, filter_out = self.filter_dry_audio(dry_audio, **filter_args)
         wet_audio = wet_audio * dist_gain.unsqueeze(-1)
@@ -114,8 +98,8 @@ class AcidSynthBase(ABC, nn.Module):
 
 
 class AcidSynthLPBiquad(AcidSynthBase):
-    def __init__(self, ac: AudioConfig, batch_size: int, interp_coeff: bool = True):
-        super().__init__(ac, batch_size)
+    def __init__(self, ac: AudioConfig, interp_coeff: bool = True):
+        super().__init__(ac)
         self.interp_coeff = interp_coeff
         self.filter = TimeVaryingLPBiquad(
             min_w=ac.min_w,
@@ -140,14 +124,13 @@ class AcidSynthLPBiquadFSM(AcidSynthLPBiquad):
     def __init__(
         self,
         ac: AudioConfig,
-        batch_size: int,
         win_len: Optional[int] = None,
         win_len_sec: Optional[float] = None,
         overlap: float = 0.75,
         oversampling_factor: int = 1,
         interp_coeff: bool = True,
     ):
-        super().__init__(ac, batch_size, interp_coeff)
+        super().__init__(ac, interp_coeff)
         self.filter = TimeVaryingLPBiquadFSM(
             win_len=win_len,
             win_len_sec=win_len_sec,
@@ -162,8 +145,8 @@ class AcidSynthLPBiquadFSM(AcidSynthLPBiquad):
 
 
 class AcidSynthLearnedBiquadCoeff(AcidSynthBase):
-    def __init__(self, ac: AudioConfig, batch_size: int, interp_logits: bool = False):
-        super().__init__(ac, batch_size)
+    def __init__(self, ac: AudioConfig, interp_logits: bool = False):
+        super().__init__(ac)
         self.interp_logits = interp_logits
 
     def _calc_coeff(self, logits: T, n_frames: int) -> (T, T):
@@ -207,14 +190,13 @@ class AcidSynthLearnedBiquadCoeffFSM(AcidSynthLearnedBiquadCoeff):
     def __init__(
         self,
         ac: AudioConfig,
-        batch_size: int,
         win_len: Optional[int] = None,
         win_len_sec: Optional[float] = None,
         overlap: float = 0.75,
         oversampling_factor: int = 1,
         interp_logits: bool = False,
     ):
-        super().__init__(ac, batch_size, interp_logits)
+        super().__init__(ac, interp_logits)
         self.filter = TimeVaryingIIRFSM(
             win_len=win_len,
             win_len_sec=win_len_sec,
@@ -266,8 +248,8 @@ class AcidSynthLearnedBiquadPoleZero(AcidSynthBase):
 
 
 class AcidSynthLSTM(AcidSynthBase):
-    def __init__(self, ac: AudioConfig, batch_size: int, n_hidden: int, n_ch: int = 1):
-        super().__init__(ac, batch_size)
+    def __init__(self, ac: AudioConfig, n_hidden: int, n_ch: int = 1):
+        super().__init__(ac)
         self.n_hidden = n_hidden
         self.n_ch = n_ch
         self.lstm = nn.LSTM(

@@ -13,8 +13,7 @@ custom:
 #  model_name: cnn_mss_coeff_fsm_4096_32_1
 #  model_name: cnn_mss_lstm64
   dataset_name: abstract_303_48k__6k__4k_min
-#  cpu_batch_size: 5  # For now must be >= n_examples
-  cpu_batch_size: 34  # For now must be >= n_examples
+  cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
   use_wandb_gpu: true
 

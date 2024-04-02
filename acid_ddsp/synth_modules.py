@@ -1,65 +1,13 @@
 import logging
 import os
-from dataclasses import dataclass
-from typing import Optional, Dict
+from typing import Optional
 
 import torch as tr
 from torch import Tensor as T, nn
 
-from torchsynth.config import SynthConfig
-from torchsynth.module import ADSR
-
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
-
-
-@dataclass
-class ADSRValues:
-    attack: float
-    decay: float
-    sustain: float
-    release: float
-    alpha: float
-
-
-class CustomADSR(ADSR):
-    def __init__(
-        self,
-        sr: int,
-        n_samples: int,
-        batch_size: int,
-        min_adsr_vals: ADSRValues,
-        max_adsr_vals: ADSRValues,
-        **kwargs: Dict[str, T],
-    ) -> None:
-        assert int(sr) == sr
-        for dr in self.default_parameter_ranges:
-            if dr.name == "attack":
-                dr.minimum = min_adsr_vals.attack
-                dr.maximum = max_adsr_vals.attack
-            if dr.name == "decay":
-                dr.minimum = min_adsr_vals.decay
-                dr.maximum = max_adsr_vals.decay
-            if dr.name == "sustain":
-                dr.minimum = min_adsr_vals.sustain
-                dr.maximum = max_adsr_vals.sustain
-            if dr.name == "release":
-                dr.minimum = min_adsr_vals.release
-                dr.maximum = max_adsr_vals.release
-            if dr.name == "alpha":
-                dr.minimum = min_adsr_vals.alpha
-                dr.maximum = max_adsr_vals.alpha
-        sc = SynthConfig(
-            batch_size=batch_size,
-            sample_rate=sr,
-            buffer_size_seconds=n_samples / sr,
-            control_rate=int(sr),
-            reproducible=False,  # TODO(cm)
-            no_grad=True,
-            debug=False,
-        )
-        super().__init__(sc, **kwargs)
 
 
 class ADSRLite(nn.Module):
@@ -189,11 +137,9 @@ class ExpDecayEnv(ADSRLite):
 
 class SquareSawVCOLite(nn.Module):
     # Based off TorchSynth's SquareSawVCO
-    def __init__(self, sr: int, batch_size: int):
+    def __init__(self, sr: int):
         super().__init__()
         self.sr = sr
-        self.batch_size = batch_size
-        self.register_buffer("phase", tr.zeros((batch_size, 1)))
 
     @staticmethod
     def calc_n_partials(f0_hz: T) -> T:
@@ -217,9 +163,10 @@ class SquareSawVCOLite(nn.Module):
 
         if phase is None:
             assert False  # TODO(cm): tmp
-            phase = (tr.rand((bs, 1)) * 2 * tr.pi) - tr.pi
-        else:
-            assert phase.shape == (bs, 1)
+            phase = (
+                tr.rand((bs, 1), dtype=f0_hz.dtype, device=f0_hz.device) * 2 * tr.pi
+            ) - tr.pi
+        assert phase.shape == (bs, 1)
         arg = tr.cumsum(2 * tr.pi * f0_hz / sr, dim=1)
         arg += phase
         return arg
@@ -268,7 +215,9 @@ if __name__ == "__main__":
     plt.plot(envelope[0].numpy())
     plt.plot(envelope[1].numpy())
     plt.show()
-    log.info(f"envelope.shape = {envelope.shape}, envelope.max(): {envelope.max()}, envelope.min(): {envelope.min()}")
+    log.info(
+        f"envelope.shape = {envelope.shape}, envelope.max(): {envelope.max()}, envelope.min(): {envelope.min()}"
+    )
     exit()
 
     import torchaudio

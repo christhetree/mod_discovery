@@ -61,7 +61,7 @@ class AcidDDSPDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
-            drop_last=True,
+            drop_last=False,
         )
 
     def val_dataloader(self) -> DataLoader:
@@ -70,7 +70,7 @@ class AcidDDSPDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,  # To ensure different visualizations
             num_workers=self.num_workers,
-            drop_last=True,
+            drop_last=False,
         )
 
     def test_dataloader(self) -> DataLoader:
@@ -79,7 +79,7 @@ class AcidDDSPDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            drop_last=True,
+            drop_last=False,
         )
 
 
@@ -154,7 +154,7 @@ class PreprocDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
-            drop_last=True,
+            drop_last=False,
         )
 
     def val_dataloader(self) -> DataLoader:
@@ -163,7 +163,7 @@ class PreprocDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,  # To ensure different visualizations
             num_workers=self.num_workers,
-            drop_last=True,
+            drop_last=False,
         )
 
     def test_dataloader(self) -> DataLoader:
@@ -172,5 +172,5 @@ class PreprocDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            drop_last=True,
+            drop_last=False,
         )

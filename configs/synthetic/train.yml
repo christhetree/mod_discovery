@@ -6,7 +6,7 @@ custom:
 #  model_name: cnn_ploss
   model_name: cnn_mss
   dataset_name: fixed_adsr__pointy
-  cpu_batch_size: 64
+  cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
   use_wandb_gpu: true
 
