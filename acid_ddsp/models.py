@@ -3,15 +3,52 @@ import os
 from typing import Optional, List, Tuple, Dict
 
 import torch as tr
-from magic_clamp import magic_clamp
 from torch import Tensor as T
 from torch import nn
+from torch.nn import functional as F
 
 from feature_extraction import LogMelSpecFeatureExtractor
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
+
+
+class Spectral2DCNNBlock(nn.Module):
+    def __init__(
+        self,
+        in_ch: int,
+        out_ch: int,
+        kernel_size: Tuple[int, int],
+        b_dil: int,
+        t_dil: int,
+        pool_size: Tuple[int, int],
+        use_ln: bool,
+    ):
+        super().__init__()
+        self.use_ln = use_ln
+        self.conv = nn.Conv2d(
+            in_ch,
+            out_ch,
+            kernel_size,
+            stride=(1, 1),
+            dilation=(b_dil, t_dil),
+            padding="same",
+        )
+        self.pool = nn.MaxPool2d(kernel_size=pool_size)
+        self.act = nn.PReLU(num_parameters=out_ch)
+
+    def forward(self, x: T) -> T:
+        assert x.ndim == 4
+        n_bin = x.size(2)
+        n_frame = x.size(3)
+        if self.use_ln:
+            # TODO(cm): parameterize eps
+            x = F.layer_norm(x, [n_bin, n_frame])
+        x = self.conv(x)
+        x = self.pool(x)
+        x = self.act(x)
+        return x
 
 
 class Spectral2DCNN(nn.Module):
@@ -66,28 +103,14 @@ class Spectral2DCNN(nn.Module):
             )
 
         # Define CNN
-        temporal_dims = [fe.n_frames] * len(out_channels)
         layers = []
         curr_n_bins = fe.n_bins
-        for out_ch, b_dil, t_dil, temp_dim in zip(
-            out_channels, bin_dilations, temp_dilations, temporal_dims
-        ):
-            if use_ln:
-                layers.append(
-                    nn.LayerNorm([curr_n_bins, temp_dim], elementwise_affine=False)
-                )
+        for out_ch, b_dil, t_dil in zip(out_channels, bin_dilations, temp_dilations):
             layers.append(
-                nn.Conv2d(
-                    in_ch,
-                    out_ch,
-                    kernel_size,
-                    stride=(1, 1),
-                    dilation=(b_dil, t_dil),
-                    padding="same",
+                Spectral2DCNNBlock(
+                    in_ch, out_ch, kernel_size, b_dil, t_dil, pool_size, use_ln
                 )
             )
-            layers.append(nn.MaxPool2d(kernel_size=pool_size))
-            layers.append(nn.PReLU(num_parameters=out_ch))
             in_ch = out_ch
             curr_n_bins = curr_n_bins // pool_size[0]
         self.cnn = nn.Sequential(*layers)
@@ -128,8 +151,8 @@ class Spectral2DCNN(nn.Module):
             out_temp = tr.tanh(x)
         elif self.temp_params_act_name == "clamp":
             out_temp = tr.clamp(x, min=0.0, max=1.0)
-        elif self.temp_params_act_name == "magic_clamp":
-            out_temp = magic_clamp(x, min_value=0.0, max_value=1.0)
+        # elif self.temp_params_act_name == "magic_clamp":
+        #     out_temp = magic_clamp(x, min_value=0.0, max_value=1.0)
         elif self.temp_params_act_name is None:
             out_temp = x
         else:

@@ -51,6 +51,7 @@ class AcidSynthBase(ABC, nn.Module):
 
     def forward(
         self,
+        n_samples: int,
         f0_hz: T,
         note_on_duration: T,
         phase: T,
@@ -81,9 +82,9 @@ class AcidSynthBase(ABC, nn.Module):
             == dist_gain.shape
             == learned_alpha.shape
         )
-        dry_audio = self.vco(f0_hz, osc_shape, n_samples=self.ac.n_samples, phase=phase)
+        dry_audio = self.vco(f0_hz, osc_shape, n_samples=n_samples, phase=phase)
         dry_audio *= osc_gain.unsqueeze(-1)
-        envelope = self.env_gen(learned_alpha, note_on_duration, self.ac.n_samples)
+        envelope = self.env_gen(learned_alpha, note_on_duration, n_samples)
         dry_audio *= envelope
         wet_audio, filter_out = self.filter_dry_audio(dry_audio, filter_args)
         wet_audio = wet_audio * dist_gain.unsqueeze(-1)

@@ -143,6 +143,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # Generate ground truth wet audio
         with tr.no_grad():
             synth_out = self.synth(
+                self.ac.n_samples,
                 f0_hz,
                 note_on_duration,
                 phase,
@@ -232,6 +233,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # Generate audio x_hat
         synth_out_hat = self.synth_hat(
+            self.ac.n_samples,
             f0_hz,
             note_on_duration,
             phase_hat,
@@ -309,6 +311,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             # Generate audio x_eval
             try:
                 synth_out_eval = self.synth_eval(
+                    self.ac.n_samples,
                     f0_hz,
                     note_on_duration,
                     phase_hat,
