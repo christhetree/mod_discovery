@@ -75,8 +75,7 @@ class AcidSynthBase(ABC, nn.Module):
             assert self.ac.is_fixed("learned_alpha")
             learned_alpha = tr.full_like(f0_hz, self.ac.min_learned_alpha)
         assert (
-            f0_hz.shape
-            == note_on_duration.shape
+            note_on_duration.shape
             == osc_shape.shape
             == osc_gain.shape
             == dist_gain.shape

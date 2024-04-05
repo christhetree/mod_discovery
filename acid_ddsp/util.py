@@ -1,9 +1,11 @@
+import importlib
 import logging
 import os
-from typing import Union
+from typing import Union, Any, Dict
 
 import torch as tr
 import torch.nn.functional as F
+import yaml
 from scipy.stats import loguniform
 from torch import Tensor as T
 
@@ -74,3 +76,16 @@ def calc_h(a: T, b: T, n_frames: int = 50, n_fft: int = 1024) -> T:
     B = tr.fft.rfft(b, n_fft)
     H = B / A  # TODO(cm): Make more stable
     return H
+
+
+def load_class_from_config(config_path: str) -> (Any, Dict[str, Any]):
+    assert os.path.isfile(config_path)
+    with open(config_path, "r") as in_f:
+        config = yaml.safe_load(in_f)
+    class_path = config["class_path"]
+    tokens = class_path.split(".")
+    class_name = tokens[-1]
+    module_path = ".".join(tokens[:-1])
+    class_ = getattr(importlib.import_module(module_path), class_name)
+    init_args = config["init_args"]
+    return class_, init_args

@@ -10,3 +10,6 @@
 [submodule "fadtk"]
 	path = fadtk
 	url = git@github.com:christhetree/fadtk.git
+[submodule "torchsynth"]
+	path = torchsynth
+	url = git@github.com:christhetree/torchsynth.git
