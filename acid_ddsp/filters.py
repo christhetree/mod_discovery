@@ -52,7 +52,7 @@ def sample_wise_lpc_scriptable(x: T, a: T, zi: Optional[T] = None) -> T:
     a_flip = tr.flip(a, dims=[2])
 
     for t in range(T):
-        padded_y[:, t + order] += (
+        padded_y[:, t + order] -= (
             a_flip[:, t : t + 1] @ padded_y[:, t : t + order, None]
         )[:, 0, 0]
 
