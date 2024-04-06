@@ -1,5 +1,6 @@
 import logging
 import os
+from tempfile import NamedTemporaryFile
 
 import yaml
 from tqdm import tqdm
@@ -49,12 +50,10 @@ if __name__ == "__main__":
         config["model"]["init_args"]["run_name"] = model_name
         config["data"]["init_args"]["n_phases_per_file"] = 20
 
-        # Save tmp modified config
-        tmp_config_path = os.path.join(OUT_DIR, f"config_tmp.yaml")
-        with open(tmp_config_path, "w") as out_f:
+        tmp_config_file = NamedTemporaryFile()
+        with open(tmp_config_file.name, "w") as out_f:
             yaml.dump(config, out_f)
-
-        cli = CustomLightningCLI(
-            args=["test", "--config", tmp_config_path, "--ckpt_path", ckpt_path],
-            trainer_defaults=CustomLightningCLI.trainer_defaults,
-        )
+            cli = CustomLightningCLI(
+                args=["test", "--config", tmp_config_file.name, "--ckpt_path", ckpt_path],
+                trainer_defaults=CustomLightningCLI.trainer_defaults,
+            )

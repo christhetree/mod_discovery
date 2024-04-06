@@ -263,7 +263,6 @@ model:
             max_learned_alpha: 6.0
             stability_eps: 0.001
         interp_logits: false
-        make_scriptable: false
     synth_eval:
       class_path: synths.AcidSynthLearnedBiquadCoeff
       init_args:

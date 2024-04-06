@@ -222,7 +222,6 @@ class TimeVaryingLPBiquad(nn.Module):
         eps: float = 1e-3,
         modulate_log_w: bool = True,
         modulate_log_q: bool = True,
-        make_scriptable: bool = False,
     ):
         super().__init__()
         assert 0.0 <= min_w <= max_w <= tr.pi
@@ -238,7 +237,12 @@ class TimeVaryingLPBiquad(nn.Module):
         self.eps = eps
         self.modulate_log_w = modulate_log_w
         self.modulate_log_q = modulate_log_q
-        if make_scriptable:
+        self.is_scriptable = False
+        self.lpc_func = sample_wise_lpc
+
+    def toggle_scriptable(self, is_scriptable: bool) -> None:
+        self.is_scriptable = is_scriptable
+        if is_scriptable:
             self.lpc_func = sample_wise_lpc_scriptable
         else:
             self.lpc_func = sample_wise_lpc

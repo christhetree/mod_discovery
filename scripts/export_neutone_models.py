@@ -3,6 +3,7 @@ import os
 import pathlib
 from typing import Dict, List
 
+import librosa
 import torch as tr
 import torch.nn as nn
 from neutone_sdk import WaveformToWaveformBase, NeutoneParameter
@@ -11,7 +12,7 @@ from torch import Tensor as T
 
 import util
 from models import Spectral2DCNN
-from paths import CONFIGS_DIR, OUT_DIR
+from paths import OUT_DIR, MODELS_DIR
 from synths import AcidSynthBase
 
 logging.basicConfig()
@@ -24,29 +25,38 @@ class AcidSynthModel(nn.Module):
         self,
         model: Spectral2DCNN,
         synth: AcidSynthBase,
-        min_f0_hz: float = 32.70,
-        max_f0_hz: float = 523.25,
+        min_midi_f0: int = 30,
+        max_midi_f0: int = 60,
         min_note_on_duration: float = 0.125,
         max_note_on_duration: float = 0.125,
     ):
         super().__init__()
         self.model = model
         self.synth = synth
-        self.min_f0_hz = min_f0_hz
-        self.max_f0_hz = max_f0_hz
+        if hasattr(synth, "toggle_scriptable"):
+            synth.toggle_scriptable(True)
+        self.min_midi_f0 = min_midi_f0
+        self.max_midi_f0 = max_midi_f0
         self.min_note_on_duration = min_note_on_duration
         self.max_note_on_duration = max_note_on_duration
         # TODO(cm): add cached envelope
         assert self.min_note_on_duration == self.max_note_on_duration
-        # TODO(cm)
         self.ac = synth.ac
         self.register_buffer("phase", tr.zeros((1, 1)))
+        self.midi_f0_to_hz = {
+            idx: tr.tensor(librosa.midi_to_hz(idx)).view(1).float()
+            for idx in range(min_midi_f0, max_midi_f0 + 1)
+        }
 
-    def forward(self, x: T, f0_hz_0to1: T, note_on_duration_0to1: T) -> T:
-        f0_hz = f0_hz_0to1 * (self.max_f0_hz - self.min_f0_hz) + self.min_f0_hz
-        note_on_duration = note_on_duration_0to1 * (
-            self.max_note_on_duration - self.min_note_on_duration
-        ) + self.min_note_on_duration
+    def forward(self, x: T, midi_f0_0to1: T, note_on_duration_0to1: T) -> T:
+        midi_f0 = midi_f0_0to1 * (self.max_midi_f0 - self.min_midi_f0) + self.min_midi_f0
+        midi_f0 = midi_f0.round().int().item()
+        f0_hz = self.midi_f0_to_hz[midi_f0]
+        note_on_duration = (
+            note_on_duration_0to1
+            * (self.max_note_on_duration - self.min_note_on_duration)
+            + self.min_note_on_duration
+        )
 
         model_out = self.model(x)
         w_mod_sig = model_out["w_mod_sig"]
@@ -56,11 +66,20 @@ class AcidSynthModel(nn.Module):
             "q_mod_sig": q_mod_sig,
         }
         global_params = {
-            "osc_shape": self.ac.convert_from_0to1("osc_shape", model_out["osc_shape_0to1"]),
-            "osc_gain": self.ac.convert_from_0to1("osc_shape", model_out["osc_gain_0to1"]),
-            "dist_gain": self.ac.convert_from_0to1("osc_shape", model_out["dist_gain_0to1"]),
-            "learned_alpha": self.ac.convert_from_0to1("osc_shape", model_out["learned_alpha_0to1"]),
+            "osc_shape": self.ac.convert_from_0to1(
+                "osc_shape", model_out["osc_shape_0to1"]
+            ),
+            "osc_gain": self.ac.convert_from_0to1(
+                "osc_shape", model_out["osc_gain_0to1"]
+            ),
+            "dist_gain": self.ac.convert_from_0to1(
+                "osc_shape", model_out["dist_gain_0to1"]
+            ),
+            "learned_alpha": self.ac.convert_from_0to1(
+                "osc_shape", model_out["learned_alpha_0to1"]
+            ),
         }
+        self.phase.uniform_()  # TODO(cm)
         n_samples = x.size(-1)
         synth_out = self.synth(
             n_samples=n_samples,
@@ -107,7 +126,7 @@ class AcidSynthModelWrapper(WaveformToWaveformBase):
 
     def get_neutone_parameters(self) -> List[NeutoneParameter]:
         return [
-            NeutoneParameter("f0_hz", "f0_hz", default_value=0.5),
+            NeutoneParameter("midi_f0", "midi_f0", default_value=0.90),
             NeutoneParameter("note_on_duration", "note_on_duration", default_value=0.5),
         ]
 
@@ -133,43 +152,27 @@ class AcidSynthModelWrapper(WaveformToWaveformBase):
     def do_forward_pass(self, x: T, params: Dict[str, T]) -> T:
         if x.min() == 0.0:
             return x
-        f0_hz = params["f0_hz"]
+        midi_f0 = params["midi_f0"]
         note_on_duration = params["note_on_duration"]
-
         x = x.unsqueeze(1)
-        y = self.model(x, f0_hz, note_on_duration)
+        y = self.model(x, midi_f0, note_on_duration)
         y = y.squeeze(1)
         return y
 
 
 if __name__ == "__main__":
-    # parser = ArgumentParser()
-    # cfg = parser.parse_path(ac_path)
-    # cfg = parser.instantiate_classes(cfg)
-    # exit()
+    model_dir = MODELS_DIR
+    # model_name = "cnn_mss_lp_td__abstract_303_48k__6k__4k_min__epoch_183_step_1104"
+    model_name = "cnn_mss_lp_fs_128__abstract_303_48k__6k__4k_min__epoch_183_step_1104"
 
-    ac_path = os.path.join(CONFIGS_DIR, "abstract_303", "audio_config.yml")
-    ac_class, kwargs = util.load_class_from_config(ac_path)
-    ac = ac_class(**kwargs)
-    fe_path = os.path.join(CONFIGS_DIR, "abstract_303", "log_mel_spec.yml")
-    fe_class, kwargs = util.load_class_from_config(fe_path)
-    kwargs["eps"] = float(kwargs["eps"])
-    fe = fe_class(**kwargs)
-    cnn_path = os.path.join(CONFIGS_DIR, "abstract_303", "spectral_2dcnn_lp.yml")
-    cnn_class, kwargs = util.load_class_from_config(cnn_path)
-    kwargs["fe"] = fe
-    cnn = cnn_class(**kwargs)
-    # synth_path = os.path.join(CONFIGS_DIR, "abstract_303", "synth_lp_td.yml")
-    synth_path = os.path.join(CONFIGS_DIR, "abstract_303", "synth_lp_fs_128.yml")
-    # synth_path = os.path.join(CONFIGS_DIR, "abstract_303", "synth_lp_fs_4096.yml")
-    synth_class, kwargs = util.load_class_from_config(synth_path)
-    kwargs["ac"] = ac
-    # kwargs["make_scriptable"] = True
-    synth = synth_class(**kwargs)
+    config_path = os.path.join(model_dir, model_name, "config.yaml")
+    ckpt_path = os.path.join(model_dir, model_name, "checkpoints", f"{model_name}.ckpt")
+    cnn, synth = util.extract_model_and_synth_from_config(config_path, ckpt_path)
+    # This isn't actually necessary, doing it just in case
+    cnn.eval()
+    synth.eval()
 
     model = AcidSynthModel(cnn, synth)
     wrapper = AcidSynthModelWrapper(model)
-    root_dir = pathlib.Path(
-        os.path.join(OUT_DIR, "neutone_models", wrapper.get_model_name())
-    )
+    root_dir = pathlib.Path(os.path.join(OUT_DIR, "neutone_models", model_name))
     save_neutone_model(wrapper, root_dir, dump_samples=False, submission=False)

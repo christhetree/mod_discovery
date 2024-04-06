@@ -49,6 +49,7 @@ def extract_notes_from_midi(
     n_saved_notes = 0
     all_note_min = []
     all_note_max = []
+    all_midi_f0 = []
     for idx, note in tqdm(enumerate(midi_data.notes)):
         start_time = note.start
         end_time = note.end
@@ -69,6 +70,7 @@ def extract_notes_from_midi(
         all_note_min.append(note_min)
         all_note_max.append(note_max)
         midi_f0 = note.pitch
+        all_midi_f0.append(midi_f0)
         note_wav_path = os.path.join(
             out_dir, f"note_{idx:03d}__{midi_f0}__{min(note_n_samples, max_n_samples)}__.wav"
         )
@@ -98,6 +100,9 @@ def extract_notes_from_midi(
     log.info(f"Average note max: {sum(all_note_max) / len(all_note_max)}")
     log.info(f"STD note max: {np.std(all_note_max)}")
 
+    log.info(f"Min midi f0: {min(all_midi_f0)}")
+    log.info(f"Max midi f0: {max(all_midi_f0)}")
+
 
 if __name__ == "__main__":
     # data_dir = os.path.join(DATA_DIR, "samplescience_abstract_303")
@@ -105,5 +110,5 @@ if __name__ == "__main__":
     # concat_wav_files(data_dir, out_path)
     audio_path = os.path.join(DATA_DIR, "abstract_303_all_48k.wav")
     midi_path = os.path.join(DATA_DIR, "abstract_303_all.mid")
-    out_dir = os.path.join(DATA_DIR, "abstract_303_48k__6k__4k_min")
+    out_dir = os.path.join(DATA_DIR, "abstract_303_48k__6k__4k_min__tmp")
     extract_notes_from_midi(audio_path, midi_path, out_dir)

@@ -1,13 +1,14 @@
 import importlib
 import logging
 import os
-from typing import Union, Any, Dict
+from tempfile import NamedTemporaryFile
+from typing import Union, Any, Dict, Optional
 
 import torch as tr
 import torch.nn.functional as F
 import yaml
 from scipy.stats import loguniform
-from torch import Tensor as T
+from torch import Tensor as T, nn
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -89,3 +90,32 @@ def load_class_from_config(config_path: str) -> (Any, Dict[str, Any]):
     class_ = getattr(importlib.import_module(module_path), class_name)
     init_args = config["init_args"]
     return class_, init_args
+
+
+def extract_model_and_synth_from_config(
+    config_path: str, ckpt_path: Optional[str] = None
+) -> (nn.Module, nn.Module):
+    assert os.path.isfile(config_path)
+    with open(config_path, "r") as in_f:
+        config = yaml.safe_load(in_f)
+    del config["ckpt_path"]
+
+    tmp_config_file = NamedTemporaryFile()
+    with open(tmp_config_file.name, "w") as out_f:
+        yaml.dump(config, out_f)
+        from cli import CustomLightningCLI
+
+        cli = CustomLightningCLI(
+            args=["-c", tmp_config_file.name],
+            trainer_defaults=CustomLightningCLI.trainer_defaults,
+            run=False,
+        )
+    lm = cli.model
+
+    if ckpt_path is not None:
+        log.info(f"Loading checkpoint from {ckpt_path}")
+        assert os.path.isfile(ckpt_path)
+        ckpt_data = tr.load(ckpt_path, map_location=tr.device("cpu"))
+        lm.load_state_dict(ckpt_data["state_dict"])
+
+    return lm.model, lm.synth_hat

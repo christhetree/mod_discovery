@@ -99,19 +99,25 @@ class AcidSynthBase(ABC, nn.Module):
 
 class AcidSynthLPBiquad(AcidSynthBase):
     def __init__(
-        self, ac: AudioConfig, interp_coeff: bool = True, make_scriptable: bool = False
+        self,
+        ac: AudioConfig,
+        interp_coeff: bool = True,
+        make_scriptable=False,  # TODO(cm): remove
     ):
         super().__init__(ac)
         self.interp_coeff = interp_coeff
-        self.make_scriptable = make_scriptable
         self.filter = TimeVaryingLPBiquad(
             min_w=ac.min_w,
             max_w=ac.max_w,
             min_q=ac.min_q,
             max_q=ac.max_q,
             eps=ac.stability_eps,
-            make_scriptable=make_scriptable,
         )
+        self.is_scriptable = False
+
+    def toggle_scriptable(self, is_scriptable: bool) -> None:
+        self.is_scriptable = is_scriptable
+        self.filter.toggle_scriptable(is_scriptable)
 
     def filter_dry_audio(
         self, x: T, filter_args: Dict[str, T]
@@ -159,12 +165,16 @@ class AcidSynthLearnedBiquadCoeff(AcidSynthBase):
         self,
         ac: AudioConfig,
         interp_logits: bool = False,
-        make_scriptable: bool = False,
+        make_scriptable=False,  # TODO(cm): remove
     ):
         super().__init__(ac)
         self.interp_logits = interp_logits
-        self.make_scriptable = make_scriptable
-        if make_scriptable:
+        self.is_scriptable = False
+        self.lpc_func = sample_wise_lpc
+
+    def toggle_scriptable(self, is_scriptable: bool) -> None:
+        self.is_scriptable = is_scriptable
+        if is_scriptable:
             self.lpc_func = sample_wise_lpc_scriptable
         else:
             self.lpc_func = sample_wise_lpc
