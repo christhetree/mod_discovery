@@ -64,6 +64,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             fad_model_names = []
         if run_name is None:
             self.run_name = f"run__{datetime.now().strftime('%Y-%m-%d__%H-%M-%S')}"
+        else:
+            self.run_name = run_name
         log.info(f"Run name: {self.run_name}")
 
         self.ac = ac
@@ -365,144 +367,125 @@ class AcidDDSPLightingModule(pl.LightningModule):
         return out
 
     def on_test_epoch_end(self) -> None:
-        loss = tr.stack([out["loss"] for out in self.test_out_dicts], dim=0).mean()
-        audio_mss = tr.stack(
-            [out["audio_mss"] for out in self.test_out_dicts], dim=0
-        ).mean()
-        audio_mss_eval = None
-        if self.test_out_dicts[0].get("audio_mss_eval") is not None:
-            audio_mss_eval = tr.stack(
-                [out["audio_mss_eval"] for out in self.test_out_dicts], dim=0
-            ).mean()
-        audio_mel_stft = tr.stack(
-            [out["audio_mel_stft"] for out in self.test_out_dicts], dim=0
-        ).mean()
-        audio_mel_stft_eval = None
-        if self.test_out_dicts[0].get("audio_mel_stft_eval") is not None:
-            audio_mel_stft_eval = tr.stack(
-                [out["audio_mel_stft_eval"] for out in self.test_out_dicts], dim=0
-            ).mean()
-        audio_mfcc = tr.stack(
-            [out["audio_mfcc"] for out in self.test_out_dicts], dim=0
-        ).mean()
-        audio_mfcc_eval = None
-        if self.test_out_dicts[0].get("audio_mfcc_eval") is not None:
-            audio_mfcc_eval = tr.stack(
-                [out["audio_mfcc_eval"] for out in self.test_out_dicts], dim=0
-            ).mean()
+        tsv_rows = []
 
-        tsv_data = [
-            ["loss", loss.item()],
-            ["mss", audio_mss.item()],
-            ["mss_eval", audio_mss_eval.item() if audio_mss_eval else None],
-            ["mel_stft", audio_mel_stft.item()],
-            [
-                "mel_stft_eval",
-                audio_mel_stft_eval.item() if audio_mel_stft_eval else None,
-            ],
-            ["mfcc", audio_mfcc.item()],
-            ["mfcc_eval", audio_mfcc_eval.item() if audio_mfcc_eval else None],
-        ]
+        test_metrics = ["loss"]
+        for metric_name in self.audio_metrics:
+            test_metrics.append(f"{metric_name}_hat")
+            test_metrics.append(f"{metric_name}_eval")
 
-        # TODO(cm): refactor
-        if self.fad_model_names:
-            wet = (
-                tr.cat([out["x"] for out in self.test_out_dicts], dim=0).detach().cpu()
+        for metric_name in test_metrics:
+            metric_values = [d.get(metric_name) for d in self.test_out_dicts]
+            if any(v is None for v in metric_values):
+                log.warning(f"Skipping test metric: {metric_name}")
+                continue
+            metric_values = tr.stack(metric_values, dim=0)
+            assert metric_values.ndim == 1
+            metric_mean = metric_values.mean()
+            metric_std = metric_values.std()
+            metric_ci95 = 1.96 * scipy.stats.sem(metric_values.numpy())
+            self.log(f"test/{metric_name}", metric_mean, prog_bar=False)
+            tsv_rows.append(
+                [
+                    metric_name,
+                    metric_mean.item(),
+                    metric_std.item(),
+                    metric_ci95,
+                    metric_values.size(0),
+                    metric_values.numpy(),
+                ]
             )
-            wet_hat = (
-                tr.cat([out["x_hat"] for out in self.test_out_dicts], dim=0)
-                .detach()
-                .cpu()
-            )
-            wet_eval = None
-            if self.test_out_dicts[0].get("x_eval") is not None:
-                wet_eval = (
-                    tr.cat([out["x_eval"] for out in self.test_out_dicts], dim=0)
-                    .detach()
-                    .cpu()
-                )
-            fad_values = []
+
+        for fad_model_name in self.fad_model_names:
+            fad_hat_values = []
             fad_eval_values = []
-            epoch_n = 68
-            for idx in range(0, wet.size(0), epoch_n):
-                curr_wet = wet[idx : idx + epoch_n, :]
-                curr_wet_hat = wet_hat[idx : idx + epoch_n, :]
-                curr_wet_eval = None
-                if wet_eval is not None:
-                    curr_wet_eval = wet_eval[idx : idx + epoch_n, :]
-                fad_wet_dir = os.path.join(OUT_DIR, f"{self.run_name}__fad_wet")
-                save_and_concat_fad_audio(
-                    self.ac.sr,
-                    curr_wet,
-                    fad_wet_dir,
-                    fade_n_samples=self.spectral_visualizer.hop_len,
-                )
+            for out in self.test_out_dicts:
+                wet = out["wet"]
+                wet_hat = out["wet_hat"]
+                wet_eval = out.get("wet_eval")
 
+                fad_wet_dir = os.path.join(OUT_DIR, f"{self.run_name}__fad_wet")
                 fad_wet_hat_dir = os.path.join(OUT_DIR, f"{self.run_name}__fad_wet_hat")
                 save_and_concat_fad_audio(
                     self.ac.sr,
-                    curr_wet_hat,
+                    wet,
+                    fad_wet_dir,
+                    fade_n_samples=self.spectral_visualizer.hop_len,
+                )
+                save_and_concat_fad_audio(
+                    self.ac.sr,
+                    wet_hat,
                     fad_wet_hat_dir,
                     fade_n_samples=self.spectral_visualizer.hop_len,
                 )
-                fad_wet_eval_dir = os.path.join(
-                    OUT_DIR, f"{self.run_name}__fad_wet_eval"
-                )
+                clean_up_baseline = True
                 if wet_eval is not None:
+                    clean_up_baseline = False
+                fad_hat = calc_fad(
+                    fad_model_name,
+                    baseline_dir=fad_wet_dir,
+                    eval_dir=fad_wet_hat_dir,
+                    clean_up_baseline=clean_up_baseline,
+                    clean_up_eval=True,
+                )
+                fad_hat_values.append(fad_hat)
+                if wet_eval is not None:
+                    fad_wet_eval_dir = os.path.join(
+                        OUT_DIR, f"{self.run_name}__fad_wet_eval"
+                    )
                     save_and_concat_fad_audio(
                         self.ac.sr,
-                        curr_wet_eval,
+                        wet_eval,
                         fad_wet_eval_dir,
                         fade_n_samples=self.spectral_visualizer.hop_len,
                     )
-
-                for fad_model_name in tqdm(self.fad_model_names):
-                    fad_hat = calc_fad(
+                    fad_eval = calc_fad(
                         fad_model_name,
-                        fad_wet_dir,
-                        fad_wet_hat_dir,
-                        clean_up_baseline=False,
+                        baseline_dir=fad_wet_dir,
+                        eval_dir=fad_wet_eval_dir,
+                        clean_up_baseline=True,
                         clean_up_eval=True,
                     )
-                    fad_values.append(fad_hat)
-                    # self.log(
-                    #     f"test/fad_{fad_model_name}_eval_{idx}", fad_hat, prog_bar=False
-                    # )
-                    tsv_data.append([f"fad_{fad_model_name}", fad_hat])
-                    fad_eval = None
-                    if wet_eval is not None:
-                        fad_eval = calc_fad(
-                            fad_model_name,
-                            fad_wet_dir,
-                            fad_wet_eval_dir,
-                            clean_up_baseline=True,
-                            clean_up_eval=True,
-                        )
-                        fad_eval_values.append(fad_eval)
-                        # self.log(
-                        #     f"test/fad_{fad_model_name}_{self.synth_eval.__class__.__name__}",
-                        #     fad_eval,
-                        #     prog_bar=False,
-                        # )
-                    tsv_data.append([f"fad_{fad_model_name}_eval_{idx}", fad_eval])
+                    fad_eval_values.append(fad_eval)
 
-            log.info(f"Test FAD hat values: {fad_values}")
-            log.info(f"Test FAD eval values: {fad_eval_values}")
-            ci_hat = 1.96 * scipy.stats.sem(fad_values)
-            ci_eval = 1.96 * scipy.stats.sem(fad_eval_values)
-            tsv_data.append([f"fad_{fad_model_name}_mean", np.mean(fad_values)])
-            tsv_data.append([f"fad_{fad_model_name}_std", np.std(fad_values)])
-            tsv_data.append([f"fad_{fad_model_name}_ci95", ci_hat])
-            tsv_data.append(
-                [f"fad_{fad_model_name}_eval_mean", np.mean(fad_eval_values)]
+            fad_hat_mean = np.mean(fad_hat_values)
+            fad_hat_std = np.std(fad_hat_values)
+            fad_hat_ci95 = 1.96 * scipy.stats.sem(fad_hat_values)
+            self.log(f"test/fad_{fad_model_name}_hat", fad_hat_mean, prog_bar=False)
+            tsv_rows.append(
+                [
+                    f"fad_{fad_model_name}_hat",
+                    fad_hat_mean,
+                    fad_hat_std,
+                    fad_hat_ci95,
+                    len(fad_hat_values),
+                    fad_hat_values,
+                ]
             )
-            tsv_data.append([f"fad_{fad_model_name}_eval_std", np.std(fad_eval_values)])
-            tsv_data.append([f"fad_{fad_model_name}_eval_ci95", ci_eval])
+            if fad_eval_values:
+                fad_eval_mean = np.mean(fad_eval_values)
+                fad_eval_std = np.std(fad_eval_values)
+                fad_eval_ci95 = 1.96 * scipy.stats.sem(fad_eval_values)
+                self.log(
+                    f"test/fad_{fad_model_name}_eval", fad_eval_mean, prog_bar=False
+                )
+                tsv_rows.append(
+                    [
+                        f"fad_{fad_model_name}_eval",
+                        fad_eval_mean,
+                        fad_eval_std,
+                        fad_eval_ci95,
+                        len(fad_eval_values),
+                        fad_eval_values,
+                    ]
+                )
 
         tsv_path = os.path.join(OUT_DIR, f"{self.run_name}__test.tsv")
         if os.path.exists(tsv_path):
             log.warning(f"Overwriting existing TSV file: {tsv_path}")
-        df = pd.DataFrame(tsv_data, columns=["metric", "value"])
+        df = pd.DataFrame(
+            tsv_rows, columns=["metric_name", "mean", "std", "ci95", "n", "values"]
+        )
         df.to_csv(tsv_path, sep="\t", index=False)
 
         # H = tr.cat([out["H"] for out in self.test_outs], dim=0)

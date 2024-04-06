@@ -2,6 +2,7 @@ import logging
 import os
 from typing import Optional, Dict, Any
 
+import torch as tr
 import yaml
 from jsonargparse import lazy_instance
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
@@ -125,8 +126,6 @@ class CustomLightningCLI(LightningCLI):
             log.info(f"setting CUDA_VISIBLE_DEVICES = {cuda_flag}")
             os.environ["CUDA_VISIBLE_DEVICES"] = f"{cuda_flag}"
             config.trainer.devices = len(devices)
-
-        import torch as tr  # This prevents a bug when setting CUDA_VISIBLE_DEVICES
 
         if config.trainer.devices < 2:
             log.info("Disabling strategy")

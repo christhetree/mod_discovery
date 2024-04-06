@@ -3,15 +3,21 @@ seed_everything: 42
 custom:
   project_name: acid_ddsp
 #  model_name: testing
-#  model_name: cnn_mss_coeff
-  model_name: cnn_mss_adapter2
-#  model_name: cnn_mss_coeff_fsm_128_32_1
-#  model_name: cnn_mss_coeff_fsm_256_32_1
-#  model_name: cnn_mss_coeff_fsm_512_32_1
-#  model_name: cnn_mss_coeff_fsm_1024_32_1
-#  model_name: cnn_mss_coeff_fsm_2048_32_1
-#  model_name: cnn_mss_coeff_fsm_4096_32_1
-#  model_name: cnn_mss_lstm64
+  model_name: cnn_mss_coeff_td
+#  model_name: cnn_mss_coeff_fs_128
+#  model_name: cnn_mss_coeff_fs_256
+#  model_name: cnn_mss_coeff_fs_512
+#  model_name: cnn_mss_coeff_fs_1024
+#  model_name: cnn_mss_coeff_fs_2048
+#  model_name: cnn_mss_coeff_fs_4096
+#  model_name: cnn_mss_lp_td
+#  model_name: cnn_mss_lp_fs_128
+#  model_name: cnn_mss_lp_fs_256
+#  model_name: cnn_mss_lp_fs_512
+#  model_name: cnn_mss_lp_fs_1024
+#  model_name: cnn_mss_lp_fs_2048
+#  model_name: cnn_mss_lp_fs_4096
+#  model_name: cnn_mss_lstm_64
   dataset_name: abstract_303_48k__6k__4k_min
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
@@ -24,7 +30,6 @@ trainer:
   max_epochs: 200
   num_sanity_val_steps: 0
   accumulate_grad_batches: 1
-#  check_val_every_n_epoch: 1
   check_val_every_n_epoch: 8
   gradient_clip_val: 0.5
 
@@ -60,7 +65,7 @@ model:
 #    synth_hat: synth_coeff_fs_1024.yml
 #    synth_hat: synth_coeff_fs_2048.yml
 #    synth_hat: synth_coeff_fs_4096.yml
-#    synth_eval: synth_coeff_td.yml
+    synth_eval: synth_coeff_td.yml
 
 #    model: spectral_2dcnn_lp.yml
 #    temp_params_name_hat: w_mod_sig

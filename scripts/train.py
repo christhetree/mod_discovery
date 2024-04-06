@@ -1,5 +1,7 @@
 import logging
 import os
+# Prevents a bug with PyTorch and CUDA_VISIBLE_DEVICES
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 import torch
 
