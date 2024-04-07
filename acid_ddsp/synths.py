@@ -57,6 +57,7 @@ class AcidSynthBase(ABC, nn.Module):
         phase: T,
         filter_args: Dict[str, T],
         global_params: Dict[str, T],
+        envelope: Optional[T] = None,
     ) -> Dict[str, T]:
         osc_shape = global_params.get("osc_shape")
         if osc_shape is None:
@@ -83,7 +84,8 @@ class AcidSynthBase(ABC, nn.Module):
         )
         dry_audio = self.vco(f0_hz, osc_shape, n_samples=n_samples, phase=phase)
         dry_audio *= osc_gain.unsqueeze(-1)
-        envelope = self.env_gen(learned_alpha, note_on_duration, n_samples)
+        if envelope is None:
+            envelope = self.env_gen(learned_alpha, note_on_duration, n_samples)
         dry_audio *= envelope
         wet_audio, filter_out = self.filter_dry_audio(dry_audio, filter_args)
         wet_audio = wet_audio * dist_gain.unsqueeze(-1)
