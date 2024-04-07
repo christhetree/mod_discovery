@@ -145,7 +145,9 @@ class Spectral2DCNN(nn.Module):
 
         # Calc temporal params
         x = self.out_temp(latent)
-        if self.temp_params_act_name == "sigmoid":
+        if self.temp_params_act_name is None:
+            out_temp = x
+        elif self.temp_params_act_name == "sigmoid":
             out_temp = tr.sigmoid(x)
         elif self.temp_params_act_name == "tanh":
             out_temp = tr.tanh(x)
@@ -153,8 +155,6 @@ class Spectral2DCNN(nn.Module):
             out_temp = tr.clamp(x, min=0.0, max=1.0)
         # elif self.temp_params_act_name == "magic_clamp":
         #     out_temp = magic_clamp(x, min_value=0.0, max_value=1.0)
-        elif self.temp_params_act_name is None:
-            out_temp = x
         else:
             raise ValueError(f"Unknown activation: {self.temp_params_act_name}")
         out_dict[self.temporal_params_name] = out_temp
