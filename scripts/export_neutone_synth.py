@@ -19,6 +19,60 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
+def make_envelope(
+    x: T, note_on_samples: int, curr_env_val: float
+) -> Tuple[T, int, float]:
+    n_samples = x.size(-1)
+    n_env = (2 * n_samples) // note_on_samples
+    n_env = max(n_env, 2)
+    env = tr.linspace(1.0, 0.0, note_on_samples)
+    env = env.repeat(n_env)
+
+    out = tr.zeros((1, n_samples))
+
+    # Find first non-zero index
+    non_zero_indices = tr.nonzero(x.squeeze())
+    first_nonzero_idx = -1
+    if non_zero_indices.size(0) > 0:
+        first_nonzero_idx = non_zero_indices[0, 0].item()
+
+    # If all silence and no envelope is being continued, return silence
+    if first_nonzero_idx == -1 and curr_env_val == 0.0:
+        return out, 0, curr_env_val
+
+    # Calc envelope continuation index
+    cont_env_start_idx = 0
+    if curr_env_val != 0.0:
+        cont_env_start_idx = int(round((1.0 - curr_env_val) * (note_on_samples - 1)))
+        # cont_env_start_idx = int(round(cont_env_start_idx))
+        cont_env_start_idx = min(cont_env_start_idx, note_on_samples - 1)
+        cont_env_start_idx = max(cont_env_start_idx, 0)
+
+    # If there is no silence, return the envelope
+    if first_nonzero_idx == 0:
+        out[:, 0:n_samples] = env[cont_env_start_idx : cont_env_start_idx + n_samples]
+        curr_env_val = out[0, -1].item()
+        return out, first_nonzero_idx, curr_env_val
+
+    # Continue the envelope if required
+    cont_env_len = 0
+    if curr_env_val != 0.0:
+        cont_env_len = min(n_samples, note_on_samples - cont_env_start_idx)
+        cont_env_end_idx = cont_env_start_idx + cont_env_len
+        out[:, 0:cont_env_len] = env[cont_env_start_idx:cont_env_end_idx]
+
+    # If all silence
+    if first_nonzero_idx == -1:
+        curr_env_val = out[0, -1].item()
+        return out, 0, curr_env_val
+
+    first_nonzero_idx = max(first_nonzero_idx, cont_env_len)
+    n_non_zero_samples = n_samples - first_nonzero_idx
+    out[:, first_nonzero_idx:n_samples] = env[0:n_non_zero_samples]
+    curr_env_val = out[0, -1].item()
+    return out, first_nonzero_idx, curr_env_val
+
+
 class AcidSynth(nn.Module):
     def __init__(
         self,
@@ -69,6 +123,7 @@ class AcidSynth(nn.Module):
         self.register_buffer("osc_shape", tr.full((1,), osc_shape))
         self.register_buffer("osc_gain", tr.full((1,), osc_gain))
         self.register_buffer("dist_gain", tr.full((1,), dist_gain))
+        self.use_fs = use_fs
 
         self.sr = self.ac.sr
         self.note_on_samples = int(note_on_duration * self.sr)
@@ -95,7 +150,7 @@ class AcidSynth(nn.Module):
     ) -> T:
         n_samples = x.size(-1)
         alpha = alpha_0to1 * (self.max_alpha - self.min_alpha) + self.min_alpha
-        env, env_start_idx, new_env_val = self.make_envelope(
+        env, _, new_env_val = make_envelope(
             x, self.note_on_samples, self.curr_env_val
         )
         self.curr_env_val = new_env_val
@@ -132,68 +187,10 @@ class AcidSynth(nn.Module):
 
         period_completion = (n_samples / (self.sr / f0_hz.double())) % 1.0
         tr.add(self.phase, 2 * tr.pi * period_completion, out=self.phase)
-        y_a = synth_out.get("y_a")
-        if y_a is not None:
+        if not self.use_fs:
+            y_a = synth_out["y_a"]
             self.zi[:, :] = y_a[:, -2:]
         return wet
-
-    @staticmethod
-    def make_envelope(
-        x: T, note_on_samples: int, curr_env_val: float
-    ) -> Tuple[T, int, float]:
-        n_samples = x.size(-1)
-        n_env = (2 * n_samples) // note_on_samples
-        n_env = max(n_env, 2)
-        env = tr.linspace(1.0, 0.0, note_on_samples)
-        env = env.repeat(n_env)
-
-        out = tr.zeros((1, n_samples))
-
-        # Find first non-zero index
-        non_zero_indices = tr.nonzero(x.squeeze())
-        first_nonzero_idx = -1
-        if non_zero_indices.size(0) > 0:
-            first_nonzero_idx = non_zero_indices[0, 0].item()
-
-        # If all silence and no envelope is being continued, return silence
-        if first_nonzero_idx == -1 and curr_env_val == 0.0:
-            return out, 0, curr_env_val
-
-        # Calc envelope continuation index
-        cont_env_start_idx = 0
-        if curr_env_val != 0.0:
-            cont_env_start_idx = int(
-                round((1.0 - curr_env_val) * (note_on_samples - 1))
-            )
-            # cont_env_start_idx = int(round(cont_env_start_idx))
-            cont_env_start_idx = min(cont_env_start_idx, note_on_samples - 1)
-            cont_env_start_idx = max(cont_env_start_idx, 0)
-
-        # If there is no silence, return the envelope
-        if first_nonzero_idx == 0:
-            out[:, 0:n_samples] = env[
-                cont_env_start_idx : cont_env_start_idx + n_samples
-            ]
-            curr_env_val = out[0, -1].item()
-            return out, first_nonzero_idx, curr_env_val
-
-        # Continue the envelope if required
-        cont_env_len = 0
-        if curr_env_val != 0.0:
-            cont_env_len = min(n_samples, note_on_samples - cont_env_start_idx)
-            cont_env_end_idx = cont_env_start_idx + cont_env_len
-            out[:, 0:cont_env_len] = env[cont_env_start_idx:cont_env_end_idx]
-
-        # If all silence
-        if first_nonzero_idx == -1:
-            curr_env_val = out[0, -1].item()
-            return out, 0, curr_env_val
-
-        first_nonzero_idx = max(first_nonzero_idx, cont_env_len)
-        n_non_zero_samples = n_samples - first_nonzero_idx
-        out[:, first_nonzero_idx:n_samples] = env[0:n_non_zero_samples]
-        curr_env_val = out[0, -1].item()
-        return out, first_nonzero_idx, curr_env_val
 
 
 class AcidSynthWrapper(WaveformToWaveformBase):

@@ -220,15 +220,19 @@ class AcidSynthLearnedBiquadCoeff(AcidSynthBase):
         assert logits.ndim == 3
         n_samples = x.size(1)
         a_coeff, b_coeff = self._calc_coeff(logits, n_samples)
-        y_a = self.lpc_func(x, a_coeff)
+        zi = filter_args.get("zi")
+        zi_a = zi
+        if zi_a is not None:
+            zi_a = tr.flip(zi_a, dims=[1])  # Match scipy's convention for torchlpc
+        y_a = self.lpc_func(x, a_coeff, zi=zi_a)
         assert not tr.isinf(y_a).any()
         assert not tr.isnan(y_a).any()
-        y_ab = time_varying_fir(y_a, b_coeff)
+        y_ab = time_varying_fir(y_a, b_coeff, zi=zi)
         a1 = a_coeff[:, :, 0]
         a2 = a_coeff[:, :, 1]
         a0 = tr.ones_like(a1)
         a_coeff = tr.stack([a0, a1, a2], dim=2)
-        filter_out = {"a_coeff": a_coeff, "b_coeff": b_coeff}
+        filter_out = {"a_coeff": a_coeff, "b_coeff": b_coeff, "y_a": y_a}
         return y_ab, filter_out
 
 
