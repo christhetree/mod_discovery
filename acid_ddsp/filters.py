@@ -16,13 +16,16 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-def time_varying_fir(x: T, b: T) -> T:
+def time_varying_fir(x: T, b: T, zi: Optional[T] = None) -> T:
     assert x.ndim == 2
     assert b.ndim == 3
     assert x.size(0) == b.size(0)
     assert x.size(1) == b.size(1)
     order = b.size(2) - 1
     x_padded = F.pad(x, (order, 0))
+    if zi is not None:
+        assert zi.shape == (x.size(0), order)
+        x_padded[:, :order] = zi
     x_unfolded = x_padded.unfold(dimension=1, size=order + 1, step=1)
     x_unfolded = x_unfolded.unsqueeze(3)
     b = tr.flip(b, dims=[2])  # Go from correlation to convolution
@@ -283,7 +286,8 @@ class TimeVaryingLPBiquad(nn.Module):
         w_mod_sig: Optional[T] = None,
         q_mod_sig: Optional[T] = None,
         interp_coeff: bool = False,
-    ) -> Tuple[T, T, T]:
+        zi: Optional[T] = None,
+    ) -> Tuple[T, T, T, T]:
         w, q = self.calc_w_and_q(x, w_mod_sig, q_mod_sig)
         n_samples = x.size(1)
         if not interp_coeff:
@@ -298,15 +302,18 @@ class TimeVaryingLPBiquad(nn.Module):
             b_coeff = util.linear_interpolate_dim(
                 b_coeff, n_samples, dim=1, align_corners=True
             )
-        y_a = self.lpc_func(x, a_coeff)
+        zi_a = zi
+        if zi_a is not None:
+            zi_a = tr.flip(zi_a, dims=[1])  # Match scipy's convention for torchlpc
+        y_a = self.lpc_func(x, a_coeff, zi_a)
         assert not tr.isinf(y_a).any()
         assert not tr.isnan(y_a).any()
-        y_ab = time_varying_fir(y_a, b_coeff)
+        y_ab = time_varying_fir(y_a, b_coeff, zi)
         a1 = a_coeff[:, :, 0]
         a2 = a_coeff[:, :, 1]
         a0 = tr.ones_like(a1)
         a_coeff = tr.stack([a0, a1, a2], dim=2)
-        return y_ab, a_coeff, b_coeff
+        return y_ab, a_coeff, b_coeff, y_a
 
 
 class TimeVaryingLPBiquadFSM(TimeVaryingLPBiquad):

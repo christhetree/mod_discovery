@@ -87,13 +87,16 @@ class AcidSynthBase(ABC, nn.Module):
         if envelope is None:
             envelope = self.env_gen(learned_alpha, note_on_duration, n_samples)
         dry_audio *= envelope
-        wet_audio, filter_out = self.filter_dry_audio(dry_audio, filter_args)
-        wet_audio = wet_audio * dist_gain.unsqueeze(-1)
+        filtered_audio, filter_out = self.filter_dry_audio(dry_audio, filter_args)
+        y_a = filter_out["y_a"]
+        wet_audio = filtered_audio * dist_gain.unsqueeze(-1)
         wet_audio = tr.tanh(wet_audio)
         synth_out = {
             "dry": dry_audio,
             "wet": wet_audio,
             "envelope": envelope,
+            "y_a": y_a,
+            "filtered_audio": filtered_audio,
         }
         synth_out.update(filter_out)
         return synth_out
@@ -126,14 +129,19 @@ class AcidSynthLPBiquad(AcidSynthBase):
     ) -> Tuple[T, Dict[str, T]]:
         w_mod_sig = filter_args["w_mod_sig"]
         q_mod_sig = filter_args["q_mod_sig"]
+        zi = filter_args.get("zi")
         if w_mod_sig.ndim == 3:
             w_mod_sig = w_mod_sig.squeeze(2)
         if q_mod_sig.ndim == 3:
             q_mod_sig = q_mod_sig.squeeze(2)
-        y, a_coeff, b_coeff = self.filter(
-            x, w_mod_sig, q_mod_sig, interp_coeff=self.interp_coeff
+        y, a_coeff, b_coeff, y_a = self.filter(
+            x,
+            w_mod_sig,
+            q_mod_sig,
+            interp_coeff=self.interp_coeff,
+            zi=zi,
         )
-        filter_out = {"a_coeff": a_coeff, "b_coeff": b_coeff}
+        filter_out = {"a_coeff": a_coeff, "b_coeff": b_coeff, "y_a": y_a}
         return y, filter_out
 
 
