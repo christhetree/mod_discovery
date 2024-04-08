@@ -88,14 +88,12 @@ class AcidSynthBase(ABC, nn.Module):
             envelope = self.env_gen(learned_alpha, note_on_duration, n_samples)
         dry_audio *= envelope
         filtered_audio, filter_out = self.filter_dry_audio(dry_audio, filter_args)
-        y_a = filter_out["y_a"]
         wet_audio = filtered_audio * dist_gain.unsqueeze(-1)
         wet_audio = tr.tanh(wet_audio)
         synth_out = {
             "dry": dry_audio,
             "wet": wet_audio,
             "envelope": envelope,
-            "y_a": y_a,
             "filtered_audio": filtered_audio,
         }
         synth_out.update(filter_out)
@@ -141,7 +139,9 @@ class AcidSynthLPBiquad(AcidSynthBase):
             interp_coeff=self.interp_coeff,
             zi=zi,
         )
-        filter_out = {"a_coeff": a_coeff, "b_coeff": b_coeff, "y_a": y_a}
+        filter_out = {"a_coeff": a_coeff, "b_coeff": b_coeff}
+        if y_a is not None:
+            filter_out["y_a"] = y_a
         return y, filter_out
 
 

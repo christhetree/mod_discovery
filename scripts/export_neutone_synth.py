@@ -1,20 +1,18 @@
 import logging
 import os
 import pathlib
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 
 import librosa
 import torch as tr
 import torch.nn as nn
-import torchaudio
 from neutone_sdk import WaveformToWaveformBase, NeutoneParameter
 from neutone_sdk.utils import save_neutone_model
 from torch import Tensor as T
-from tqdm import tqdm
 
-import util
-from paths import OUT_DIR, MODELS_DIR
-from synths import AcidSynthLPBiquad
+from audio_config import AudioConfig
+from paths import OUT_DIR
+from synths import AcidSynthLPBiquad, AcidSynthLPBiquadFSM
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -24,31 +22,58 @@ log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 class AcidSynth(nn.Module):
     def __init__(
         self,
-        synth: AcidSynthLPBiquad,
         min_midi_f0: int = 30,
         max_midi_f0: int = 60,
+        min_alpha: float = 0.2,
+        max_alpha: float = 3.0,
+        min_w_hz: float = 100.0,
+        max_w_hz: float = 8000.0,
+        min_q: float = 0.7071,
+        max_q: float = 8.0,
+        sr: int = 48000,
         note_on_duration: float = 0.125,
         osc_shape: float = 1.0,
         osc_gain: float = 0.5,
         dist_gain: float = 1.0,
+        stability_eps: float = 0.001,
+        use_fs: bool = False,
+        win_len: int = 128,
+        overlap: float = 0.75,
+        oversampling_factor: int = 1,
     ):
         super().__init__()
-        self.synth = synth
-        if hasattr(synth, "toggle_scriptable"):
-            synth.toggle_scriptable(True)
+        self.ac = AudioConfig(
+            sr=sr,
+            min_w_hz=min_w_hz,
+            max_w_hz=max_w_hz,
+            min_q=min_q,
+            max_q=max_q,
+            stability_eps=stability_eps,
+        )
+        if use_fs:
+            self.synth = AcidSynthLPBiquadFSM(
+                self.ac,
+                win_len=win_len,
+                overlap=overlap,
+                oversampling_factor=oversampling_factor,
+            )
+        else:
+            self.synth = AcidSynthLPBiquad(self.ac)
+            self.synth.toggle_scriptable(is_scriptable=True)
+
         self.min_midi_f0 = min_midi_f0
         self.max_midi_f0 = max_midi_f0
+        self.min_alpha = min_alpha
+        self.max_alpha = max_alpha
         self.register_buffer("note_on_duration", tr.full((1,), note_on_duration))
         self.register_buffer("osc_shape", tr.full((1,), osc_shape))
         self.register_buffer("osc_gain", tr.full((1,), osc_gain))
         self.register_buffer("dist_gain", tr.full((1,), dist_gain))
-        # self.register_buffer("alpha", tr.full((1,), 1.0))
 
-        self.sr = self.synth.ac.sr
+        self.sr = self.ac.sr
         self.note_on_samples = int(note_on_duration * self.sr)
         self.curr_env_val = 1.0
         self.register_buffer("phase", tr.zeros((1, 1), dtype=tr.double))
-        # self.register_buffer("phase", tr.zeros((1, 1), dtype=tr.float))
         self.register_buffer("zi", tr.zeros((1, 2)))
         self.midi_f0_to_hz = {
             idx: tr.tensor(librosa.midi_to_hz(idx)).view(1).float()
@@ -64,20 +89,12 @@ class AcidSynth(nn.Module):
         self,
         x: T,
         midi_f0_0to1: T,
-        # note_on_duration_0to1: T,
         alpha_0to1: T,
         w_mod_sig: T,
         q_mod_sig: T,
     ) -> T:
         n_samples = x.size(-1)
-        # note_on_duration = (
-        #     note_on_duration_0to1
-        #     * (self.max_note_on_duration - self.min_note_on_duration)
-        #     + self.min_note_on_duration
-        # )
-        # note_on_samples = int(note_on_duration.item() * self.sr)
-        alpha = self.synth.ac.convert_from_0to1("learned_alpha", alpha_0to1)
-
+        alpha = alpha_0to1 * (self.max_alpha - self.min_alpha) + self.min_alpha
         env, env_start_idx, new_env_val = self.make_envelope(
             x, self.note_on_samples, self.curr_env_val
         )
@@ -111,17 +128,13 @@ class AcidSynth(nn.Module):
             global_params=global_params,
             envelope=env,
         )
-        dry = synth_out["dry"]
-        y_a = synth_out["y_a"]
-        filtered_audio = synth_out["filtered_audio"]
         wet = synth_out["wet"]
 
         period_completion = (n_samples / (self.sr / f0_hz.double())) % 1.0
-        # period_completion = (n_samples / (self.sr / f0_hz)) % 1.0
         tr.add(self.phase, 2 * tr.pi * period_completion, out=self.phase)
-        self.zi[:, :] = y_a[:, -2:]
-        # return dry
-        # return filtered_audio
+        y_a = synth_out.get("y_a")
+        if y_a is not None:
+            self.zi[:, :] = y_a[:, -2:]
         return wet
 
     @staticmethod
@@ -217,14 +230,10 @@ class AcidSynthWrapper(WaveformToWaveformBase):
     def get_neutone_parameters(self) -> List[NeutoneParameter]:
         return [
             NeutoneParameter("midi_f0", "midi_f0", default_value=0.5),
-            # NeutoneParameter("note_on_duration", "note_on_duration", default_value=0.0),
-            NeutoneParameter("alpha", "alpha", default_value=0.25),
+            NeutoneParameter("alpha", "alpha", default_value=0.5),
             NeutoneParameter("w_mod_sig", "w_mod_sig", default_value=1.0),
             NeutoneParameter("q_mod_sig", "q_mod_sig", default_value=0.5),
         ]
-
-    def aggregate_params(self, params: T) -> T:
-        return params
 
     @tr.jit.export
     def is_input_mono(self) -> bool:
@@ -236,7 +245,7 @@ class AcidSynthWrapper(WaveformToWaveformBase):
 
     @tr.jit.export
     def get_native_sample_rates(self) -> List[int]:
-        return [48000]
+        return [self.model.sr]
 
     @tr.jit.export
     def get_native_buffer_sizes(self) -> List[int]:
@@ -248,114 +257,22 @@ class AcidSynthWrapper(WaveformToWaveformBase):
         return True
 
     def do_forward_pass(self, x: T, params: Dict[str, T]) -> T:
+        n_samples = x.size(-1)
         midi_f0_0to1 = params["midi_f0"]
-        midi_f0_0to1 = midi_f0_0to1.mean().unsqueeze(0)
-        # note_on_duration_0to1 = params["note_on_duration"]
-        # note_on_duration_0to1 = note_on_duration_0to1.mean().unsqueeze(0)
         w_mod_sig = params["w_mod_sig"].unsqueeze(0)
         q_mod_sig = params["q_mod_sig"].unsqueeze(0)
+        w_mod_sig = w_mod_sig.expand(-1, n_samples)
+        q_mod_sig = q_mod_sig.expand(-1, n_samples)
         alpha_0to1 = params["alpha"]
-        alpha_0to1 = alpha_0to1.mean().unsqueeze(0)
         x = x.unsqueeze(1)
-        # y = self.model(x, midi_f0_0to1, note_on_duration_0to1, w_mod_sig, q_mod_sig)
         y = self.model(x, midi_f0_0to1, alpha_0to1, w_mod_sig, q_mod_sig)
         y = y.squeeze(1)
         return y
 
 
 if __name__ == "__main__":
-    # buffer_n_samples = 200
-    # curr_env_val = 0.0
-    # alpha = 1.0
-    # note_on_samples_all = [300] * 5
-    # envs = []
-    # for idx, note_on_samples in enumerate(note_on_samples_all):
-    #     if idx == 0:
-    #         x = tr.randn((buffer_n_samples,))
-    #         x[0:10] = 0.0
-    #     elif idx == 1:
-    #         x = tr.zeros((buffer_n_samples,))
-    #     else:
-    #         x = tr.randn((buffer_n_samples,))
-    #     # x[6:9] = 0.0
-    #
-    #     env, start_idx, curr_env_val = AcidSynth.make_envelope_2(
-    #         x, note_on_samples, curr_env_val, alpha
-    #     )
-    #     log.info(
-    #         f"env.shape: {env.shape}, start_idx: {start_idx}, curr_env_val: {curr_env_val}"
-    #     )
-    #     envs.append(env)
-    # from matplotlib import pyplot as plt
-    #
-    # env = tr.cat(envs, dim=-1)
-    # plt.plot(env.squeeze().numpy())
-    # plt.show()
-    # exit()
-
-    model_dir = MODELS_DIR
-    model_name = "cnn_mss_lp_td__abstract_303_48k__6k__4k_min__epoch_183_step_1104"
-    # model_name = "cnn_mss_lp_fs_128__abstract_303_48k__6k__4k_min__epoch_183_step_1104"
-
-    config_path = os.path.join(model_dir, model_name, "config.yaml")
-    ckpt_path = os.path.join(model_dir, model_name, "checkpoints", f"{model_name}.ckpt")
-    _, synth = util.extract_model_and_synth_from_config(config_path, ckpt_path)
-    # This isn't actually necessary, doing it just in case
-    synth.eval()
-
-    model = AcidSynth(synth)
+    model = AcidSynth()
+    model.eval()  # This isn't actually necessary, doing it just in case
     wrapper = AcidSynthWrapper(model)
-
-    # n_buf = 200
-    # bs = 512
-    # x_all = []
-    # y_all = []
-    # for _ in tqdm(range(n_buf)):
-    #     x = tr.rand((1, bs))
-    #     x_all.append(x)
-    #     midi_f0_0to1 = tr.full((1,), 0.5)
-    #     alpha_0to1 = tr.full((1,), 0.5)
-    #     w_mod_sig = tr.full((1, bs), 0.5)
-    #     q_mod_sig = tr.full((1, bs), 0.5)
-    #     y = model(x, midi_f0_0to1, alpha_0to1, w_mod_sig, q_mod_sig)
-    #     y_all.append(y)
-    # x = tr.cat(x_all, dim=-1)
-    # y = tr.cat(y_all, dim=-1)
-    # save_path = os.path.join(OUT_DIR, "acid_synth_test_buf.wav")
-    # torchaudio.save(save_path, y, synth.ac.sr)
-    #
-    # model.reset()
-    # bs = x.size(-1)
-    #
-    # midi_f0_0to1 = tr.full((1,), 0.5)
-    # alpha_0to1 = tr.full((1,), 0.5)
-    # w_mod_sig = tr.full((1, bs), 0.5)
-    # q_mod_sig = tr.full((1, bs), 0.5)
-    # y_2 = model(x, midi_f0_0to1, alpha_0to1, w_mod_sig, q_mod_sig)
-    # save_path = os.path.join(OUT_DIR, "acid_synth_test_all.wav")
-    # torchaudio.save(save_path, y_2, synth.ac.sr)
-    #
-    # log.info(f"tr.allclose(y, y_2): {tr.allclose(y, y_2, atol=1e-2)}")
-    # if not tr.allclose(y, y_2):
-    #     # Find largest difference location
-    #     diff = tr.abs(y - y_2)
-    #     max_diff = tr.max(diff)
-    #     log.info(f"max_diff: {max_diff}")
-    #     max_diff_idx = tr.argmax(diff)
-    #     log.info(f"max_diff_idx: {max_diff_idx}")
-    #     log.info(
-    #         f"{y[0, max_diff_idx - 1: max_diff_idx + 3]} vs {y_2[0, max_diff_idx - 1: max_diff_idx + 3]}"
-    #     )
-    #     # Find first index that's different
-    #     diff_idx = tr.nonzero(y[0, :] != y_2[0, :])
-    #     first_idx = diff_idx[0, 0].item()
-    #     log.info(f"first_idx: {first_idx}")
-    #     log.info(
-    #         f"{y[0, first_idx - 1: first_idx + 3]} vs {y_2[0, first_idx - 1: first_idx + 3]}"
-    #     )
-    #     log.info(f"{y[0, -5:]} vs {y_2[0, -5:]}")
-    #
-    # exit()
-
     root_dir = pathlib.Path(os.path.join(OUT_DIR, "neutone_models", "acid_synth"))
     save_neutone_model(wrapper, root_dir, dump_samples=False, submission=False)
