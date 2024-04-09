@@ -326,14 +326,25 @@ class AcidSynthLSTM(AcidSynthBase):
         if q_mod_sig.ndim == 3:
             q_mod_sig = q_mod_sig.squeeze(2)
         w_mod_sig, q_mod_sig = self.resize_mod_sig(x, w_mod_sig, q_mod_sig)
+
+        h_n = filter_args.get("h_n")
+        c_n = filter_args.get("c_n")
+        hidden: Optional[Tuple[T, T]] = None
+        if h_n is not None and c_n is not None:
+            # This is a workaround for torchscript typing not working well with Optional
+            if h_n.shape == (1, 1, self.n_hidden):
+                if c_n.shape == (1, 1, self.n_hidden):
+                    hidden = (h_n, c_n)
+
         x_orig = x
         x = tr.stack([x, w_mod_sig, q_mod_sig], dim=2)
-        x, _ = self.lstm(x)
+        x, (new_h_n, new_c_n) = self.lstm(x, hidden)
         x = self.out_lstm(x)
         x = x.squeeze(-1)
         x = x + x_orig
         x = tr.tanh(x)
-        return x, {}
+        filter_out = {"h_n": new_h_n, "c_n": new_c_n}
+        return x, filter_out
 
 
 if __name__ == "__main__":

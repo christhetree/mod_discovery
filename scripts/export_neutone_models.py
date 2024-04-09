@@ -61,6 +61,8 @@ class AcidSynthModel(nn.Module):
         self.curr_env_val = 1.0
         self.register_buffer("phase", tr.zeros((1, 1), dtype=tr.double))
         self.register_buffer("zi", tr.zeros((1, 2)))
+        self.register_buffer("h_n", tr.empty(0))
+        self.register_buffer("c_n", tr.empty(0))
         self.midi_f0_to_hz = {
             idx: tr.tensor(librosa.midi_to_hz(idx)).view(1).float()
             for idx in range(min_midi_f0, max_midi_f0 + 1)
@@ -70,6 +72,8 @@ class AcidSynthModel(nn.Module):
         self.curr_env_val = 1.0
         self.phase.zero_()
         self.zi.zero_()
+        self.h_n = tr.empty(0)
+        self.c_n = tr.empty(0)
 
     def forward(self, x: T, midi_f0_0to1: T) -> T:
         n_samples = x.size(-1)
@@ -101,6 +105,9 @@ class AcidSynthModel(nn.Module):
             }
         if self.is_td_synth:
             filter_args["zi"] = self.zi
+        if self.is_rnn_synth:
+            filter_args["h_n"] = self.h_n
+            filter_args["c_n"] = self.c_n
         global_params = {
             "osc_shape": self.ac.convert_from_0to1(
                 "osc_shape", model_out["osc_shape_0to1"]
@@ -129,6 +136,9 @@ class AcidSynthModel(nn.Module):
         if self.is_td_synth:
             y_a = synth_out["y_a"]
             self.zi[:, :] = y_a[:, -2:]
+        if self.is_rnn_synth:
+            self.h_n = synth_out["h_n"]
+            self.c_n = synth_out["c_n"]
         return wet
 
 
