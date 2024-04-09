@@ -15,6 +15,7 @@ dependencies:
     - numpy==1.23.5
     - pandas
     - pytorch-lightning
+    - resampy
     - scipy==1.11.2
     - torch
     - torchaudio

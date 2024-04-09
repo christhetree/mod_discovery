@@ -22,6 +22,7 @@ dependencies:
     - numpy==1.23.5
     - nvitop
     - pandas
+    - resampy
     - scipy==1.11.2
     - tensorboard
     - wandb

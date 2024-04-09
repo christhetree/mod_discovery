@@ -135,6 +135,8 @@ class AcidSynth(nn.Module):
         self.use_fs = use_fs
         self.win_len = win_len
         self.overlap = overlap
+        self.hop_len = int(win_len * (1 - overlap))
+        assert win_len % self.hop_len == 0, "Hop length must divide into window length."
         self.oversampling_factor = oversampling_factor
 
         self.note_on_samples = int(note_on_duration * self.sr)
@@ -274,7 +276,17 @@ class AcidSynthWrapper(WaveformToWaveformBase):
 
     @tr.jit.export
     def get_native_buffer_sizes(self) -> List[int]:
-        return []
+        if self.model.use_fs:
+            return [
+                bs
+                for bs in range(
+                    self.model.win_len,
+                    max(self.model.win_len + 1, 10000),
+                    self.model.hop_len,
+                )
+            ]
+        else:
+            return []
 
     @tr.jit.export
     def reset_model(self) -> bool:

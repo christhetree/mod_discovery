@@ -240,7 +240,11 @@ if __name__ == "__main__":
 
     model = AcidSynthModel(cnn, synth)
     wrapper = AcidSynthModelWrapper(model)
-    root_dir = pathlib.Path(os.path.join(OUT_DIR, "neutone_models", model_name))
+    root_dir = pathlib.Path(
+        os.path.join(
+            OUT_DIR, "neutone_models", f"{wrapper.get_model_name()}__{model_name}"
+        )
+    )
     save_neutone_model(
         wrapper,
         root_dir,

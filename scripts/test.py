@@ -45,7 +45,11 @@ if __name__ == "__main__":
             config = yaml.safe_load(in_f)
         if config.get("ckpt_path"):
             assert os.path.abspath(config["ckpt_path"]) == os.path.abspath(ckpt_path)
-        config["custom"]["cpu_batch_size"] = 68
+
+        test_set_n = 68
+        config["custom"]["cpu_batch_size"] = test_set_n
+        config["data"]["init_args"]["batch_size"] = test_set_n
+
         config["model"]["init_args"]["fad_model_names"] = fad_model_names
         config["model"]["init_args"]["run_name"] = model_name
         # Modify this to reduce the number of N for confidence intervals

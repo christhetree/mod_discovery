@@ -6,10 +6,11 @@ hypy-utils==1.0.22
 jsonargparse==4.27.7
 librosa==0.10.1
 matplotlib==3.7.3
-neutone_sdk @ git+https://github.com/Neutone/neutone_sdk.git@c69108d6ad11910afdc3ce4ead0a647456e2addb
+neutone-sdk==1.4.3
 pandas==2.2.1
 pip-chill==1.0.3
 pytorch-lightning==2.2.1
+resampy==0.4.3
 tensorboard==2.16.2
 torchvision==0.16.2
 typeshed-client==2.5.1
