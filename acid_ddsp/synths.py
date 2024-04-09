@@ -363,36 +363,3 @@ class AcidSynthLSTM(AcidSynthBase):
         x = tr.tanh(x)
         filter_out = {"h_n": new_h_n, "c_n": new_c_n}
         return x, filter_out
-
-
-if __name__ == "__main__":
-    tr.manual_seed(0)
-    ac = AudioConfig()
-    # synth = AcidSynthLPBiquad(ac, make_scriptable=True)
-    # synth = AcidSynthLPBiquadFSM(ac, win_len=128, overlap=0.75, oversampling_factor=1)
-    synth = AcidSynthLearnedBiquadCoeff(ac, make_scriptable=True)
-    # synth = AcidSynthLearnedBiquadCoeff(ac, make_scriptable=False)
-    # synth = AcidSynthLearnedBiquadCoeffFSM(
-    #     ac, win_len=128, overlap=0.75, oversampling_factor=1
-    # )
-    # synth = AcidSynthLSTM(ac, 64)
-    scripted = tr.jit.script(synth)
-    f0_hz = tr.tensor([220.0])
-    note_on_duration = tr.tensor([0.100])
-    phase = tr.tensor([0.0]).unsqueeze(1)
-    # filter_args = {
-    #     "w_mod_sig": tr.tensor([[0.5]]),
-    #     "q_mod_sig": tr.tensor([[0.5]]),
-    # }
-    filter_args = {
-        "logits": tr.rand((1, 10, 5)),
-    }
-    global_params = {
-        "osc_shape": tr.tensor([0.5]),
-        "osc_gain": tr.tensor([0.5]),
-        "dist_gain": tr.tensor([0.5]),
-        "learned_alpha": tr.tensor([0.5]),
-    }
-    synth_out = scripted(f0_hz, note_on_duration, phase, filter_args, global_params)
-    print(synth_out["wet"])
-    # tr.jit.save(scripted, "synth.ts")
