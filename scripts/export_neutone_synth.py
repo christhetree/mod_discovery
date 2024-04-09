@@ -6,7 +6,11 @@ from typing import Dict, List, Tuple
 import librosa
 import torch as tr
 import torch.nn as nn
-from neutone_sdk import WaveformToWaveformBase, NeutoneParameter
+from neutone_sdk import (
+    WaveformToWaveformBase,
+    NeutoneParameter,
+    ContinuousNeutoneParameter,
+)
 from neutone_sdk.utils import save_neutone_model
 from torch import Tensor as T
 
@@ -119,13 +123,20 @@ class AcidSynth(nn.Module):
         self.max_midi_f0 = max_midi_f0
         self.min_alpha = min_alpha
         self.max_alpha = max_alpha
+        self.min_w_hz = min_w_hz
+        self.max_w_hz = max_w_hz
+        self.min_q = min_q
+        self.max_q = max_q
+        self.sr = sr
         self.register_buffer("note_on_duration", tr.full((1,), note_on_duration))
         self.register_buffer("osc_shape", tr.full((1,), osc_shape))
         self.register_buffer("osc_gain", tr.full((1,), osc_gain))
         self.register_buffer("dist_gain", tr.full((1,), dist_gain))
         self.use_fs = use_fs
+        self.win_len = win_len
+        self.overlap = overlap
+        self.oversampling_factor = oversampling_factor
 
-        self.sr = self.ac.sr
         self.note_on_samples = int(note_on_duration * self.sr)
         self.curr_env_val = 1.0
         self.register_buffer("phase", tr.zeros((1, 1), dtype=tr.double))
@@ -150,9 +161,7 @@ class AcidSynth(nn.Module):
     ) -> T:
         n_samples = x.size(-1)
         alpha = alpha_0to1 * (self.max_alpha - self.min_alpha) + self.min_alpha
-        env, _, new_env_val = make_envelope(
-            x, self.note_on_samples, self.curr_env_val
-        )
+        env, _, new_env_val = make_envelope(x, self.note_on_samples, self.curr_env_val)
         self.curr_env_val = new_env_val
         if alpha != 1.0:
             tr.pow(env, alpha, out=env)
@@ -195,28 +204,31 @@ class AcidSynth(nn.Module):
 
 class AcidSynthWrapper(WaveformToWaveformBase):
     def get_model_name(self) -> str:
-        return "testing"
+        if self.model.use_fs:
+            return f"acid_synth_lp_fs_{self.model.win_len}"
+        else:
+            return "acid_synth_lp_td"
 
     def get_model_authors(self) -> List[str]:
         return ["Christopher Mitcheltree"]
 
     def get_model_short_description(self) -> str:
-        return "tbd"
+        return "Low-pass biquad TB-303 DDSP implementation."
 
     def get_model_long_description(self) -> str:
-        return "tbd"
+        return "Low-pass biquad TB-303 DDSP implementation for 'Differentiable All-pole Filters for Time-varying Audio Systems'"
 
     def get_technical_description(self) -> str:
-        return "tbd"
+        return "Wrapper for a TB-303 DDSP implementation consisting of a sawtooth or square wave oscillator, time-varying low-pass biquad filter, and hyperbolic tangent distortion."
 
     def get_technical_links(self) -> Dict[str, str]:
         return {
             # "Paper": "tbd",
-            # "Code": "tbd",
+            "Code": "https://github.com/DiffAPF/TB-303",
         }
 
     def get_tags(self) -> List[str]:
-        return ["subtractive synth", "acid", "TB-303", "sound matching"]
+        return ["subtractive synth", "acid", "TB-303"]
 
     def get_model_version(self) -> str:
         return "1.0.0"
@@ -226,10 +238,26 @@ class AcidSynthWrapper(WaveformToWaveformBase):
 
     def get_neutone_parameters(self) -> List[NeutoneParameter]:
         return [
-            NeutoneParameter("midi_f0", "midi_f0", default_value=0.5),
-            NeutoneParameter("alpha", "alpha", default_value=0.5),
-            NeutoneParameter("w_mod_sig", "w_mod_sig", default_value=1.0),
-            NeutoneParameter("q_mod_sig", "q_mod_sig", default_value=0.5),
+            ContinuousNeutoneParameter(
+                "midi_f0",
+                f"Oscillator pitch quantized to the nearest midi pitch [f{self.model.min_midi_f0}, f{self.model.max_midi_f0}]",
+                default_value=0.5,
+            ),
+            ContinuousNeutoneParameter(
+                "alpha",
+                f"Decaying envelope generator exponent [f{self.model.min_alpha}, f{self.model.max_alpha}]",
+                default_value=0.5,
+            ),
+            ContinuousNeutoneParameter(
+                "w_mod_sig",
+                f"Filter cutoff frequency [f{self.model.min_w_hz} Hz, f{self.model.max_w_hz} Hz]",
+                default_value=1.0,
+            ),
+            ContinuousNeutoneParameter(
+                "q_mod_sig",
+                f"Filter resonance Q-factor [f{self.model.min_q}, f{self.model.max_q}]",
+                default_value=0.5,
+            ),
         ]
 
     @tr.jit.export
@@ -268,8 +296,12 @@ class AcidSynthWrapper(WaveformToWaveformBase):
 
 
 if __name__ == "__main__":
-    model = AcidSynth()
+    model = AcidSynth(use_fs=False)
     model.eval()  # This isn't actually necessary, doing it just in case
     wrapper = AcidSynthWrapper(model)
-    root_dir = pathlib.Path(os.path.join(OUT_DIR, "neutone_models", "acid_synth"))
-    save_neutone_model(wrapper, root_dir, dump_samples=False, submission=False)
+    root_dir = pathlib.Path(
+        os.path.join(OUT_DIR, "neutone_models", wrapper.get_model_name())
+    )
+    save_neutone_model(
+        wrapper, root_dir, submission=False, dump_samples=False, test_offline_mode=False
+    )
