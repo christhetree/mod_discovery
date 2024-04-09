@@ -216,7 +216,7 @@ class AcidSynthWrapper(WaveformToWaveformBase):
         return "Low-pass biquad TB-303 DDSP implementation."
 
     def get_model_long_description(self) -> str:
-        return "Low-pass biquad TB-303 DDSP implementation for 'Differentiable All-pole Filters for Time-varying Audio Systems'"
+        return "Low-pass biquad TB-303 DDSP implementation for 'Differentiable All-pole Filters for Time-varying Audio Systems'."
 
     def get_technical_description(self) -> str:
         return "Wrapper for a TB-303 DDSP implementation consisting of a sawtooth or square wave oscillator, time-varying low-pass biquad filter, and hyperbolic tangent distortion."
@@ -297,11 +297,15 @@ class AcidSynthWrapper(WaveformToWaveformBase):
 
 if __name__ == "__main__":
     model = AcidSynth(use_fs=False)
-    model.eval()  # This isn't actually necessary, doing it just in case
     wrapper = AcidSynthWrapper(model)
     root_dir = pathlib.Path(
         os.path.join(OUT_DIR, "neutone_models", wrapper.get_model_name())
     )
     save_neutone_model(
-        wrapper, root_dir, submission=False, dump_samples=False, test_offline_mode=False
+        wrapper,
+        root_dir,
+        submission=False,
+        dump_samples=False,
+        test_offline_mode=False,
+        speed_benchmark=False,
     )

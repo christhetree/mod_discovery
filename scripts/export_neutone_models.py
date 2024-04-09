@@ -6,7 +6,11 @@ from typing import Dict, List
 import librosa
 import torch as tr
 import torch.nn as nn
-from neutone_sdk import WaveformToWaveformBase, NeutoneParameter
+from neutone_sdk import (
+    WaveformToWaveformBase,
+    NeutoneParameter,
+    ContinuousNeutoneParameter,
+)
 from neutone_sdk.utils import save_neutone_model
 from torch import Tensor as T
 
@@ -14,7 +18,12 @@ import util
 from models import Spectral2DCNN
 from paths import OUT_DIR, MODELS_DIR
 from scripts.export_neutone_synth import make_envelope
-from synths import AcidSynthBase, AcidSynthLearnedBiquadCoeff, AcidSynthLPBiquad
+from synths import (
+    AcidSynthBase,
+    AcidSynthLearnedBiquadCoeff,
+    AcidSynthLPBiquad,
+    AcidSynthLSTM,
+)
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -36,6 +45,7 @@ class AcidSynthModel(nn.Module):
         self.max_midi_f0 = max_midi_f0
 
         self.is_coeff_synth = isinstance(synth, AcidSynthLearnedBiquadCoeff)
+        self.is_rnn_synth = isinstance(synth, AcidSynthLSTM)
         self.is_td_synth = type(synth) in {
             AcidSynthLearnedBiquadCoeff,
             AcidSynthLPBiquad,
@@ -124,24 +134,34 @@ class AcidSynthModel(nn.Module):
 
 class AcidSynthModelWrapper(WaveformToWaveformBase):
     def get_model_name(self) -> str:
-        return "testing"
+        if self.model.is_coeff_synth:
+            prefix = "acid_synth_model_coeff"
+        elif self.model.is_rnn_synth:
+            prefix = "acid_synth_model_rnn"
+        else:
+            prefix = "acid_synth_model_lp"
+        if self.model.is_td_synth:
+            suffix = "_td"
+        else:
+            suffix = f"_fs"
+        return f"{prefix}{suffix}"
 
     def get_model_authors(self) -> List[str]:
         return ["Christopher Mitcheltree"]
 
     def get_model_short_description(self) -> str:
-        return "tbd"
+        return "TB-303 DDSP and control model implementation."
 
     def get_model_long_description(self) -> str:
-        return "tbd"
+        return "TB-303 DDSP and control model implementation for 'Differentiable All-pole Filters for Time-varying Audio Systems'."
 
     def get_technical_description(self) -> str:
-        return "tbd"
+        return "Wrapper for a TB-303 DDSP and control model implementation consisting of an analysis CNN that generates the parameters for a differentiable synth."
 
     def get_technical_links(self) -> Dict[str, str]:
         return {
             # "Paper": "tbd",
-            # "Code": "tbd",
+            "Code": "https://github.com/DiffAPF/TB-303",
         }
 
     def get_tags(self) -> List[str]:
@@ -155,7 +175,11 @@ class AcidSynthModelWrapper(WaveformToWaveformBase):
 
     def get_neutone_parameters(self) -> List[NeutoneParameter]:
         return [
-            NeutoneParameter("midi_f0", "midi_f0", default_value=0.50),
+            ContinuousNeutoneParameter(
+                "midi_f0",
+                f"Oscillator pitch quantized to the nearest midi pitch [f{self.model.min_midi_f0}, f{self.model.max_midi_f0}]",
+                default_value=0.50,
+            ),
         ]
 
     @tr.jit.export
@@ -184,24 +208,34 @@ class AcidSynthModelWrapper(WaveformToWaveformBase):
 
 if __name__ == "__main__":
     model_dir = MODELS_DIR
-    # model_name = "cnn_mss_coeff_td__abstract_303_48k__6k__4k_min__epoch_199_step_1200"
+    model_name = "cnn_mss_coeff_td__abstract_303_48k__6k__4k_min__epoch_199_step_1200"
     # model_name = "cnn_mss_coeff_fs_128__abstract_303_48k__6k__4k_min__epoch_143_step_864"
     # model_name = "cnn_mss_coeff_fs_256__abstract_303_48k__6k__4k_min__epoch_159_step_960"
+    # model_name = "cnn_mss_coeff_fs_512__abstract_303_48k__6k__4k_min__epoch_191_step_1152"
+    # model_name = "cnn_mss_coeff_fs_1024__abstract_303_48k__6k__4k_min__epoch_167_step_1008"
+    # model_name = "cnn_mss_coeff_fs_2048__abstract_303_48k__6k__4k_min__epoch_159_step_960"
     # model_name = "cnn_mss_coeff_fs_4096__abstract_303_48k__6k__4k_min__epoch_167_step_1008"
     # model_name = "cnn_mss_lp_td__abstract_303_48k__6k__4k_min__epoch_183_step_1104"
     # model_name = "cnn_mss_lp_fs_128__abstract_303_48k__6k__4k_min__epoch_183_step_1104"
     # model_name = "cnn_mss_lp_fs_256__abstract_303_48k__6k__4k_min__epoch_183_step_1104"
+    # model_name = "cnn_mss_lp_fs_512__abstract_303_48k__6k__4k_min__epoch_183_step_1104"
+    # model_name = "cnn_mss_lp_fs_1024__abstract_303_48k__6k__4k_min__epoch_135_step_816"
+    # model_name = "cnn_mss_lp_fs_2048__abstract_303_48k__6k__4k_min__epoch_135_step_816"
     # model_name = "cnn_mss_lp_fs_4096__abstract_303_48k__6k__4k_min__epoch_135_step_816"
-    model_name = "cnn_mss_lstm_64__abstract_303_48k__6k__4k_min__epoch_175_step_1056"
+    # model_name = "cnn_mss_lstm_64__abstract_303_48k__6k__4k_min__epoch_175_step_1056"
 
     config_path = os.path.join(model_dir, model_name, "config.yaml")
     ckpt_path = os.path.join(model_dir, model_name, "checkpoints", f"{model_name}.ckpt")
     cnn, synth = util.extract_model_and_synth_from_config(config_path, ckpt_path)
-    # This isn't actually necessary, doing it just in case
-    cnn.eval()
-    synth.eval()
 
     model = AcidSynthModel(cnn, synth)
     wrapper = AcidSynthModelWrapper(model)
     root_dir = pathlib.Path(os.path.join(OUT_DIR, "neutone_models", model_name))
-    save_neutone_model(wrapper, root_dir, dump_samples=False, submission=False)
+    save_neutone_model(
+        wrapper,
+        root_dir,
+        submission=False,
+        dump_samples=False,
+        test_offline_mode=False,
+        speed_benchmark=False,
+    )
