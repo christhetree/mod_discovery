@@ -1,14 +1,16 @@
 aiohttp==3.9.3
 auraloss==0.4.0
-black==24.2.0
-docstring-parser==0.15
-jsonargparse==4.27.5
+black==24.3.0
+docstring-parser==0.16
+hypy-utils==1.0.22
+jsonargparse==4.27.7
 librosa==0.10.1
-matplotlib==3.8.3
+matplotlib==3.7.3
+neutone_sdk @ git+https://github.com/Neutone/neutone_sdk.git@c69108d6ad11910afdc3ce4ead0a647456e2addb
+pandas==2.2.1
 pip-chill==1.0.3
-pytorch-lightning==2.2.0
+pytorch-lightning==2.2.1
 tensorboard==2.16.2
-torchaudio==2.2.0
-torchvision==0.17.0
-typeshed-client==2.4.0
-wandb==0.16.3
+torchvision==0.16.2
+typeshed-client==2.5.1
+wandb==0.16.6

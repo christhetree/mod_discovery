@@ -7,16 +7,18 @@ dependencies:
   - pip:
     - auraloss
     - black
+    - hypy_utils
     - jsonargparse[signatures]
     - librosa
-    - matplotlib=3.7.3
-    - nnaudio
+    - matplotlib==3.7.3
     - numba
-    - numpy=1.23.5
+    - numpy==1.23.5
     - pandas
-    - torch
     - pytorch-lightning
+    - scipy==1.11.2
+    - torch
     - torchaudio
     - torchvision
     - tensorboard
     - wandb
+    - git+https://github.com/Neutone/neutone_sdk.git@c69108d6ad11910afdc3ce4ead0a647456e2addb

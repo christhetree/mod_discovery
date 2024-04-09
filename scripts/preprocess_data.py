@@ -109,6 +109,7 @@ if __name__ == "__main__":
     # data_dir = os.path.join(DATA_DIR, "samplescience_abstract_303")
     # out_path = os.path.join(DATA_DIR, "all.wav")
     # concat_wav_files(data_dir, out_path)
+
     audio_path = os.path.join(DATA_DIR, "abstract_303_all_48k.wav")
     midi_path = os.path.join(DATA_DIR, "abstract_303_all.mid")
     out_dir = os.path.join(DATA_DIR, "abstract_303_48k__6k__4k_min")

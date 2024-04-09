@@ -6,7 +6,7 @@ import yaml
 from tqdm import tqdm
 
 from cli import CustomLightningCLI
-from paths import MODELS_DIR, OUT_DIR
+from paths import MODELS_DIR
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -48,6 +48,7 @@ if __name__ == "__main__":
         config["custom"]["cpu_batch_size"] = 68
         config["model"]["init_args"]["fad_model_names"] = fad_model_names
         config["model"]["init_args"]["run_name"] = model_name
+        # Modify this to reduce the number of N for confidence intervals
         config["data"]["init_args"]["n_phases_per_file"] = 20
 
         tmp_config_file = NamedTemporaryFile()
