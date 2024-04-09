@@ -25,6 +25,10 @@ TBD
     <code>export PYTHONPATH=$PYTHONPATH:BASE_DIR/fadtk/</code>.
     </li>
     <li>
+    CPU benchmark values can be obtained by running <code>scripts/benchmark.py</code>.<br>
+    These will vary depending on your computer.
+    </li>
+    <li>
     (Optional) All models can be trained by modifying <code>configs/abstract_303/train.yml</code> and running <code>scripts/train.py</code>.<br>
     Before training, <code>scripts/preprocess_data.py</code> should be run to create the dataset. 
     </li>

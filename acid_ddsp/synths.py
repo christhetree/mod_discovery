@@ -28,6 +28,24 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
+def make_synth(synth_type: str, ac: AudioConfig, **kwargs) -> "AcidSynthBase":
+    if synth_type == "AcidSynthLPBiquad":
+        synth_class = AcidSynthLPBiquad
+    elif synth_type == "AcidSynthLPBiquadFSM":
+        synth_class = AcidSynthLPBiquadFSM
+    elif synth_type == "AcidSynthLearnedBiquadCoeff":
+        synth_class = AcidSynthLearnedBiquadCoeff
+    elif synth_type == "AcidSynthLearnedBiquadCoeffFSM":
+        synth_class = AcidSynthLearnedBiquadCoeffFSM
+    elif synth_type == "AcidSynthLearnedBiquadPoleZero":
+        synth_class = AcidSynthLearnedBiquadPoleZero
+    elif synth_type == "AcidSynthLSTM":
+        synth_class = AcidSynthLSTM
+    else:
+        raise ValueError(f"Unknown synth_type: {synth_type}")
+    return synth_class(ac, **kwargs)
+
+
 class AcidSynthBase(ABC, nn.Module):
     def __init__(self, ac: AudioConfig):
         super().__init__()
