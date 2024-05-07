@@ -45,8 +45,7 @@ class PiecewiseSplines(nn.Module):
         assert coeff.size(2) == self.degree
         coeff = coeff.unsqueeze(1)
         x = coeff * self.support
-        x = x.sum(dim=-1)
-        x = x.sum(dim=-1)
+        x = x.sum(dim=[2, 3])
         if bias is not None:
             x = x + bias
         return x
@@ -69,6 +68,7 @@ if __name__ == "__main__":
         degree,
     )
     x = curves(coeff, bias)
+    # x = tr.sigmoid(x)
 
     log.info(f"x.shape: {x.shape}")
 

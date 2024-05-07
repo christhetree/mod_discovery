@@ -1,10 +1,10 @@
 seed_everything: 42
 
 custom:
-  project_name: acid_ddsp
-#  model_name: testing
+  project_name: acid_ddsp_2
+  model_name: testing
 #  model_name: cnn_ploss
-  model_name: cnn_mss
+#  model_name: cnn_mss
   dataset_name: fixed_adsr__pointy
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
@@ -15,7 +15,7 @@ trainer:
   benchmark: false
   devices: [1]
   max_epochs: 20
-  num_sanity_val_steps: 1
+  num_sanity_val_steps: 0
   accumulate_grad_batches: 1
   gradient_clip_val: 0.5
 
@@ -41,17 +41,17 @@ model:
 
     synth: synth_lp_td.yml
     temp_params_name: w_mod_sig
-    global_param_names: [ q, osc_shape, osc_gain, dist_gain ]
+    global_param_names: [ q, osc_shape, osc_gain, dist_gain, learned_alpha ]
 
-    model: spectral_2dcnn_coeff.yml
-    temp_params_name_hat: logits
-    global_param_names_hat: [ osc_shape, osc_gain, dist_gain ]
-    synth_hat: synth_coeff_td.yml
+#    model: spectral_2dcnn_coeff.yml
+#    temp_params_name_hat: logits
+#    global_param_names_hat: [ osc_shape, osc_gain, dist_gain ]
+#    synth_hat: synth_coeff_td.yml
 
-#    model: spectral_2dcnn_lp.yml
-#    temp_params_name_hat: w_mod_sig
-#    global_param_names_hat: [ q, osc_shape, osc_gain, dist_gain ]
-#    synth_hat: synth_lp_td.yml
+    model: spectral_2dcnn_lp.yml
+    temp_params_name_hat: w_mod_sig
+    global_param_names_hat: [ q, osc_shape, osc_gain, dist_gain, learned_alpha ]
+    synth_hat: synth_lp_td.yml
 #    synth_hat: synth_lstm_64.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss

@@ -13,7 +13,6 @@ import torch as tr
 from auraloss.time import ESRLoss
 from torch import Tensor as T
 from torch import nn
-from tqdm import tqdm
 
 import util
 from audio_config import AudioConfig

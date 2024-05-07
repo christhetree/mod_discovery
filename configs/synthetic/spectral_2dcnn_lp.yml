@@ -9,5 +9,5 @@ init_args:
   n_temp_params: 1
   temp_params_name: w_mod_sig
   temp_params_act_name: sigmoid
-  global_param_names: [q_0to1, osc_shape_0to1, osc_gain_0to1, dist_gain_0to1]
+  global_param_names: [q_0to1, osc_shape_0to1, osc_gain_0to1, dist_gain_0to1, learned_alpha_0to1]
   dropout: 0.25
