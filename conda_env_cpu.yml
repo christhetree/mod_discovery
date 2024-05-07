@@ -22,4 +22,4 @@ dependencies:
     - torchvision
     - tensorboard
     - wandb
-    - git+https://github.com/Neutone/neutone_sdk.git@c69108d6ad11910afdc3ce4ead0a647456e2addb
+    - neutone_sdk @ git+https://github.com/Neutone/neutone_sdk.git@c69108d6ad11910afdc3ce4ead0a647456e2addb
