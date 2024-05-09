@@ -2,7 +2,7 @@ seed_everything: 42
 
 custom:
   project_name: acid_ddsp_2
-  model_name: testing
+  model_name: splines_s4_d1
 #  model_name: cnn_ploss
 #  model_name: cnn_mss
   dataset_name: fixed_adsr__pointy
@@ -13,7 +13,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [1]
+  devices: [7]
   max_epochs: 20
   num_sanity_val_steps: 0
   accumulate_grad_batches: 1

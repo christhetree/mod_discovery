@@ -3,6 +3,7 @@ import os
 from typing import Optional
 
 import torch as tr
+import torch.nn.functional as F
 from torch import Tensor as T, nn
 
 logging.basicConfig()
@@ -198,7 +199,89 @@ class SquareSawVCOLite(nn.Module):
         return out_wave
 
 
+class WavetableOsc(nn.Module):
+    def __init__(
+        self,
+        sr: int,
+        n_pos: Optional[int] = None,
+        n_samples: Optional[int] = None,
+        wt: Optional[T] = None,
+    ):
+        super().__init__()
+        self.sr = sr
+        if wt is None:
+            assert n_samples is not None
+            assert n_pos is not None
+            wt = tr.empty(n_pos, n_samples).normal_(mean=0.0, std=0.01)
+        else:
+            assert wt.ndim == 2
+            n_pos, n_samples = wt.size()
+        self.n_pos = n_pos
+        self.n_samples = n_samples
+
+        # wt = tr.sin(tr.linspace(0.0, 2 * tr.pi, n_samples)).view(1, 1, 1, -1)
+        # import matplotlib.pyplot as plt
+        # plt.plot(wt.squeeze().numpy())
+        # plt.show()
+        # wt_2 = tr.sin(tr.linspace(0.0, 4 * tr.pi, n_samples)).view(1, 1, 1, -1)
+        # plt.plot(wt_2.squeeze().numpy())
+        # plt.show()
+        # wt = tr.cat([wt, wt_2], dim=2)
+        # wt = wt.repeat(1, 1, n_pos, 1)
+        # self.wt = nn.Parameter(wt)
+
+        self.wt = nn.Parameter(wt.view(1, 1, n_pos, n_samples))
+
+    def forward(self, arg: T, wt_pos: T) -> T:
+        assert arg.ndim == 2
+        n_samples = arg.size(1)
+        assert 1 <= wt_pos.ndim <= 2
+        if wt_pos.ndim == 1:
+            wt_pos = wt_pos.unsqueeze(1)
+            wt_pos = wt_pos.expand(-1, n_samples)
+        assert wt_pos.shape == arg.shape
+        temp_coords = arg / tr.pi - 1.0
+        flow_field = tr.stack([temp_coords, wt_pos], dim=2).unsqueeze(1)
+        audio = F.grid_sample(
+            self.wt,
+            flow_field,
+            mode="bilinear",
+            padding_mode="zeros",
+            align_corners=True,
+        )
+        audio = audio.squeeze(1).squeeze(1)
+        return audio
+
+
 if __name__ == "__main__":
+    sr = 16000
+    n_sec = 2.0
+    n_samples = int(sr * n_sec)
+    n_wt_samples = 2048
+    f0_hz = tr.tensor([220.0])
+
+    f0_hz = f0_hz.unsqueeze(1)
+    f0_hz = f0_hz.expand(-1, n_samples)
+    arg = tr.cumsum(2 * tr.pi * f0_hz / sr, dim=1) % (2 * tr.pi)
+    # arg = tr.cumsum(2 * tr.pi * f0_hz / sr, dim=1)
+    # wt_pos = tr.linspace(-1.0, -1.0, n_samples).unsqueeze(0)
+    # wt_pos = tr.linspace(1.0, 1.0, n_samples).unsqueeze(0)
+    wt_pos = tr.linspace(-1.0, 1.0, n_samples).unsqueeze(0)
+
+    osc = WavetableOsc(sr, n_pos=2, n_samples=n_wt_samples)
+    audio = osc(arg, wt_pos)
+
+    import matplotlib.pyplot as plt
+    plt.plot(audio.squeeze()[:1000].detach().numpy())
+    plt.show()
+    plt.plot(audio.squeeze()[-1000:].detach().numpy())
+    plt.show()
+
+    import torchaudio
+
+    torchaudio.save("../out/audio.wav", audio, sr)
+    exit()
+
     adsr = ADSRLite(10, eps=1e-3)
     exp_decay = ExpDecayEnv(10, eps=1e-3)
     attack = tr.tensor([0.1, 0.2])

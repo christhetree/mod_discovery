@@ -47,6 +47,7 @@ class PiecewiseSplines(nn.Module):
         x = coeff * self.support
         x = x.sum(dim=[2, 3])
         if bias is not None:
+            bias = bias.view(x.size(0), 1)
             x = x + bias
         return x
 
