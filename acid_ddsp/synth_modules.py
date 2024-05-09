@@ -146,7 +146,7 @@ class SquareSawVCOLite(nn.Module):
     def calc_n_partials(f0_hz: T) -> T:
         assert f0_hz.ndim == 2
         max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
-        # TODO(cm): check this calculation
+        # TODO(cm): the constant 12000 is only valid for sr of 44100 Hz
         n_partials = 12000 / (max_f0_hz * tr.log10(max_f0_hz))
         return n_partials
 
@@ -163,7 +163,7 @@ class SquareSawVCOLite(nn.Module):
             f0_hz = f0_hz.expand(-1, n_samples)
 
         if phase is None:
-            assert False  # TODO(cm): tmp
+            # assert False  # TODO(cm): tmp
             phase = (
                 tr.rand((bs, 1), dtype=f0_hz.dtype, device=f0_hz.device) * 2 * tr.pi
             ) - tr.pi
@@ -204,49 +204,104 @@ class WavetableOsc(nn.Module):
         self,
         sr: int,
         n_pos: Optional[int] = None,
-        n_samples: Optional[int] = None,
+        n_wt_samples: Optional[int] = None,
         wt: Optional[T] = None,
+        aa_filter_n: int = 17,
     ):
         super().__init__()
         self.sr = sr
         if wt is None:
-            assert n_samples is not None
+            assert n_wt_samples is not None
             assert n_pos is not None
-            wt = tr.empty(n_pos, n_samples).normal_(mean=0.0, std=0.01)
+            wt = tr.empty(n_pos, n_wt_samples).normal_(mean=0.0, std=0.01)
         else:
             assert wt.ndim == 2
-            n_pos, n_samples = wt.size()
+            n_pos, n_wt_samples = wt.size()
         self.n_pos = n_pos
-        self.n_samples = n_samples
+        self.n_wt_samples = n_wt_samples
+        assert aa_filter_n % 2 == 1
+        self.aa_filter_n = aa_filter_n
 
-        # wt = tr.sin(tr.linspace(0.0, 2 * tr.pi, n_samples)).view(1, 1, 1, -1)
+        # wt = tr.sin(tr.linspace(0.0, 2 * tr.pi, n_wt_samples)).view(1, 1, 1, -1)
         # import matplotlib.pyplot as plt
         # plt.plot(wt.squeeze().numpy())
         # plt.show()
-        # wt_2 = tr.sin(tr.linspace(0.0, 4 * tr.pi, n_samples)).view(1, 1, 1, -1)
+        # wt_2 = tr.sin(tr.linspace(0.0, 4 * tr.pi, n_wt_samples)).view(1, 1, 1, -1)
         # plt.plot(wt_2.squeeze().numpy())
         # plt.show()
         # wt = tr.cat([wt, wt_2], dim=2)
         # wt = wt.repeat(1, 1, n_pos, 1)
         # self.wt = nn.Parameter(wt)
 
-        self.wt = nn.Parameter(wt.view(1, 1, n_pos, n_samples))
+        self.wt = nn.Parameter(wt.view(1, 1, n_pos, n_wt_samples))
+        aa_filter_support = 2 * (tr.arange(aa_filter_n) - (aa_filter_n - 1) / 2) / sr
+        self.register_buffer("aa_filter_support", aa_filter_support.unsqueeze(0))
+        self.register_buffer(
+            "window", tr.blackman_window(aa_filter_n, periodic=False).unsqueeze(0)
+        )
 
-    def forward(self, arg: T, wt_pos: T) -> T:
-        assert arg.ndim == 2
-        n_samples = arg.size(1)
+    def calc_lp_sinc_blackman_coeff(self, cf_hz: T) -> T:
+        assert cf_hz.ndim == 2
+        # Compute sinc filter.
+        bs = cf_hz.size(0)
+        support = self.aa_filter_support.expand(bs, -1)
+        h = tr.sinc(cf_hz * support)
+        # Apply window.
+        window = self.window.expand(bs, -1)
+        h *= window
+        # Normalize to get unity gain.
+        summed = tr.sum(h, dim=1, keepdim=True)
+        h /= summed
+        return h
+
+    def get_anti_aliased_bounded_wt(self, max_f0_hz: T) -> T:
+        bounded_wt = tr.tanh(self.wt)
+        cf_hz = (self.sr / 2.0) - max_f0_hz
+        aa_filters = self.calc_lp_sinc_blackman_coeff(cf_hz)
+        bs = aa_filters.size(0)
+        aa_filters = aa_filters.view(bs, 1, 1, -1)
+        # Put batch in channel dim to apply different kernel to each item in batch
+        bounded_wt = bounded_wt.expand(1, bs, -1, -1)
+        n_pad = self.aa_filter_n // 2
+        padded_wt = F.pad(bounded_wt, (n_pad, n_pad, 0, 0), mode="circular")
+        filtered_wt = F.conv2d(padded_wt, aa_filters, padding="valid", groups=bs)
+        filtered_wt = tr.swapaxes(filtered_wt, 0, 1)
+        return filtered_wt
+
+    def forward(
+        self,
+        f0_hz: T,
+        wt_pos: T,
+        n_samples: Optional[int] = None,
+        phase: Optional[T] = None,
+    ) -> T:
+        assert 1 <= f0_hz.ndim <= 2
         assert 1 <= wt_pos.ndim <= 2
+        if f0_hz.ndim == 1:
+            assert n_samples is not None
+            f0_hz = f0_hz.unsqueeze(1)
+            f0_hz = f0_hz.expand(-1, n_samples)
         if wt_pos.ndim == 1:
+            assert n_samples is not None
             wt_pos = wt_pos.unsqueeze(1)
             wt_pos = wt_pos.expand(-1, n_samples)
-        assert wt_pos.shape == arg.shape
-        temp_coords = arg / tr.pi - 1.0
+        assert wt_pos.min() >= -1.0
+        assert wt_pos.max() <= 1.0
+
+        arg = SquareSawVCOLite.calc_osc_arg(self.sr, f0_hz, n_samples, phase)
+        arg = arg % (2 * tr.pi)
+        temp_coords = arg / tr.pi - 1.0  # Normalize to [-1, 1] for grid_sample
+        assert temp_coords.min() >= -1.0
+        assert temp_coords.max() <= 1.0
         flow_field = tr.stack([temp_coords, wt_pos], dim=2).unsqueeze(1)
+
+        max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
+        wt = self.get_anti_aliased_bounded_wt(max_f0_hz)
         audio = F.grid_sample(
-            self.wt,
+            wt,
             flow_field,
             mode="bilinear",
-            padding_mode="zeros",
+            padding_mode="border",
             align_corners=True,
         )
         audio = audio.squeeze(1).squeeze(1)
@@ -254,32 +309,32 @@ class WavetableOsc(nn.Module):
 
 
 if __name__ == "__main__":
+    bs = 2
     sr = 16000
     n_sec = 2.0
     n_samples = int(sr * n_sec)
     n_wt_samples = 2048
     f0_hz = tr.tensor([220.0])
+    f0_hz = f0_hz.repeat(bs)
 
-    f0_hz = f0_hz.unsqueeze(1)
-    f0_hz = f0_hz.expand(-1, n_samples)
-    arg = tr.cumsum(2 * tr.pi * f0_hz / sr, dim=1) % (2 * tr.pi)
-    # arg = tr.cumsum(2 * tr.pi * f0_hz / sr, dim=1)
     # wt_pos = tr.linspace(-1.0, -1.0, n_samples).unsqueeze(0)
     # wt_pos = tr.linspace(1.0, 1.0, n_samples).unsqueeze(0)
     wt_pos = tr.linspace(-1.0, 1.0, n_samples).unsqueeze(0)
+    wt_pos = wt_pos.repeat(bs, 1)
 
-    osc = WavetableOsc(sr, n_pos=2, n_samples=n_wt_samples)
-    audio = osc(arg, wt_pos)
+    osc = WavetableOsc(sr, n_pos=2, n_wt_samples=n_wt_samples)
+    audio = osc(f0_hz, wt_pos, n_samples=n_samples)
 
     import matplotlib.pyplot as plt
-    plt.plot(audio.squeeze()[:1000].detach().numpy())
+
+    plt.plot(audio[0, :1000].detach().numpy())
     plt.show()
-    plt.plot(audio.squeeze()[-1000:].detach().numpy())
+    plt.plot(audio[0, -1000:].detach().numpy())
     plt.show()
 
     import torchaudio
 
-    torchaudio.save("../out/audio.wav", audio, sr)
+    torchaudio.save("../out/audio.wav", audio[0:1, :], sr)
     exit()
 
     adsr = ADSRLite(10, eps=1e-3)
