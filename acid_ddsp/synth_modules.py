@@ -206,7 +206,7 @@ class WavetableOsc(nn.Module):
         n_pos: Optional[int] = None,
         n_wt_samples: Optional[int] = None,
         wt: Optional[T] = None,
-        aa_filter_n: int = 17,
+        aa_filter_n: Optional[int] = None,
     ):
         super().__init__()
         self.sr = sr
@@ -219,6 +219,14 @@ class WavetableOsc(nn.Module):
             n_pos, n_wt_samples = wt.size()
         self.n_pos = n_pos
         self.n_wt_samples = n_wt_samples
+        if aa_filter_n is None:
+            assert n_wt_samples % 8 == 0
+            # This is purely a heuristic
+            aa_filter_n = n_wt_samples // 8 + 1
+            log.info(
+                f"Setting aa_filter_n = {aa_filter_n} "
+                f"since n_wt_samples = {n_wt_samples}"
+            )
         assert aa_filter_n % 2 == 1
         self.aa_filter_n = aa_filter_n
 
@@ -227,11 +235,11 @@ class WavetableOsc(nn.Module):
         # plt.plot(wt.squeeze().numpy())
         # plt.show()
         # wt_2 = tr.sin(tr.linspace(0.0, 4 * tr.pi, n_wt_samples)).view(1, 1, 1, -1)
+        # wt_2 = tr.linspace(-1.0, 1.0, n_wt_samples).view(1, 1, 1, -1)
+        # wt_2 = tr.linspace(-1.0, 1.0, n_wt_samples // 4).view(1, 1, 1, -1).repeat(1, 1, 1, 4)
         # plt.plot(wt_2.squeeze().numpy())
         # plt.show()
         # wt = tr.cat([wt, wt_2], dim=2)
-        # wt = wt.repeat(1, 1, n_pos, 1)
-        # self.wt = nn.Parameter(wt)
 
         self.wt = nn.Parameter(wt.view(1, 1, n_pos, n_wt_samples))
         aa_filter_support = 2 * (tr.arange(aa_filter_n) - (aa_filter_n - 1) / 2) / sr
@@ -239,6 +247,7 @@ class WavetableOsc(nn.Module):
         self.register_buffer(
             "window", tr.blackman_window(aa_filter_n, periodic=False).unsqueeze(0)
         )
+        self.wt_pitch_hz = sr / n_wt_samples
 
     def calc_lp_sinc_blackman_coeff(self, cf_hz: T) -> T:
         assert cf_hz.ndim == 2
@@ -256,10 +265,12 @@ class WavetableOsc(nn.Module):
 
     def get_anti_aliased_bounded_wt(self, max_f0_hz: T) -> T:
         bounded_wt = tr.tanh(self.wt)
-        cf_hz = (self.sr / 2.0) - max_f0_hz
+        pitch_ratio = max_f0_hz / self.wt_pitch_hz
+        # Make the center frequency a bit lower than the new nyquist
+        cf_hz = (self.sr / pitch_ratio / 2.0) * 0.9
         aa_filters = self.calc_lp_sinc_blackman_coeff(cf_hz)
         bs = aa_filters.size(0)
-        aa_filters = aa_filters.view(bs, 1, 1, -1)
+        aa_filters = aa_filters.unsqueeze(1).unsqueeze(1)
         # Put batch in channel dim to apply different kernel to each item in batch
         bounded_wt = bounded_wt.expand(1, bs, -1, -1)
         n_pad = self.aa_filter_n // 2
@@ -267,6 +278,8 @@ class WavetableOsc(nn.Module):
         filtered_wt = F.conv2d(padded_wt, aa_filters, padding="valid", groups=bs)
         filtered_wt = tr.swapaxes(filtered_wt, 0, 1)
         return filtered_wt
+        # return bounded_wt.swapaxes(0, 1)
+        # return self.wt.expand(bs, -1, -1, -1)
 
     def forward(
         self,
@@ -297,6 +310,15 @@ class WavetableOsc(nn.Module):
 
         max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
         wt = self.get_anti_aliased_bounded_wt(max_f0_hz)
+
+        # import matplotlib.pyplot as plt
+        # plt.plot(self.wt[0, 0, 0, :].detach().numpy())
+        # plt.plot(wt[0, 0, 0, :].detach().numpy())
+        # plt.show()
+        # plt.plot(self.wt[0, 0, 1, :].detach().numpy())
+        # plt.plot(wt[0, 0, 1, :].detach().numpy())
+        # plt.show()
+
         audio = F.grid_sample(
             wt,
             flow_field,
@@ -310,10 +332,10 @@ class WavetableOsc(nn.Module):
 
 if __name__ == "__main__":
     bs = 2
-    sr = 16000
-    n_sec = 2.0
+    sr = 48000
+    n_sec = 4.0
     n_samples = int(sr * n_sec)
-    n_wt_samples = 2048
+    n_wt_samples = 1024
     f0_hz = tr.tensor([220.0])
     f0_hz = f0_hz.repeat(bs)
 
@@ -325,12 +347,11 @@ if __name__ == "__main__":
     osc = WavetableOsc(sr, n_pos=2, n_wt_samples=n_wt_samples)
     audio = osc(f0_hz, wt_pos, n_samples=n_samples)
 
-    import matplotlib.pyplot as plt
-
-    plt.plot(audio[0, :1000].detach().numpy())
-    plt.show()
-    plt.plot(audio[0, -1000:].detach().numpy())
-    plt.show()
+    # import matplotlib.pyplot as plt
+    # plt.plot(audio[0, :1000].detach().numpy())
+    # plt.show()
+    # plt.plot(audio[0, -1000:].detach().numpy())
+    # plt.show()
 
     import torchaudio
 
