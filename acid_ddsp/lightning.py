@@ -20,7 +20,7 @@ from fad import save_and_concat_fad_audio, calc_fad
 from feature_extraction import LogMelSpecFeatureExtractor
 from losses import MFCCL1
 from paths import OUT_DIR
-from synths import AcidSynthLPBiquad, AcidSynthBase
+from synths import AcidSynthLPBiquad, SynthBase
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -34,9 +34,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
         model: nn.Module,
         loss_func: nn.Module,
         spectral_visualizer: LogMelSpecFeatureExtractor,
-        synth: Optional[AcidSynthBase] = None,
-        synth_hat: Optional[AcidSynthBase] = None,
-        synth_eval: Optional[AcidSynthBase] = None,
+        synth: Optional[SynthBase] = None,
+        synth_hat: Optional[SynthBase] = None,
+        synth_eval: Optional[SynthBase] = None,
         temp_params_name: Optional[str] = None,
         temp_params_name_hat: str = "mod_sig",
         global_param_names: Optional[List[str]] = None,
@@ -124,12 +124,13 @@ class AcidDDSPLightingModule(pl.LightningModule):
         assert phase.shape == (batch_size, 1)
         assert phase_hat.shape == (batch_size, 1)
 
-        filter_args = {}
+        additive_args = {}
+        subtractive_args = {}
         if self.temp_params_name is not None:
             temp_params = batch[self.temp_params_name]
             assert temp_params.size(0) == batch_size
             assert temp_params.ndim == 3
-            filter_args[self.temp_params_name] = temp_params
+            subtractive_args[self.temp_params_name] = temp_params
 
         global_params_0to1 = {p: batch[f"{p}_0to1"] for p in self.global_param_names}
         global_params = {
@@ -139,7 +140,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         if "q" in self.global_param_names:
             q_0to1 = batch["q_0to1"]
             q_mod_sig = q_0to1.unsqueeze(-1)
-            filter_args["q_mod_sig"] = q_mod_sig
+            subtractive_args["q_mod_sig"] = q_mod_sig
 
         # Generate ground truth wet audio
         with tr.no_grad():
@@ -148,7 +149,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 f0_hz,
                 note_on_duration,
                 phase,
-                filter_args,
+                additive_args,
+                subtractive_args,
                 global_params,
             )
             dry = synth_out["dry"]
@@ -198,12 +200,13 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # Perform model forward pass
         model_in = wet.unsqueeze(1)
         model_out = self.model(model_in)
-        filter_args_hat = {}
+        additive_args_hat = {}
+        subtractive_args_hat = {}
 
         # Postprocess temp_params_hat
         temp_params_hat = model_out[self.temp_params_name_hat]
         assert temp_params_hat.ndim == 3
-        filter_args_hat[self.temp_params_name_hat] = temp_params_hat
+        subtractive_args_hat[self.temp_params_name_hat] = temp_params_hat
 
         # Postprocess global_params_hat
         global_params_0to1_hat = {}
@@ -230,7 +233,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         if "q" in self.global_param_names_hat:
             q_0to1_hat = global_params_0to1_hat["q"]
             q_mod_sig_hat = q_0to1_hat.unsqueeze(-1)
-            filter_args_hat["q_mod_sig"] = q_mod_sig_hat
+            subtractive_args_hat["q_mod_sig"] = q_mod_sig_hat
 
         # Generate audio x_hat
         synth_out_hat = self.synth_hat(
@@ -238,7 +241,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             f0_hz,
             note_on_duration,
             phase_hat,
-            filter_args_hat,
+            additive_args_hat,
+            subtractive_args_hat,
             global_params_hat,
         )
         wet_hat = synth_out_hat["wet"]
@@ -316,7 +320,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     f0_hz,
                     note_on_duration,
                     phase_hat,
-                    filter_args_hat,
+                    additive_args_hat,
+                    subtractive_args_hat,
                     global_params_hat,
                 )
                 wet_eval = synth_out_eval["wet"]

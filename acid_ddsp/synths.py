@@ -10,6 +10,7 @@ import util
 from acid_ddsp.synth_modules import (
     SquareSawVCOLite,
     ExpDecayEnv,
+    WavetableOsc,
 )
 from audio_config import AudioConfig
 from filters import (
@@ -28,7 +29,7 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-def make_synth(synth_type: str, ac: AudioConfig, **kwargs) -> "AcidSynthBase":
+def make_synth(synth_type: str, ac: AudioConfig, **kwargs) -> "SynthBase":
     if synth_type == "AcidSynthLPBiquad":
         synth_class = AcidSynthLPBiquad
     elif synth_type == "AcidSynthLPBiquadFSM":
@@ -46,16 +47,76 @@ def make_synth(synth_type: str, ac: AudioConfig, **kwargs) -> "AcidSynthBase":
     return synth_class(ac, **kwargs)
 
 
-class AcidSynthBase(ABC, nn.Module):
+class SynthBase(ABC, nn.Module):
     def __init__(self, ac: AudioConfig):
         super().__init__()
         self.ac = ac
-        self.vco = SquareSawVCOLite(ac.sr)
-        self.env_gen = ExpDecayEnv(ac.sr, ac.stability_eps)
 
     @abstractmethod
-    def filter_dry_audio(self, x: T, filter_args: Dict[str, T]) -> (T, Dict[str, T]):
+    def additive_synthesis(
+        self,
+        n_samples: int,
+        f0_hz: T,
+        note_on_duration: T,  # TODO(cm): remove
+        phase: T,
+        additive_args: Dict[str, T],
+    ) -> (T, Dict[str, T]):
         pass
+
+    def subtractive_synthesis(
+        self, x: T, subtractive_args: Dict[str, T]
+    ) -> (T, Dict[str, T]):
+        # By default, do not apply any subtractive synthesis
+        return x, {}
+
+    def forward(
+        self,
+        n_samples: int,
+        f0_hz: T,
+        note_on_duration: T,
+        phase: T,
+        additive_args: Dict[str, T],
+        subtractive_args: Dict[str, T],
+        global_params: Dict[str, T],
+        envelope: Optional[T] = None,
+    ) -> Dict[str, T]:
+        dry_audio, additive_out = self.additive_synthesis(
+            n_samples, f0_hz, note_on_duration, phase, additive_args
+        )
+        if envelope is not None:
+            dry_audio *= envelope
+        filtered_audio, subtractive_out = self.subtractive_synthesis(
+            dry_audio, subtractive_args
+        )
+        synth_out = {
+            "dry": dry_audio,
+            "envelope": envelope,
+            "filtered_audio": filtered_audio,
+        }
+        synth_out.update(additive_out)
+        synth_out.update(subtractive_out)
+        return synth_out
+
+
+class AcidSynthBase(SynthBase):
+    def __init__(self, ac: AudioConfig):
+        super().__init__(ac)
+        self.osc = SquareSawVCOLite(ac.sr)
+        self.env_gen = ExpDecayEnv(ac.sr, ac.stability_eps)
+
+    def additive_synthesis(
+        self,
+        n_samples: int,
+        f0_hz: T,
+        note_on_duration: T,
+        phase: T,
+        additive_args: Dict[str, T],
+    ) -> (T, Dict[str, T]):
+        osc_shape = additive_args["osc_shape"]
+        osc_gain = additive_args["osc_gain"]
+        dry_audio = self.osc(f0_hz, osc_shape, n_samples=n_samples, phase=phase)
+        dry_audio *= osc_gain.unsqueeze(-1)
+        return dry_audio, {}
 
     def resize_mod_sig(self, x: T, w_mod_sig: T, q_mod_sig: T) -> Tuple[T, T]:
         assert w_mod_sig.ndim == q_mod_sig.ndim == x.ndim == 2
@@ -73,18 +134,21 @@ class AcidSynthBase(ABC, nn.Module):
         f0_hz: T,
         note_on_duration: T,
         phase: T,
-        filter_args: Dict[str, T],
+        additive_args: Dict[str, T],
+        subtractive_args: Dict[str, T],
         global_params: Dict[str, T],
         envelope: Optional[T] = None,
     ) -> Dict[str, T]:
-        osc_shape = global_params.get("osc_shape")
+        osc_shape = additive_args.get("osc_shape")
         if osc_shape is None:
             assert self.ac.is_fixed("osc_shape")
             osc_shape = tr.full_like(f0_hz, self.ac.min_osc_shape)
-        osc_gain = global_params.get("osc_gain")
+            additive_args["osc_shape"] = osc_shape
+        osc_gain = additive_args.get("osc_gain")
         if osc_gain is None:
             assert self.ac.is_fixed("osc_gain")
             osc_gain = tr.full_like(f0_hz, self.ac.min_osc_gain)
+            additive_args["osc_gain"] = osc_gain
         dist_gain = global_params.get("dist_gain")
         if dist_gain is None:
             assert self.ac.is_fixed("dist_gain")
@@ -100,21 +164,22 @@ class AcidSynthBase(ABC, nn.Module):
             == dist_gain.shape
             == learned_alpha.shape
         )
-        dry_audio = self.vco(f0_hz, osc_shape, n_samples=n_samples, phase=phase)
-        dry_audio *= osc_gain.unsqueeze(-1)
         if envelope is None:
             envelope = self.env_gen(learned_alpha, note_on_duration, n_samples)
-        dry_audio *= envelope
-        filtered_audio, filter_out = self.filter_dry_audio(dry_audio, filter_args)
+        synth_out = super().forward(
+            n_samples,
+            f0_hz,
+            note_on_duration,
+            phase,
+            additive_args,
+            subtractive_args,
+            global_params,
+            envelope,
+        )
+        filtered_audio = synth_out["filtered_audio"]
         wet_audio = filtered_audio * dist_gain.unsqueeze(-1)
         wet_audio = tr.tanh(wet_audio)
-        synth_out = {
-            "dry": dry_audio,
-            "wet": wet_audio,
-            "envelope": envelope,
-            "filtered_audio": filtered_audio,
-        }
-        synth_out.update(filter_out)
+        synth_out["wet"] = wet_audio
         return synth_out
 
 
@@ -140,12 +205,12 @@ class AcidSynthLPBiquad(AcidSynthBase):
         self.is_scriptable = is_scriptable
         self.filter.toggle_scriptable(is_scriptable)
 
-    def filter_dry_audio(
-        self, x: T, filter_args: Dict[str, T]
+    def subtractive_synthesis(
+        self, x: T, subtractive_args: Dict[str, T]
     ) -> Tuple[T, Dict[str, T]]:
-        w_mod_sig = filter_args["w_mod_sig"]
-        q_mod_sig = filter_args["q_mod_sig"]
-        zi = filter_args.get("zi")
+        w_mod_sig = subtractive_args["w_mod_sig"]
+        q_mod_sig = subtractive_args["q_mod_sig"]
+        zi = subtractive_args.get("zi")
         if w_mod_sig.ndim == 3:
             w_mod_sig = w_mod_sig.squeeze(2)
         if q_mod_sig.ndim == 3:
@@ -231,14 +296,14 @@ class AcidSynthLearnedBiquadCoeff(AcidSynthBase):
             assert b_coeff.shape == (bs, n_frames, 3)
         return a_coeff, b_coeff
 
-    def filter_dry_audio(
-        self, x: T, filter_args: Dict[str, T]
+    def subtractive_synthesis(
+        self, x: T, subtractive_args: Dict[str, T]
     ) -> Tuple[T, Dict[str, T]]:
-        logits = filter_args["logits"]
+        logits = subtractive_args["logits"]
         assert logits.ndim == 3
         n_samples = x.size(1)
         a_coeff, b_coeff = self._calc_coeff(logits, n_samples)
-        zi = filter_args.get("zi")
+        zi = subtractive_args.get("zi")
         zi_a = zi
         if zi_a is not None:
             zi_a = tr.flip(zi_a, dims=[1])  # Match scipy's convention for torchlpc
@@ -273,10 +338,10 @@ class AcidSynthLearnedBiquadCoeffFSM(AcidSynthLearnedBiquadCoeff):
             oversampling_factor=oversampling_factor,
         )
 
-    def filter_dry_audio(
-        self, x: T, filter_args: Dict[str, T]
+    def subtractive_synthesis(
+        self, x: T, subtractive_args: Dict[str, T]
     ) -> Tuple[T, Dict[str, T]]:
-        logits = filter_args["logits"]
+        logits = subtractive_args["logits"]
         assert logits.ndim == 3
         n_samples = x.size(1)
         n_frames = self.filter.calc_n_frames(n_samples)
@@ -291,10 +356,10 @@ class AcidSynthLearnedBiquadCoeffFSM(AcidSynthLearnedBiquadCoeff):
 
 
 class AcidSynthLearnedBiquadPoleZero(AcidSynthBase):
-    def filter_dry_audio(
-        self, x: T, filter_args: Dict[str, T]
+    def subtractive_synthesis(
+        self, x: T, subtractive_args: Dict[str, T]
     ) -> Tuple[T, Dict[str, T]]:
-        logits = filter_args["logits"]
+        logits = subtractive_args["logits"]
         assert logits.ndim == 3
         # TODO(cm): enable coeff interpolation
         if logits.size(1) != x.size(1):
@@ -334,19 +399,19 @@ class AcidSynthLSTM(AcidSynthBase):
         )
         self.out_lstm = nn.Linear(n_hidden, n_ch)
 
-    def filter_dry_audio(
-        self, x: T, filter_args: Dict[str, T]
+    def subtractive_synthesis(
+        self, x: T, subtractive_args: Dict[str, T]
     ) -> Tuple[T, Dict[str, T]]:
-        w_mod_sig = filter_args["w_mod_sig"]
-        q_mod_sig = filter_args["q_mod_sig"]
+        w_mod_sig = subtractive_args["w_mod_sig"]
+        q_mod_sig = subtractive_args["q_mod_sig"]
         if w_mod_sig.ndim == 3:
             w_mod_sig = w_mod_sig.squeeze(2)
         if q_mod_sig.ndim == 3:
             q_mod_sig = q_mod_sig.squeeze(2)
         w_mod_sig, q_mod_sig = self.resize_mod_sig(x, w_mod_sig, q_mod_sig)
 
-        h_n = filter_args.get("h_n")
-        c_n = filter_args.get("c_n")
+        h_n = subtractive_args.get("h_n")
+        c_n = subtractive_args.get("c_n")
         hidden: Optional[Tuple[T, T]] = None
         if h_n is not None and c_n is not None:
             # This is a workaround for torchscript typing not working well with Optional
@@ -365,6 +430,28 @@ class AcidSynthLSTM(AcidSynthBase):
         return x, filter_out
 
 
+class WavetableSynth(SynthBase):
+    def __init__(
+        self, ac: AudioConfig, n_pos: int, n_wt_samples: int, aa_filter_n: int
+    ):
+        super().__init__(ac)
+        self.osc = WavetableOsc(
+            ac.sr, n_pos=n_pos, n_wt_samples=n_wt_samples, aa_filter_n=aa_filter_n
+        )
+
+    def additive_synthesis(
+            self,
+            n_samples: int,
+            f0_hz: T,
+            note_on_duration: T,
+            phase: T,
+            additive_args: Dict[str, T],
+    ) -> (T, Dict[str, T]):
+        wt_pos = additive_args["wt_pos"]
+        dry_audio = self.osc(f0_hz, wt_pos, n_samples=n_samples, phase=phase)
+        return dry_audio, {}
+
+
 if __name__ == "__main__":
     tr.manual_seed(0)
     ac = AudioConfig()
@@ -380,11 +467,11 @@ if __name__ == "__main__":
     f0_hz = tr.tensor([220.0])
     note_on_duration = tr.tensor([0.100])
     phase = tr.tensor([0.0]).unsqueeze(1)
-    # filter_args = {
+    # subtractive_args = {
     #     "w_mod_sig": tr.tensor([[0.5]]),
     #     "q_mod_sig": tr.tensor([[0.5]]),
     # }
-    filter_args = {
+    subtractive_args = {
         "logits": tr.rand((1, 10, 5)),
     }
     global_params = {
@@ -393,6 +480,6 @@ if __name__ == "__main__":
         "dist_gain": tr.tensor([0.5]),
         "learned_alpha": tr.tensor([0.5]),
     }
-    synth_out = scripted(f0_hz, note_on_duration, phase, filter_args, global_params)
+    synth_out = scripted(f0_hz, note_on_duration, phase, subtractive_args, global_params)
     print(synth_out["wet"])
     # tr.jit.save(scripted, "synth.ts")

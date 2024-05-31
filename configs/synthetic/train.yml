@@ -2,9 +2,8 @@ seed_everything: 42
 
 custom:
   project_name: acid_ddsp_2
-  model_name: splines_s4_d1
 #  model_name: cnn_ploss
-#  model_name: cnn_mss
+  model_name: cnn_mss
   dataset_name: fixed_adsr__pointy
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
@@ -13,7 +12,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [7]
+  devices: [4]
   max_epochs: 20
   num_sanity_val_steps: 0
   accumulate_grad_batches: 1
