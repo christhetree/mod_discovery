@@ -130,6 +130,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             temp_params = batch[self.temp_params_name]
             assert temp_params.size(0) == batch_size
             assert temp_params.ndim == 3
+            additive_args[self.temp_params_name] = temp_params
             subtractive_args[self.temp_params_name] = temp_params
 
         global_params_0to1 = {p: batch[f"{p}_0to1"] for p in self.global_param_names}
@@ -206,6 +207,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # Postprocess temp_params_hat
         temp_params_hat = model_out[self.temp_params_name_hat]
         assert temp_params_hat.ndim == 3
+        additive_args_hat[self.temp_params_name_hat] = temp_params_hat
         subtractive_args_hat[self.temp_params_name_hat] = temp_params_hat
 
         # Postprocess global_params_hat

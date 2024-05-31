@@ -139,6 +139,7 @@ class AcidSynthBase(SynthBase):
         global_params: Dict[str, T],
         envelope: Optional[T] = None,
     ) -> Dict[str, T]:
+        assert False  # TODO(cm): check additive args
         osc_shape = additive_args.get("osc_shape")
         if osc_shape is None:
             assert self.ac.is_fixed("osc_shape")
@@ -450,6 +451,40 @@ class WavetableSynth(SynthBase):
         wt_pos = additive_args["wt_pos"]
         dry_audio = self.osc(f0_hz, wt_pos, n_samples=n_samples, phase=phase)
         return dry_audio, {}
+
+    def forward(
+            self,
+            n_samples: int,
+            f0_hz: T,
+            note_on_duration: T,
+            phase: T,
+            additive_args: Dict[str, T],
+            subtractive_args: Dict[str, T],
+            global_params: Dict[str, T],
+            envelope: Optional[T] = None,
+    ) -> Dict[str, T]:
+        wt_pos = additive_args.get("wt_pos")
+        # TODO(cm): clean up
+        if wt_pos is None:
+            wt_pos = tr.full_like(f0_hz, -1.0)
+        else:
+            wt_pos = wt_pos.squeeze(2)
+        wt_pos = util.linear_interpolate_dim(
+            wt_pos, self.ac.n_samples, align_corners=True
+        )
+        additive_args["wt_pos"] = wt_pos
+        synth_out = super().forward(
+            n_samples,
+            f0_hz,
+            note_on_duration,
+            phase,
+            additive_args,
+            subtractive_args,
+            global_params,
+            envelope,
+        )
+        synth_out["wet"] = synth_out["filtered_audio"]
+        return synth_out
 
 
 if __name__ == "__main__":

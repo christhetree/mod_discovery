@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 
 from audio_config import AudioConfig
-from datasets import AcidSynthDataset, PreprocDataset
+from datasets import AcidSynthDataset, PreprocDataset, SynthDataset
 from modulations import ModSignalGenerator
 
 logging.basicConfig()
@@ -15,44 +15,49 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-class AcidDDSPDataModule(pl.LightningDataModule):
+# TODO(cm): refactor these two into one class
+class SynthDataModule(pl.LightningDataModule):
     def __init__(
         self,
         batch_size: int,
         ac: AudioConfig,
         mod_sig_gen: ModSignalGenerator,
+        temp_params_name: str,
         train_n_per_epoch: int,
         val_n_per_epoch: int,
         test_n_per_epoch: Optional[int] = None,
         num_workers: int = 0,
     ):
+        super().__init__()
         if test_n_per_epoch is None:
             test_n_per_epoch = val_n_per_epoch
-
-        super().__init__()
 
         self.batch_size = batch_size
         self.ac = ac
         self.mod_sig_gen = mod_sig_gen
+        self.temp_params_name = temp_params_name
         self.train_n_per_epoch = train_n_per_epoch
         self.val_n_per_epoch = val_n_per_epoch
         self.test_n_per_epoch = test_n_per_epoch
         self.num_workers = num_workers
 
-        self.train_ds = AcidSynthDataset(
+        self.train_ds = SynthDataset(
             ac,
             mod_sig_gen,
             train_n_per_epoch,
+            temp_params_name,
         )
-        self.val_ds = AcidSynthDataset(
+        self.val_ds = SynthDataset(
             ac,
             mod_sig_gen,
             val_n_per_epoch,
+            temp_params_name,
         )
-        self.test_ds = AcidSynthDataset(
+        self.test_ds = SynthDataset(
             ac,
             mod_sig_gen,
             test_n_per_epoch,
+            temp_params_name,
         )
 
     def train_dataloader(self) -> DataLoader:
@@ -80,6 +85,48 @@ class AcidDDSPDataModule(pl.LightningDataModule):
             shuffle=False,
             num_workers=self.num_workers,
             drop_last=False,
+        )
+
+
+class AcidDDSPDataModule(SynthDataModule):
+    def __init__(
+        self,
+        batch_size: int,
+        ac: AudioConfig,
+        mod_sig_gen: ModSignalGenerator,
+        temp_params_name: str,
+        train_n_per_epoch: int,
+        val_n_per_epoch: int,
+        test_n_per_epoch: Optional[int] = None,
+        num_workers: int = 0,
+    ):
+        super().__init__(
+            batch_size,
+            ac,
+            mod_sig_gen,
+            temp_params_name,
+            train_n_per_epoch,
+            val_n_per_epoch,
+            test_n_per_epoch,
+            num_workers,
+        )
+        self.train_ds = AcidSynthDataset(
+            ac,
+            mod_sig_gen,
+            train_n_per_epoch,
+            temp_params_name,
+        )
+        self.val_ds = AcidSynthDataset(
+            ac,
+            mod_sig_gen,
+            val_n_per_epoch,
+            temp_params_name,
+        )
+        self.test_ds = AcidSynthDataset(
+            ac,
+            mod_sig_gen,
+            test_n_per_epoch,
+            temp_params_name,
         )
 
 
@@ -147,7 +194,6 @@ class PreprocDataModule(pl.LightningDataModule):
             f"test n: {len(self.test_ds)}"
         )
 
-    # TODO(cm): make models batch size agnostic to set drop_last=False
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
             self.train_ds,

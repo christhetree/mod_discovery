@@ -207,6 +207,7 @@ class WavetableOsc(nn.Module):
         n_wt_samples: Optional[int] = None,
         wt: Optional[T] = None,
         aa_filter_n: Optional[int] = None,
+        is_trainable: bool = True,
     ):
         super().__init__()
         self.sr = sr
@@ -229,24 +230,18 @@ class WavetableOsc(nn.Module):
             )
         assert aa_filter_n % 2 == 1
         self.aa_filter_n = aa_filter_n
+        self.is_trainable = is_trainable
 
-        # wt = tr.sin(tr.linspace(0.0, 2 * tr.pi, n_wt_samples)).view(1, 1, 1, -1)
-        # import matplotlib.pyplot as plt
-        # plt.plot(wt.squeeze().numpy())
-        # plt.show()
-        # wt_2 = tr.sin(tr.linspace(0.0, 4 * tr.pi, n_wt_samples)).view(1, 1, 1, -1)
-        # wt_2 = tr.linspace(-1.0, 1.0, n_wt_samples).view(1, 1, 1, -1)
-        # wt_2 = tr.linspace(-1.0, 1.0, n_wt_samples // 4).view(1, 1, 1, -1).repeat(1, 1, 1, 4)
-        # plt.plot(wt_2.squeeze().numpy())
-        # plt.show()
-        # wt = tr.cat([wt, wt_2], dim=2)
-
-        self.wt = nn.Parameter(wt.view(1, 1, n_pos, n_wt_samples))
+        if is_trainable:
+            self.wt = nn.Parameter(wt.view(1, 1, n_pos, n_wt_samples))
+        else:
+            self.register_buffer("wt", wt.view(1, 1, n_pos, n_wt_samples))
         aa_filter_support = 2 * (tr.arange(aa_filter_n) - (aa_filter_n - 1) / 2) / sr
         self.register_buffer("aa_filter_support", aa_filter_support.unsqueeze(0))
         self.register_buffer(
             "window", tr.blackman_window(aa_filter_n, periodic=False).unsqueeze(0)
         )
+        # TODO(cm): check whether this is correct or not
         self.wt_pitch_hz = sr / n_wt_samples
 
     def calc_lp_sinc_blackman_coeff(self, cf_hz: T) -> T:
