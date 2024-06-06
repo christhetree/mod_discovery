@@ -48,16 +48,14 @@ def sample_wise_lpc_scriptable(x: T, a: T, zi: Optional[T] = None) -> T:
     else:
         assert zi.shape == (B, order)
 
-    padded_y = tr.empty((B, T + order), dtype=x.dtype)
     zi = tr.flip(zi, dims=[1])
-    padded_y[:, :order] = zi
-    padded_y[:, order:] = x
     a_flip = tr.flip(a, dims=[2])
+    padded_y = tr.cat([zi, x], dim=1)
 
     for t in range(T):
-        padded_y[:, t + order] -= (
-            a_flip[:, t : t + 1] @ padded_y[:, t : t + order, None]
-        )[:, 0, 0]
+        prod = a_flip[:, t : t + 1] @ padded_y[:, t : t + order, None]
+        prod = prod[:, 0, 0]
+        padded_y[:, t + order] -= prod
 
     return padded_y[:, order:]
 
