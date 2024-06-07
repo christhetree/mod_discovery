@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.1 FATAL_ERROR)
 project(torchlpc)
 
 find_package(Torch REQUIRED)
+# find_package(OpenMP REQUIRED)
 
 # Define our library target
 add_library(torchlpc SHARED torchlpc.cpp)
