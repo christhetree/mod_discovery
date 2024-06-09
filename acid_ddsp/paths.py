@@ -12,5 +12,7 @@ DATA_DIR = os.path.join(ROOT_DIR, "data")
 MODELS_DIR = os.path.join(ROOT_DIR, "models")
 OUT_DIR = os.path.join(ROOT_DIR, "out")
 
+WAVETABLES_DIR = os.path.join(DATA_DIR, "wavetables")
+
 assert os.path.isdir(DATA_DIR)
 assert os.path.isdir(OUT_DIR)

@@ -4,3 +4,4 @@ init_args:
   n_pos: 1
   n_wt_samples: 1024
   aa_filter_n: 129
+  wt_name: sines_1_1024.pt

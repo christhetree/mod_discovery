@@ -22,6 +22,7 @@ from filters import (
     TimeVaryingIIRFSM,
     sample_wise_lpc_scriptable,
 )
+from paths import WAVETABLES_DIR
 from torchlpc import sample_wise_lpc
 
 logging.basicConfig()
@@ -433,35 +434,52 @@ class AcidSynthLSTM(AcidSynthBase):
 
 class WavetableSynth(SynthBase):
     def __init__(
-        self, ac: AudioConfig, n_pos: int, n_wt_samples: int, aa_filter_n: int
+        self,
+        ac: AudioConfig,
+        n_pos: int,
+        n_wt_samples: int,
+        aa_filter_n: int,
+        wt_name: Optional[str] = None,
     ):
         super().__init__(ac)
+        wt = None
+        if wt_name is not None:
+            wt_path = os.path.join(WAVETABLES_DIR, wt_name)
+            assert os.path.isfile(wt_path)
+            log.info(f"Loading wavetable from {wt_path}")
+            wt = tr.load(wt_path)
+            assert wt.shape == (n_pos, n_wt_samples)
+
         self.osc = WavetableOsc(
-            ac.sr, n_pos=n_pos, n_wt_samples=n_wt_samples, aa_filter_n=aa_filter_n
+            ac.sr,
+            n_pos=n_pos,
+            n_wt_samples=n_wt_samples,
+            aa_filter_n=aa_filter_n,
+            wt=wt,
         )
 
     def additive_synthesis(
-            self,
-            n_samples: int,
-            f0_hz: T,
-            note_on_duration: T,
-            phase: T,
-            additive_args: Dict[str, T],
+        self,
+        n_samples: int,
+        f0_hz: T,
+        note_on_duration: T,
+        phase: T,
+        additive_args: Dict[str, T],
     ) -> (T, Dict[str, T]):
         wt_pos = additive_args["wt_pos"]
         dry_audio = self.osc(f0_hz, wt_pos, n_samples=n_samples, phase=phase)
         return dry_audio, {}
 
     def forward(
-            self,
-            n_samples: int,
-            f0_hz: T,
-            note_on_duration: T,
-            phase: T,
-            additive_args: Dict[str, T],
-            subtractive_args: Dict[str, T],
-            global_params: Dict[str, T],
-            envelope: Optional[T] = None,
+        self,
+        n_samples: int,
+        f0_hz: T,
+        note_on_duration: T,
+        phase: T,
+        additive_args: Dict[str, T],
+        subtractive_args: Dict[str, T],
+        global_params: Dict[str, T],
+        envelope: Optional[T] = None,
     ) -> Dict[str, T]:
         wt_pos = additive_args.get("wt_pos")
         # TODO(cm): clean up
@@ -515,6 +533,8 @@ if __name__ == "__main__":
         "dist_gain": tr.tensor([0.5]),
         "learned_alpha": tr.tensor([0.5]),
     }
-    synth_out = scripted(f0_hz, note_on_duration, phase, subtractive_args, global_params)
+    synth_out = scripted(
+        f0_hz, note_on_duration, phase, subtractive_args, global_params
+    )
     print(synth_out["wet"])
     # tr.jit.save(scripted, "synth.ts")
