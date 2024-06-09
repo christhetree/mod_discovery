@@ -466,7 +466,7 @@ class WavetableSynth(SynthBase):
         wt_pos = additive_args.get("wt_pos")
         # TODO(cm): clean up
         if wt_pos is None:
-            wt_pos = tr.full_like(f0_hz, -1.0)
+            wt_pos = tr.full_like(f0_hz, -1.0).unsqueeze(1)
         else:
             wt_pos = wt_pos.squeeze(2)
         wt_pos = util.linear_interpolate_dim(

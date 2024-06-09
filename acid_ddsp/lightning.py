@@ -31,9 +31,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
     def __init__(
         self,
         ac: AudioConfig,
-        model: nn.Module,
         loss_func: nn.Module,
         spectral_visualizer: LogMelSpecFeatureExtractor,
+        model: Optional[nn.Module] = None,
         synth: Optional[SynthBase] = None,
         synth_hat: Optional[SynthBase] = None,
         synth_eval: Optional[SynthBase] = None,
@@ -45,6 +45,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         log_envelope: bool = True,
         fad_model_names: Optional[List[str]] = None,
         run_name: Optional[str] = None,
+        use_model: bool = True,
     ):
         super().__init__()
         if synth is None:
@@ -65,6 +66,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
             self.run_name = f"run__{datetime.now().strftime('%Y-%m-%d__%H-%M-%S')}"
         else:
             self.run_name = run_name
+        if use_model:
+            assert model is not None
+            assert not use_p_loss
+        self.use_model = use_model
         log.info(f"Run name: {self.run_name}")
 
         self.ac = ac
@@ -198,44 +203,49 @@ class AcidDDSPLightingModule(pl.LightningModule):
         if self.temp_params_name is not None:
             temp_params = batch[self.temp_params_name]
 
-        # Perform model forward pass
         model_in = wet.unsqueeze(1)
-        model_out = self.model(model_in)
         additive_args_hat = {}
         subtractive_args_hat = {}
-
-        # Postprocess temp_params_hat
-        temp_params_hat = model_out[self.temp_params_name_hat]
-        assert temp_params_hat.ndim == 3
-        additive_args_hat[self.temp_params_name_hat] = temp_params_hat
-        subtractive_args_hat[self.temp_params_name_hat] = temp_params_hat
-
-        # Postprocess global_params_hat
+        temp_params_hat = None
         global_params_0to1_hat = {}
         global_params_hat = {}
-        for p_name in self.global_param_names_hat:
-            p_val_0to1_hat = model_out[f"{p_name}_0to1"]
-            p_val_hat = self.ac.convert_from_0to1(p_name, p_val_0to1_hat)
-            global_params_0to1_hat[p_name] = p_val_0to1_hat
-            global_params_hat[p_name] = p_val_hat
-            if not self.ac.is_fixed(p_name) and p_name in global_params_0to1:
-                p_val_0to1 = global_params_0to1[p_name]
-                with tr.no_grad():
-                    p_val_l1 = self.l1(p_val_0to1_hat, p_val_0to1)
-                self.log(f"{stage}/{p_name}_l1", p_val_l1, prog_bar=False)
+        log_spec_wet = None
 
-        # Postprocess log_spec_wet
-        log_spec_wet = model_out.get("log_spec_wet")
+        # Perform model forward pass
+        if self.use_model:
+            model_out = self.model(model_in)
+
+            # Postprocess temp_params_hat
+            temp_params_hat = model_out[self.temp_params_name_hat]
+            assert temp_params_hat.ndim == 3
+            additive_args_hat[self.temp_params_name_hat] = temp_params_hat
+            subtractive_args_hat[self.temp_params_name_hat] = temp_params_hat
+
+            # Postprocess global_params_hat
+            for p_name in self.global_param_names_hat:
+                p_val_0to1_hat = model_out[f"{p_name}_0to1"]
+                p_val_hat = self.ac.convert_from_0to1(p_name, p_val_0to1_hat)
+                global_params_0to1_hat[p_name] = p_val_0to1_hat
+                global_params_hat[p_name] = p_val_hat
+                if not self.ac.is_fixed(p_name) and p_name in global_params_0to1:
+                    p_val_0to1 = global_params_0to1[p_name]
+                    with tr.no_grad():
+                        p_val_l1 = self.l1(p_val_0to1_hat, p_val_0to1)
+                    self.log(f"{stage}/{p_name}_l1", p_val_l1, prog_bar=False)
+
+            # Postprocess log_spec_wet
+            log_spec_wet = model_out.get("log_spec_wet")
+
+            # Postprocess q_hat TODO(cm): generalize
+            if "q" in self.global_param_names_hat:
+                q_0to1_hat = global_params_0to1_hat["q"]
+                q_mod_sig_hat = q_0to1_hat.unsqueeze(-1)
+                subtractive_args_hat["q_mod_sig"] = q_mod_sig_hat
+
         if log_spec_wet is None:
             log_spec_wet = self.spectral_visualizer(model_in)
         assert log_spec_wet.ndim == 4
         log_spec_wet = log_spec_wet.squeeze(1)
-
-        # Postprocess q_hat TODO(cm): generalize
-        if "q" in self.global_param_names_hat:
-            q_0to1_hat = global_params_0to1_hat["q"]
-            q_mod_sig_hat = q_0to1_hat.unsqueeze(-1)
-            subtractive_args_hat["q_mod_sig"] = q_mod_sig_hat
 
         # Generate audio x_hat
         synth_out_hat = self.synth_hat(

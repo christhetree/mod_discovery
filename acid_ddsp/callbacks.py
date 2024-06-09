@@ -87,7 +87,7 @@ class LogModSigAndSpecCallback(Callback):
             log_spec_wet_hat = out_dict.get("log_spec_wet_hat")
 
             temp_params = out_dict.get("temp_params")
-            temp_params_hat = out_dict["temp_params_hat"]
+            temp_params_hat = out_dict.get("temp_params_hat")
             mod_sig_esr = -1
             mod_sig_l1 = -1
             if pl_module.temp_params_name == pl_module.temp_params_name_hat:

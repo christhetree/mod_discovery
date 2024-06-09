@@ -37,15 +37,16 @@ model:
   init_args:
     ac: audio_config_wt.yml
     spectral_visualizer: log_mel_spec.yml
-    log_envelope: true
+#    log_envelope: true
 
     synth: synth_wt.yml
-    temp_params_name: wt_pos
-    global_param_names: []
+#    temp_params_name: wt_pos
+#    global_param_names: []
 
-    model: spectral_2dcnn_wt.yml
-    temp_params_name_hat: wt_pos
-    global_param_names_hat: []
+    use_model: false
+#    model: spectral_2dcnn_wt.yml
+#    temp_params_name_hat: wt_pos
+#    global_param_names_hat: []
     synth_hat: synth_wt.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
