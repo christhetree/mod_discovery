@@ -2,27 +2,13 @@ import logging
 import os
 
 import torch as tr
-from matplotlib import pyplot as plt
-from torch import Tensor as T
 
 from paths import DATA_DIR
+from plotting import plot_wavetable
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
-
-
-def plot_wavetable(wt: T) -> None:
-    assert wt.ndim == 2
-    n_pos = wt.size(0)
-    # Plot as a column of subplots
-    fig, axs = plt.subplots(n_pos, ncols=1, figsize=(8, 4 * n_pos), squeeze=False)
-    for idx in range(n_pos):
-        ax = axs[idx, 0]
-        ax.plot(wt[idx, :].numpy())
-        ax.set_title(f"Position {idx}")
-        ax.set_ylim(-1.1, 1.1)
-    plt.show()
 
 
 def create_wavetable(n_wt_samples: int, save_path: str):
@@ -30,7 +16,7 @@ def create_wavetable(n_wt_samples: int, save_path: str):
     # wt_1 = tr.sin(tr.linspace(0.0, 4 * tr.pi, n_wt_samples))
     # wt_2 = tr.linspace(-1.0, 1.0, n_wt_samples)
     wt = tr.stack([wt_0], dim=0)
-    plot_wavetable(wt)
+    fig = plot_wavetable(wt)
     tr.save(wt, save_path)
 
 

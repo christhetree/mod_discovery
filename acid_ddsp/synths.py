@@ -440,6 +440,7 @@ class WavetableSynth(SynthBase):
         n_wt_samples: int,
         aa_filter_n: int,
         wt_name: Optional[str] = None,
+        is_trainable: bool = True,
     ):
         super().__init__(ac)
         wt = None
@@ -456,6 +457,7 @@ class WavetableSynth(SynthBase):
             n_wt_samples=n_wt_samples,
             aa_filter_n=aa_filter_n,
             wt=wt,
+            is_trainable=is_trainable,
         )
 
     def additive_synthesis(

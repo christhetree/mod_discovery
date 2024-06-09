@@ -321,6 +321,22 @@ def plot_waterfalls(H_paths: List[str], idx: int, use_log: bool = False) -> Figu
     return fig
 
 
+def plot_wavetable(wt: T, title: Optional[str] = None) -> Figure:
+    assert wt.ndim == 2
+    n_pos = wt.size(0)
+    # Plot as a column of subplots
+    fig, axs = plt.subplots(n_pos, ncols=1, figsize=(8, 4 * n_pos), squeeze=False)
+    for idx in range(n_pos):
+        ax = axs[idx, 0]
+        ax.plot(wt[idx, :].numpy())
+        ax.set_title(f"Position {idx}")
+        ax.set_ylim(-1.1, 1.1)
+    if title is not None:
+        fig.suptitle(title)
+    fig.tight_layout()
+    return fig
+
+
 if __name__ == "__main__":
     H_paths = [
         os.path.join(OUT_DIR, "coeff_sr__H.pt"),

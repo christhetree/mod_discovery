@@ -2,8 +2,9 @@ import logging
 import math
 import os
 from collections import defaultdict
-from typing import Any, Dict
+from typing import Any, Dict, List
 
+import torch as tr
 import wandb
 from auraloss.time import ESRLoss
 from matplotlib import pyplot as plt
@@ -13,8 +14,9 @@ from pytorch_lightning.loggers import WandbLogger
 from torch import Tensor as T, nn
 
 import util
-from acid_ddsp.plotting import fig2img, plot_waveforms_stacked
+from acid_ddsp.plotting import fig2img, plot_waveforms_stacked, plot_wavetable
 from lightning import AcidDDSPLightingModule
+from synth_modules import WavetableOsc
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -378,3 +380,58 @@ class LogAudioCallback(Callback):
                 )
 
         self.out_dicts.clear()
+
+
+class LogWavetablesCallback(Callback):
+    def create_wt_images(self, osc: WavetableOsc, title: str) -> List[T]:
+        images = []
+        wt = osc.wt.detach().cpu().squeeze(0).squeeze(0)
+        fig = plot_wavetable(wt, title)
+        img = fig2img(fig)
+        images.append(img)
+        wt_pitch_hz = tr.tensor([osc.wt_pitch_hz]).unsqueeze(1)
+        wt_bounded = (
+            osc.get_anti_aliased_bounded_wt(wt_pitch_hz)
+            .detach()
+            .cpu()
+            .squeeze(0)
+            .squeeze(0)
+        )
+        fig = plot_wavetable(wt_bounded, f"{title}__b")
+        img = fig2img(fig)
+        images.append(img)
+        return images
+
+    def on_validation_epoch_end(
+        self, trainer: Trainer, pl_module: AcidDDSPLightingModule
+    ) -> None:
+        images = []
+        try:
+            title = f"{trainer.global_step}_wt"
+            osc = pl_module.synth.osc
+            images += self.create_wt_images(osc, title)
+        except Exception as e:
+            log.error(f"Error getting synth wavetable: {e}")
+
+        try:
+            title = f"{trainer.global_step}_wt_hat"
+            osc_hat = pl_module.synth_hat.osc
+            images += self.create_wt_images(osc_hat, title)
+        except Exception as e:
+            log.error(f"Error getting synth wavetable hat: {e}")
+
+        try:
+            title = f"{trainer.global_step}_wt_eval"
+            osc_eval = pl_module.synth_eval.osc
+            images += self.create_wt_images(osc_eval, title)
+        except Exception as e:
+            log.debug(f"Error getting synth wavetable eval: {e}")
+
+        if images:
+            for logger in trainer.loggers:
+                # TODO(cm): enable for tensorboard as well
+                if isinstance(logger, WandbLogger):
+                    if images:
+                        logger.log_image(
+                            key="wavetables", images=images, step=trainer.global_step
+                        )

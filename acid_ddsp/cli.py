@@ -11,7 +11,7 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.strategies import DDPStrategy
 
 from acid_ddsp.paths import CONFIGS_DIR
-from callbacks import LogModSigAndSpecCallback, LogAudioCallback
+from callbacks import LogModSigAndSpecCallback, LogAudioCallback, LogWavetablesCallback
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -36,6 +36,7 @@ class CustomLightningCLI(LightningCLI):
             ),
             LogModSigAndSpecCallback(),
             LogAudioCallback(),
+            LogWavetablesCallback(),
         ],
         "logger": {
             "class_path": "pytorch_lightning.loggers.TensorBoardLogger",

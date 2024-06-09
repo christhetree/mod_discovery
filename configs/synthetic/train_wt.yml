@@ -39,7 +39,7 @@ model:
     spectral_visualizer: log_mel_spec.yml
 #    log_envelope: true
 
-    synth: synth_wt.yml
+    synth: synth_wt_frozen.yml
 #    temp_params_name: wt_pos
 #    global_param_names: []
 
@@ -48,6 +48,7 @@ model:
 #    temp_params_name_hat: wt_pos
 #    global_param_names_hat: []
     synth_hat: synth_wt.yml
+#    synth_hat: synth_wt_frozen.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
     use_p_loss: false
