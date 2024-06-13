@@ -279,7 +279,7 @@ class WavetableOsc(nn.Module):
         padded_wt = F.pad(bounded_wt, (n_pad, n_pad, 0, 0), mode="circular")
         filtered_wt = F.conv2d(padded_wt, aa_filters, padding="valid", groups=bs)
         filtered_wt = tr.swapaxes(filtered_wt, 0, 1)
-        filtered_wt = filtered_wt.squeeze(1).squeeze(1)
+        filtered_wt = filtered_wt.squeeze(1)
         return filtered_wt
 
     def forward(
@@ -311,7 +311,7 @@ class WavetableOsc(nn.Module):
 
         max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
         wt = self.get_anti_aliased_bounded_wt(max_f0_hz)
-        wt = wt.unsqueeze(1).unsqueeze(1)
+        wt = wt.unsqueeze(1)
 
         audio = F.grid_sample(
             wt,

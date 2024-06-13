@@ -2,8 +2,9 @@ seed_everything: 42
 
 custom:
   project_name: acid_ddsp_2
-  model_name: none_lr_1e-3
-  dataset_name: sines_1_1024
+  model_name: none_lr_1e-2
+#  dataset_name: sines_2_1024
+  dataset_name: sine_saw_1024
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
   use_wandb_gpu: true
@@ -20,14 +21,12 @@ trainer:
 data:
   class_path: acid_ddsp.data_modules.SynthDataModule
   init_args:
-    batch_size: 256
+    batch_size: 64
     ac: audio_config_wt.yml
 #    mod_sig_gen: mod_sig_gen.yml
     mod_sig_gen: mod_sig_gen__pointy.yml
     train_n_per_epoch: 8000
-#    train_n_per_epoch: 15
     val_n_per_epoch: 2000
-#    val_n_per_epoch: 5
     num_workers: 4
     temp_params_name: wt_pos
 
@@ -39,20 +38,16 @@ model:
 #    log_envelope: true
 
     synth: synth_wt_frozen.yml
-#    temp_params_name: wt_pos
-#    global_param_names: []
+    temp_params_name: wt_pos
 
-    use_model: false
-#    model: spectral_2dcnn_wt.yml
-#    temp_params_name_hat: wt_pos
-#    global_param_names_hat: []
+#    use_model: false
+    use_model: true
+    model: spectral_2dcnn_wt.yml
+    temp_params_name_hat: wt_pos
     synth_hat: synth_wt.yml
-#    synth_hat: synth_wt_frozen.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
     use_p_loss: false
-#    loss_func: torch.nn.MSELoss
-#    use_p_loss: true
 
 optimizer: adam_w.yml
 #optimizer: sgd.yml

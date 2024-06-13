@@ -8,7 +8,7 @@ init_args:
   use_ln: true
   n_temp_params: 1
   temp_params_name: wt_pos
-  temp_params_act_name: tanh
+  temp_params_act_name: sigmoid
   global_param_names: []
   dropout: 0.25
   n_frames: 188

@@ -169,6 +169,7 @@ class Spectral2DCNN(nn.Module):
         # Calc temporal params
         # x = self.out_temp(latent)
         x = latent.swapaxes(1, 2)
+        assert latent.size(-1) % self.n_segments == 0
         x = x.view(x.size(0), x.size(1), self.n_segments, -1)
         x = tr.mean(x, dim=-1)
         x = x.swapaxes(1, 2)

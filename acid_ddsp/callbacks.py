@@ -206,7 +206,7 @@ class LogModSigAndSpecCallback(Callback):
 
             ax[2].set_xlabel("n_samples")
             ax[2].set_ylabel("Amplitude")
-            ax[2].set_ylim(0, 1)
+            ax[2].set_ylim(-0.1, 1.1)
             ax[2].set_title(
                 # f"env (blu), ms (blk), ms_hat (orange), p{degree}s{n_segments} (red)\n"
                 f"env (blue), mod_sig (black), mod_sig_hat (orange)\n"
@@ -395,6 +395,7 @@ class LogWavetablesCallback(Callback):
             .detach()
             .cpu()
         )
+        wt_bounded = wt_bounded[0]
         fig = plot_wavetable(wt_bounded, f"{title}__b")
         img = fig2img(fig)
         images.append(img)

@@ -488,7 +488,7 @@ class WavetableSynth(SynthBase):
         if wt_pos is None:
             wt_pos = tr.full_like(f0_hz, -1.0).unsqueeze(1)
         else:
-            wt_pos = wt_pos.squeeze(2)
+            wt_pos = wt_pos.squeeze(2) * 2.0 - 1.0  # TODO(cm): use tanh instead
         wt_pos = util.linear_interpolate_dim(
             wt_pos, self.ac.n_samples, align_corners=True
         )
