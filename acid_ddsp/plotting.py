@@ -334,6 +334,7 @@ def plot_wavetable(wt: T, title: Optional[str] = None) -> Figure:
     if title is not None:
         fig.suptitle(title)
     fig.tight_layout()
+    plt.show()
     return fig
 
 

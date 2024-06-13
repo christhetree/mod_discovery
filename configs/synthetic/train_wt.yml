@@ -2,9 +2,8 @@ seed_everything: 42
 
 custom:
   project_name: acid_ddsp_2
-#  model_name: cnn_ploss
-  model_name: testing
-  dataset_name: fixed_adsr__pointy
+  model_name: none_lr_1e-3
+  dataset_name: sines_1_1024
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
   use_wandb_gpu: true
@@ -12,8 +11,8 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [4]
-  max_epochs: 50
+  devices: [5]
+  max_epochs: 100
   num_sanity_val_steps: 0
   accumulate_grad_batches: 1
   gradient_clip_val: 0.5
@@ -21,14 +20,14 @@ trainer:
 data:
   class_path: acid_ddsp.data_modules.SynthDataModule
   init_args:
-    batch_size: 64
+    batch_size: 256
     ac: audio_config_wt.yml
 #    mod_sig_gen: mod_sig_gen.yml
     mod_sig_gen: mod_sig_gen__pointy.yml
-#    train_n_per_epoch: 8000
-    train_n_per_epoch: 15
-#    val_n_per_epoch: 2000
-    val_n_per_epoch: 10
+    train_n_per_epoch: 8000
+#    train_n_per_epoch: 15
+    val_n_per_epoch: 2000
+#    val_n_per_epoch: 5
     num_workers: 4
     temp_params_name: wt_pos
 
@@ -56,3 +55,4 @@ model:
 #    use_p_loss: true
 
 optimizer: adam_w.yml
+#optimizer: sgd.yml

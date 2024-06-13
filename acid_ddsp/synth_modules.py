@@ -215,6 +215,7 @@ class WavetableOsc(nn.Module):
             assert n_wt_samples is not None
             assert n_pos is not None
             wt = tr.empty(n_pos, n_wt_samples).normal_(mean=0.0, std=0.01)
+            # wt = tr.empty(n_pos, n_wt_samples).uniform_() * 2.0 - 1.0
         else:
             assert wt.ndim == 2
             n_pos, n_wt_samples = wt.size()
@@ -233,9 +234,9 @@ class WavetableOsc(nn.Module):
         self.is_trainable = is_trainable
 
         if is_trainable:
-            self.wt = nn.Parameter(wt.view(1, 1, n_pos, n_wt_samples))
+            self.wt = nn.Parameter(wt)
         else:
-            self.register_buffer("wt", wt.view(1, 1, n_pos, n_wt_samples))
+            self.register_buffer("wt", wt)
         aa_filter_support = 2 * (tr.arange(aa_filter_n) - (aa_filter_n - 1) / 2) / sr
         self.register_buffer("aa_filter_support", aa_filter_support.unsqueeze(0))
         self.register_buffer(
@@ -243,6 +244,9 @@ class WavetableOsc(nn.Module):
         )
         # TODO(cm): check whether this is correct or not
         self.wt_pitch_hz = sr / n_wt_samples
+
+    def get_wt(self) -> T:
+        return self.wt
 
     def calc_lp_sinc_blackman_coeff(self, cf_hz: T) -> T:
         assert cf_hz.ndim == 2
@@ -259,22 +263,24 @@ class WavetableOsc(nn.Module):
         return h
 
     def get_anti_aliased_bounded_wt(self, max_f0_hz: T) -> T:
-        bounded_wt = tr.tanh(self.wt)
+        wt = self.get_wt()
+        bounded_wt = tr.tanh(wt)
         pitch_ratio = max_f0_hz / self.wt_pitch_hz
         # Make the center frequency a bit lower than the new nyquist
+        # TODO(cm): add roll-off factor to config
         cf_hz = (self.sr / pitch_ratio / 2.0) * 0.9
         aa_filters = self.calc_lp_sinc_blackman_coeff(cf_hz)
         bs = aa_filters.size(0)
         aa_filters = aa_filters.unsqueeze(1).unsqueeze(1)
         # Put batch in channel dim to apply different kernel to each item in batch
+        bounded_wt = bounded_wt.unsqueeze(0).unsqueeze(0)
         bounded_wt = bounded_wt.expand(1, bs, -1, -1)
         n_pad = self.aa_filter_n // 2
         padded_wt = F.pad(bounded_wt, (n_pad, n_pad, 0, 0), mode="circular")
         filtered_wt = F.conv2d(padded_wt, aa_filters, padding="valid", groups=bs)
         filtered_wt = tr.swapaxes(filtered_wt, 0, 1)
+        filtered_wt = filtered_wt.squeeze(1).squeeze(1)
         return filtered_wt
-        # return bounded_wt.swapaxes(0, 1)
-        # return self.wt.expand(bs, -1, -1, -1)
 
     def forward(
         self,
@@ -305,14 +311,7 @@ class WavetableOsc(nn.Module):
 
         max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
         wt = self.get_anti_aliased_bounded_wt(max_f0_hz)
-
-        # import matplotlib.pyplot as plt
-        # plt.plot(self.wt[0, 0, 0, :].detach().numpy())
-        # plt.plot(wt[0, 0, 0, :].detach().numpy())
-        # plt.show()
-        # plt.plot(self.wt[0, 0, 1, :].detach().numpy())
-        # plt.plot(wt[0, 0, 1, :].detach().numpy())
-        # plt.show()
+        wt = wt.unsqueeze(1).unsqueeze(1)
 
         audio = F.grid_sample(
             wt,
@@ -323,6 +322,45 @@ class WavetableOsc(nn.Module):
         )
         audio = audio.squeeze(1).squeeze(1)
         return audio
+
+
+class FourierWavetableOsc(WavetableOsc):
+    def __init__(
+        self,
+        sr: int,
+        n_pos: Optional[int] = None,
+        n_wt_samples: Optional[int] = None,
+        wt: Optional[T] = None,
+        aa_filter_n: Optional[int] = None,
+        is_trainable: bool = True,
+        n_bins: Optional[int] = None,
+    ):
+        super().__init__(sr, n_pos, n_wt_samples, wt, aa_filter_n, is_trainable)
+        if n_bins is None:
+            n_bins = self.n_wt_samples // 2 + 1
+            # n_bins = 32
+        self.n_bins = n_bins
+        # TODO(cm): check if normalization would be beneficial or not
+        fourier_wt = tr.fft.rfft(self.wt, dim=1)
+        fourier_wt = fourier_wt[:, :n_bins]
+        # wt_mag = tr.abs(fourier_wt)
+        # wt_phase = tr.angle(fourier_wt)
+        self.wt = None  # Get rid of superclass param or buffer since we don't need it
+        if is_trainable:
+            self.wt = nn.Parameter(fourier_wt)
+            # self.wt_mag = nn.Parameter(wt_mag)
+            # self.wt_phase = nn.Parameter(wt_phase)
+        else:
+            self.register_buffer("wt", fourier_wt)
+            # self.register_buffer("wt_mag", wt_mag)
+            # self.register_buffer("wt_phase", wt_phase)
+
+    def get_wt(self) -> T:
+        # fourier_wt = self.wt_mag * tr.exp(1j * self.wt_phase)
+        # wt = tr.fft.irfft(fourier_wt, n=self.n_wt_samples, dim=1)
+        # TODO(cm): check if normalization would be beneficial or not
+        wt = tr.fft.irfft(self.wt, n=self.n_wt_samples, dim=1)
+        return wt
 
 
 if __name__ == "__main__":

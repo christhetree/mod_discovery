@@ -385,17 +385,15 @@ class LogAudioCallback(Callback):
 class LogWavetablesCallback(Callback):
     def create_wt_images(self, osc: WavetableOsc, title: str) -> List[T]:
         images = []
-        wt = osc.wt.detach().cpu().squeeze(0).squeeze(0)
+        wt = osc.get_wt().detach().cpu()
         fig = plot_wavetable(wt, title)
         img = fig2img(fig)
         images.append(img)
-        wt_pitch_hz = tr.tensor([osc.wt_pitch_hz]).unsqueeze(1)
+        wt_pitch_hz = tr.tensor([osc.wt_pitch_hz]).unsqueeze(1).to(osc.window.device)
         wt_bounded = (
             osc.get_anti_aliased_bounded_wt(wt_pitch_hz)
             .detach()
             .cpu()
-            .squeeze(0)
-            .squeeze(0)
         )
         fig = plot_wavetable(wt_bounded, f"{title}__b")
         img = fig2img(fig)
