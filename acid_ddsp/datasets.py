@@ -1,3 +1,4 @@
+import glob
 import logging
 import os
 from typing import Dict, List
@@ -111,4 +112,55 @@ class PreprocDataset(Dataset):
             "note_on_duration": note_on_duration,
             "phase_hat": phase_hat,
             "audio_paths": audio_path,
+        }
+
+
+class NSynthStringsDataset(Dataset):
+    def __init__(
+        self,
+        ac: AudioConfig,
+        temp_params_name: str,
+        nsynth_strings_dir: str,
+        ext: str = "flac",
+        split: str = "train",
+    ):
+        super().__init__()
+        assert os.path.exists(nsynth_strings_dir)
+        self.nsynth_strings_fnames = sorted(glob.glob(f"{nsynth_strings_dir}/*.{ext}"))
+        
+        # easy train-test split
+        if split == "train":
+            self.nsynth_strings_fnames = self.nsynth_strings_fnames[:int(0.8 * len(self.nsynth_strings_fnames))]
+        elif split == "test":
+            self.nsynth_strings_fnames = self.nsynth_strings_fnames[int(0.8 * len(self.nsynth_strings_fnames)):int(0.9 * len(self.nsynth_strings_fnames))]
+        else:
+            self.nsynth_strings_fnames = self.nsynth_strings_fnames[int(0.9 * len(self.nsynth_strings_fnames)):]
+        
+        self.ac = ac
+        self.note_on_duration = tr.tensor(ac.note_on_duration)
+        self.temp_params_name = temp_params_name
+
+    def __len__(self) -> int:
+        return len(self.nsynth_strings_fnames)
+
+    def __getitem__(self, idx: int) -> Dict[str, T]:
+        fname = self.nsynth_strings_fnames[idx]
+        audio, sr = torchaudio.load(fname)
+        n_samples = audio.size(1)
+        assert sr == self.ac.sr
+        assert n_samples == self.ac.n_samples
+        audio = audio.squeeze(0)
+
+        # NOTE: NSynth strings filenames are of the form:
+        # "<inst_name>_<inst_type>_<inst_str>-<pitch>-<velocity>"
+        midi_note = int(fname.split("-")[1])
+        f0_hz = tr.tensor(librosa.midi_to_hz(midi_note)).float()
+
+        # gudgud96: I am not too sure why phase_hat is needed yet...
+        phase_hat = (tr.rand((1,)) * 2 * tr.pi)
+        return {
+            "wet": audio,
+            "f0_hz": f0_hz,
+            "note_on_duration": self.note_on_duration,
+            "phase_hat": phase_hat,
         }
