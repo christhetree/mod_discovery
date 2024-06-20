@@ -517,7 +517,7 @@ class PreprocLightningModule(AcidDDSPLightingModule):
         f0_hz = batch["f0_hz"]
         note_on_duration = batch["note_on_duration"]
         assert wet.ndim == 2
-        assert wet.size(1) == self.ac.n_samples
+        assert wet.size(1) == self.ac.n_samples, f"{wet.size(1)}, {self.ac.n_samples}"
         batch_size = wet.size(0)
         assert f0_hz.shape == (batch_size,)
         assert note_on_duration.shape == (batch_size,)

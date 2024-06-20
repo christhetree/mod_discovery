@@ -227,7 +227,6 @@ class NSynthStringsDataModule(pl.LightningDataModule):
         self,
         batch_size: int,
         ac: AudioConfig,
-        temp_params_name: str,
         nsynth_strings_dir: str,
         ext: str = "flac",
         num_workers: int = 0,
@@ -236,28 +235,24 @@ class NSynthStringsDataModule(pl.LightningDataModule):
         assert os.path.exists(nsynth_strings_dir)
         self.batch_size = batch_size
         self.ac = ac
-        self.temp_params_name = temp_params_name
         self.nsynth_strings_dir = nsynth_strings_dir
         self.ext = ext
         self.num_workers = num_workers
 
         self.train_ds = NSynthStringsDataset(
             ac,
-            temp_params_name,
             nsynth_strings_dir,
             ext,
             "train",
         )
         self.val_ds = NSynthStringsDataset(
             ac,
-            temp_params_name,
             nsynth_strings_dir,
             ext,
             "val",
         )
         self.test_ds = NSynthStringsDataset(
             ac,
-            temp_params_name,
             nsynth_strings_dir,
             ext,
             "test",

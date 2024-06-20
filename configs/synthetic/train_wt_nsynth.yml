@@ -1,10 +1,10 @@
 seed_everything: 42
 
 custom:
-  project_name: acid_ddsp_nsynth
+  project_name: acid_ddsp_nsynth_strings
   model_name: none_lr_1e-2
 #  dataset_name: sines_2_1024
-  dataset_name: sine_saw_1024
+  dataset_name: nsynth_strings
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
   use_wandb_gpu: true
@@ -19,32 +19,33 @@ trainer:
   gradient_clip_val: 0.5
 
 data:
-  class_path: acid_ddsp.data_modules.SynthDataModule
+  class_path: acid_ddsp.data_modules.NSynthStringsDataModule
   init_args:
-    batch_size: 64
-    ac: audio_config_wt.yml
-#    mod_sig_gen: mod_sig_gen.yml
-    mod_sig_gen: mod_sig_gen__pointy.yml
-    train_n_per_epoch: 8000
-    val_n_per_epoch: 2000
+    batch_size: 8
+    ac: audio_config_wt_nsynth.yml
+    # mod_sig_gen: mod_sig_gen.yml
+    # mod_sig_gen: mod_sig_gen__pointy.yml
+    # train_n_per_epoch: 8000
+    # val_n_per_epoch: 2000
     num_workers: 4
-    temp_params_name: wt_pos
+    # temp_params_name: wt_pos
+    nsynth_strings_dir: /data/projects/acid_ddsp/nsynth-valid/strings_audio/
 
 model:
-  class_path: acid_ddsp.lightning.AcidDDSPLightingModule
+  class_path: acid_ddsp.lightning.PreprocLightningModule
   init_args:
-    ac: audio_config_wt.yml
+    ac: audio_config_wt_nsynth.yml
     spectral_visualizer: log_mel_spec.yml
 #    log_envelope: true
 
     synth: synth_wt_frozen.yml
-    temp_params_name: wt_pos
+    # temp_params_name: wt_pos
 
-#    use_model: false
+    # use_model: false
     use_model: true
-    model: spectral_2dcnn_wt_nsynth.yml
+    model: spectral_2dcnn_wt.yml
     temp_params_name_hat: wt_pos
-    synth_hat: synth_wt.yml
+    synth_hat: synth_wt_nsynth.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
     use_p_loss: false

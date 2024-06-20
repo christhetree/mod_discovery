@@ -119,7 +119,6 @@ class NSynthStringsDataset(Dataset):
     def __init__(
         self,
         ac: AudioConfig,
-        temp_params_name: str,
         nsynth_strings_dir: str,
         ext: str = "flac",
         split: str = "train",
@@ -137,8 +136,7 @@ class NSynthStringsDataset(Dataset):
             self.nsynth_strings_fnames = self.nsynth_strings_fnames[int(0.9 * len(self.nsynth_strings_fnames)):]
         
         self.ac = ac
-        self.note_on_duration = tr.tensor(ac.note_on_duration)
-        self.temp_params_name = temp_params_name
+        self.note_on_duration = tr.tensor(4)    # TODO: configure this
 
     def __len__(self) -> int:
         return len(self.nsynth_strings_fnames)
@@ -146,14 +144,20 @@ class NSynthStringsDataset(Dataset):
     def __getitem__(self, idx: int) -> Dict[str, T]:
         fname = self.nsynth_strings_fnames[idx]
         audio, sr = torchaudio.load(fname)
-        n_samples = audio.size(1)
-        assert sr == self.ac.sr
-        assert n_samples == self.ac.n_samples
         audio = audio.squeeze(0)
+
+        # let's pad all nsynth data to the same length, 4 seconds
+        if audio.size(0) < self.ac.n_samples:
+            audio = tr.nn.functional.pad(audio, (0, self.ac.n_samples - audio.size(0)))
+        elif audio.size(0) > self.ac.n_samples:
+            audio = audio[:self.ac.n_samples]
+        
+        assert sr == self.ac.sr    
+        assert audio.shape[0] == self.ac.n_samples
 
         # NOTE: NSynth strings filenames are of the form:
         # "<inst_name>_<inst_type>_<inst_str>-<pitch>-<velocity>"
-        midi_note = int(fname.split("-")[1])
+        midi_note = int(os.path.basename(fname).split("-")[1])
         f0_hz = tr.tensor(librosa.midi_to_hz(midi_note)).float()
 
         # gudgud96: I am not too sure why phase_hat is needed yet...
@@ -163,4 +167,5 @@ class NSynthStringsDataset(Dataset):
             "f0_hz": f0_hz,
             "note_on_duration": self.note_on_duration,
             "phase_hat": phase_hat,
+            "type": "nsynth_strings",
         }
