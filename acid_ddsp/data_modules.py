@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 
 from audio_config import AudioConfig
-from datasets import AcidSynthDataset, PreprocDataset, SynthDataset
+from datasets import AcidSynthDataset, PreprocDataset, SynthDataset, NSynthStringsDataset
 from modulations import ModSignalGenerator
 
 logging.basicConfig()
@@ -215,6 +215,70 @@ class PreprocDataModule(pl.LightningDataModule):
     def test_dataloader(self) -> DataLoader:
         return DataLoader(
             self.test_ds,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            drop_last=False,
+        )
+
+
+class NSynthStringsDataModule(pl.LightningDataModule):
+    def __init__(
+        self,
+        batch_size: int,
+        ac: AudioConfig,
+        nsynth_strings_dir: str,
+        ext: str = "flac",
+        num_workers: int = 0,
+    ):
+        super().__init__()
+        assert os.path.exists(nsynth_strings_dir)
+        self.batch_size = batch_size
+        self.ac = ac
+        self.nsynth_strings_dir = nsynth_strings_dir
+        self.ext = ext
+        self.num_workers = num_workers
+
+        self.train_ds = NSynthStringsDataset(
+            ac,
+            nsynth_strings_dir,
+            ext,
+            "train",
+        )
+        self.val_ds = NSynthStringsDataset(
+            ac,
+            nsynth_strings_dir,
+            ext,
+            "val",
+        )
+        self.test_ds = NSynthStringsDataset(
+            ac,
+            nsynth_strings_dir,
+            ext,
+            "test",
+        )
+
+    def train_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.train_ds,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+            drop_last=False,
+        )
+
+    def val_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.train_ds,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            drop_last=False,
+        )
+
+    def test_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.train_ds,
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
