@@ -1,8 +1,8 @@
 seed_everything: 42
 
 custom:
-  project_name: acid_ddsp_nsynth
-  model_name: none_lr_1e-2
+  project_name: acid_ddsp_2
+  model_name: raw_mod__n_pos_4__lr_1e-2
 #  dataset_name: sines_2_1024
   dataset_name: sine_saw_1024
   cpu_batch_size: 5  # For now must be >= n_examples
@@ -12,7 +12,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [0]
+  devices: [3]
   max_epochs: 100
   num_sanity_val_steps: 0
   accumulate_grad_batches: 1

@@ -11,6 +11,6 @@ init_args:
   temp_params_act_name: sigmoid
   global_param_names: []
   dropout: 0.25
-  n_frames: 188
-  n_segments: 4
-  degree: 1
+#  n_frames: 188
+#  n_segments: 4
+#  degree: 1

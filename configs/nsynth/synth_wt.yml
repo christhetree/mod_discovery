@@ -1,8 +1,7 @@
 class_path: synths.WavetableSynth
 init_args:
-  ac: audio_config_wt_nsynth.yml
+  ac: audio_config_wt.yml
   n_pos: 2
   n_wt_samples: 1024
   aa_filter_n: 129
-#  wt_name: sines_1_1024.pt
   is_trainable: true

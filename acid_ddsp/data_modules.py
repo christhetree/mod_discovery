@@ -228,7 +228,7 @@ class NSynthStringsDataModule(pl.LightningDataModule):
         batch_size: int,
         ac: AudioConfig,
         nsynth_strings_dir: str,
-        ext: str = "flac",
+        ext: str = "wav",
         num_workers: int = 0,
     ):
         super().__init__()

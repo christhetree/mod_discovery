@@ -337,14 +337,14 @@ class LogAudioCallback(Callback):
                     )
 
                 data = defaultdict(list)
-                for idx, curr_dry in enumerate(dry_audio_waveforms):
-                    data["dry"].append(
-                        wandb.Audio(
-                            curr_dry,
-                            caption=f"dry_{idx}",
-                            sample_rate=int(pl_module.ac.sr),
-                        )
-                    )
+                # for idx, curr_dry in enumerate(dry_audio_waveforms):
+                #     data["dry"].append(
+                #         wandb.Audio(
+                #             curr_dry,
+                #             caption=f"dry_{idx}",
+                #             sample_rate=int(pl_module.ac.sr),
+                #         )
+                #     )
                 for idx, curr_wet in enumerate(wet_waveforms):
                     data["wet"].append(
                         wandb.Audio(
@@ -361,14 +361,14 @@ class LogAudioCallback(Callback):
                             sample_rate=int(pl_module.ac.sr),
                         )
                     )
-                for idx, curr_wet_eval in enumerate(wet_eval_waveforms):
-                    data["wet_eval"].append(
-                        wandb.Audio(
-                            curr_wet_eval,
-                            caption=f"wet_eval_{idx}",
-                            sample_rate=int(pl_module.ac.sr),
-                        )
-                    )
+                # for idx, curr_wet_eval in enumerate(wet_eval_waveforms):
+                #     data["wet_eval"].append(
+                #         wandb.Audio(
+                #             curr_wet_eval,
+                #             caption=f"wet_eval_{idx}",
+                #             sample_rate=int(pl_module.ac.sr),
+                #         )
+                #     )
                 data = list(data.values())
                 for row in data:
                     self.table.add_data(*row)

@@ -71,6 +71,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             assert not use_p_loss
         self.use_model = use_model
         log.info(f"Run name: {self.run_name}")
+        assert ac.sr == spectral_visualizer.sr
 
         self.ac = ac
         self.model = model

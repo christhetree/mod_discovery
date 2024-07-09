@@ -143,8 +143,6 @@ class CustomLightningCLI(LightningCLI):
             config.trainer.devices = "auto"
             config.trainer.strategy = "auto"
             config.data.init_args.batch_size = config.custom.cpu_batch_size
-            config.data.init_args.train_n_per_epoch = config.custom.cpu_train_n_per_epoch
-            config.data.init_args.val_n_per_epoch = config.custom.cpu_val_n_per_epoch
             config.data.init_args.num_workers = 0
 
             if "cpu_link_arguments_if_possible" in self.cli_config:

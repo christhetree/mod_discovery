@@ -70,9 +70,9 @@ class Spectral2DCNN(nn.Module):
         temp_params_act_name: Optional[str] = "sigmoid",
         global_param_names: Optional[List[str]] = None,
         dropout: float = 0.25,
-        n_frames: int = 188,
-        n_segments: int = 4,
-        degree: int = 3,
+        # n_frames: int = 188,
+        # n_segments: int = 4,
+        # degree: int = 3,
     ) -> None:
         super().__init__()
         self.fe = fe
@@ -85,10 +85,10 @@ class Spectral2DCNN(nn.Module):
         self.temporal_params_name = temp_params_name
         self.temp_params_act_name = temp_params_act_name
         self.dropout = dropout
-        assert n_frames % n_segments == 0
-        self.n_frames = n_frames
-        self.n_segments = n_segments
-        self.degree = degree
+        # assert n_frames % n_segments == 0
+        # self.n_frames = n_frames
+        # self.n_segments = n_segments
+        # self.degree = degree
 
         # Define default params
         if out_channels is None:
@@ -103,8 +103,8 @@ class Spectral2DCNN(nn.Module):
         assert len(out_channels) == len(bin_dilations) == len(temp_dilations)
         if global_param_names is None:
             global_param_names = []
-        if "spline_bias" not in global_param_names:
-            global_param_names.append("spline_bias")
+        # if "spline_bias" not in global_param_names:
+        #     global_param_names.append("spline_bias")
         self.global_param_names = global_param_names
         if pool_size[1] == 1:
             log.info(
@@ -130,10 +130,11 @@ class Spectral2DCNN(nn.Module):
         n_hidden = (out_channels[-1] + n_temp_params) // 2
         self.out_temp = nn.Sequential(
             nn.Linear(out_channels[-1], n_hidden),
-            nn.PReLU(num_parameters=n_segments),
+            # nn.PReLU(num_parameters=n_segments),
+            nn.PReLU(),
             nn.Linear(n_hidden, n_temp_params),
         )
-        self.curves = PiecewiseSplines(n_frames, n_segments, degree)
+        # self.curves = PiecewiseSplines(n_frames, n_segments, degree)
 
         # Define global params
         self.out_global = nn.ModuleDict()
@@ -167,15 +168,17 @@ class Spectral2DCNN(nn.Module):
             out_dict[param_name] = p_val_hat
 
         # Calc temporal params
-        # x = self.out_temp(latent)
-        x = latent.swapaxes(1, 2)
-        assert latent.size(-1) % self.n_segments == 0
-        x = x.view(x.size(0), x.size(1), self.n_segments, -1)
-        x = tr.mean(x, dim=-1)
-        x = x.swapaxes(1, 2)
-        x = self.out_temp(x)
-        spline_bias = out_dict.get("spline_bias")
-        x = self.curves(x, spline_bias).unsqueeze(-1)
+        x = self.out_temp(latent)
+
+        # x = latent.swapaxes(1, 2)
+        # assert latent.size(-1) % self.n_segments == 0
+        # x = x.view(x.size(0), x.size(1), self.n_segments, -1)
+        # x = tr.mean(x, dim=-1)
+        # x = x.swapaxes(1, 2)
+        # x = self.out_temp(x)
+        # spline_bias = out_dict.get("spline_bias")
+        # x = self.curves(x, spline_bias).unsqueeze(-1)
+
         if self.temp_params_act_name is None:
             out_temp = x
         elif self.temp_params_act_name == "sigmoid":

@@ -120,7 +120,7 @@ class NSynthStringsDataset(Dataset):
         self,
         ac: AudioConfig,
         nsynth_strings_dir: str,
-        ext: str = "flac",
+        ext: str = "wav",
         split: str = "train",
     ):
         super().__init__()
@@ -129,14 +129,14 @@ class NSynthStringsDataset(Dataset):
         
         # easy train-test split
         if split == "train":
-            self.nsynth_strings_fnames = self.nsynth_strings_fnames[:int(0.8 * len(self.nsynth_strings_fnames))]
-        elif split == "test":
-            self.nsynth_strings_fnames = self.nsynth_strings_fnames[int(0.8 * len(self.nsynth_strings_fnames)):int(0.9 * len(self.nsynth_strings_fnames))]
+            self.nsynth_strings_fnames = self.nsynth_strings_fnames[:int(0.7 * len(self.nsynth_strings_fnames))]
+        elif split == "val":
+            self.nsynth_strings_fnames = self.nsynth_strings_fnames[int(0.7 * len(self.nsynth_strings_fnames)):int(0.9 * len(self.nsynth_strings_fnames))]
         else:
             self.nsynth_strings_fnames = self.nsynth_strings_fnames[int(0.9 * len(self.nsynth_strings_fnames)):]
         
         self.ac = ac
-        self.note_on_duration = tr.tensor(4)    # TODO: configure this
+        self.note_on_duration = tr.tensor(4.0)    # TODO: configure this
 
     def __len__(self) -> int:
         return len(self.nsynth_strings_fnames)
@@ -144,6 +144,7 @@ class NSynthStringsDataset(Dataset):
     def __getitem__(self, idx: int) -> Dict[str, T]:
         fname = self.nsynth_strings_fnames[idx]
         audio, sr = torchaudio.load(fname)
+        assert sr == self.ac.sr
         audio = audio.squeeze(0)
 
         # let's pad all nsynth data to the same length, 4 seconds

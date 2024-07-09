@@ -1,0 +1,7 @@
+class_path: data_modules.AudioConfig
+init_args:
+  sr: 16000
+#  buffer_size_seconds: 3.9996371882   # lol, to fit into 176,384 samples
+  buffer_size_seconds: 4.0
+#  note_on_duration: 3.9996371882      # lol, to fit into 176,384 samples
+  note_on_duration: 4.0
