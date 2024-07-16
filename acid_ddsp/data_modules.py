@@ -271,7 +271,7 @@ class NSynthStringsDataModule(pl.LightningDataModule):
         return DataLoader(
             self.train_ds,
             batch_size=self.batch_size,
-            shuffle=False,
+            shuffle=True,  # To ensure different visualizations
             num_workers=self.num_workers,
             drop_last=False,
         )

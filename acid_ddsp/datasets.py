@@ -136,7 +136,7 @@ class NSynthStringsDataset(Dataset):
             self.nsynth_strings_fnames = self.nsynth_strings_fnames[int(0.9 * len(self.nsynth_strings_fnames)):]
         
         self.ac = ac
-        self.note_on_duration = tr.tensor(4.0)    # TODO: configure this
+        self.note_on_duration = tr.tensor(2.999)    # TODO: configure this
 
     def __len__(self) -> int:
         return len(self.nsynth_strings_fnames)

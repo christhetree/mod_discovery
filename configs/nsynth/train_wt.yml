@@ -2,8 +2,8 @@ seed_everything: 42
 
 custom:
   project_name: acid_ddsp_2
-  model_name: raw_mod__n_pos_2__lr_1e-2
-  dataset_name: nsynth_strings_acoustic_val
+  model_name: spline_12d1__n_pos_8__lr_1e-2
+  dataset_name: nsynth_strings_val__3s
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
   use_wandb_gpu: true
@@ -13,7 +13,7 @@ trainer:
   benchmark: false
   devices: [2]
   max_epochs: 100
-  num_sanity_val_steps: 2
+  num_sanity_val_steps: 0
   accumulate_grad_batches: 1
   gradient_clip_val: 0.5
 
