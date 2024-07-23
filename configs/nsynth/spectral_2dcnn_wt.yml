@@ -6,11 +6,11 @@ init_args:
   temp_dilations: [1, 2, 4, 16, 64, 128]
   pool_size: [2, 1]
   use_ln: true
-  n_temp_params: 1
+  n_temp_params: 3
   temp_params_name: wt_pos
   temp_params_act_name: sigmoid
   global_param_names: []
   dropout: 0.25
   n_frames: 1500
   n_segments: 12
-  degree: 1
+  degree: 3

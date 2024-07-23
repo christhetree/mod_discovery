@@ -115,34 +115,34 @@ class PreprocDataset(Dataset):
         }
 
 
-class NSynthStringsDataset(Dataset):
+class NSynthDataset(Dataset):
     def __init__(
         self,
         ac: AudioConfig,
-        nsynth_strings_dir: str,
+        data_dir: str,
         ext: str = "wav",
         split: str = "train",
     ):
         super().__init__()
-        assert os.path.exists(nsynth_strings_dir)
-        self.nsynth_strings_fnames = sorted(glob.glob(f"{nsynth_strings_dir}/*.{ext}"))
+        assert os.path.exists(data_dir)
+        self.fnames = sorted(glob.glob(f"{data_dir}/*.{ext}"))
         
         # easy train-test split
         if split == "train":
-            self.nsynth_strings_fnames = self.nsynth_strings_fnames[:int(0.7 * len(self.nsynth_strings_fnames))]
+            self.fnames = self.fnames[:int(0.7 * len(self.fnames))]
         elif split == "val":
-            self.nsynth_strings_fnames = self.nsynth_strings_fnames[int(0.7 * len(self.nsynth_strings_fnames)):int(0.9 * len(self.nsynth_strings_fnames))]
+            self.fnames = self.fnames[int(0.7 * len(self.fnames)):int(0.9 * len(self.fnames))]
         else:
-            self.nsynth_strings_fnames = self.nsynth_strings_fnames[int(0.9 * len(self.nsynth_strings_fnames)):]
+            self.fnames = self.fnames[int(0.9 * len(self.fnames)):]
         
         self.ac = ac
         self.note_on_duration = tr.tensor(2.999)    # TODO: configure this
 
     def __len__(self) -> int:
-        return len(self.nsynth_strings_fnames)
+        return len(self.fnames)
 
     def __getitem__(self, idx: int) -> Dict[str, T]:
-        fname = self.nsynth_strings_fnames[idx]
+        fname = self.fnames[idx]
         audio, sr = torchaudio.load(fname)
         assert sr == self.ac.sr
         audio = audio.squeeze(0)

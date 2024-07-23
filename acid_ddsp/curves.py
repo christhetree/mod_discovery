@@ -34,7 +34,7 @@ class PiecewiseSplines(nn.Module):
             1, 1, -1, 1
         )
         support = support - segment_offsets
-        support = tr.clamp(support, min=self.min_t, max=self.max_t)
+        support = tr.clamp(support, min=self.min_t, max=self.max_t / n_segments)
         exponent = tr.arange(start=1, end=degree + 1).int().view(1, 1, 1, -1)
         support = support.pow(exponent)
         self.register_buffer("support", support)
@@ -55,13 +55,13 @@ class PiecewiseSplines(nn.Module):
 if __name__ == "__main__":
     n_frames = 100
 
-    coeff = tr.tensor([[1.0, -1.0], [2.0, 2.0]]).unsqueeze(0)
+    coeff = tr.tensor([[1.0, 0.0], [2.0, 0.0], [-1.0, -10.0]]).unsqueeze(0)
     log.info(f"coeff.shape: {coeff.shape}")
     n_segments = coeff.size(1)
     degree = coeff.size(2)
 
     bias = None
-    bias = tr.tensor(0.5)
+    # bias = tr.tensor(0.5)
 
     curves = PiecewiseSplines(
         n_frames,

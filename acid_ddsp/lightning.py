@@ -2,7 +2,7 @@ import logging
 import os
 from contextlib import suppress
 from datetime import datetime
-from typing import Dict, Any, Optional, List, Mapping
+from typing import Dict, Any, Optional, List, Mapping, Tuple
 
 import auraloss
 import numpy as np
@@ -11,6 +11,7 @@ import pytorch_lightning as pl
 import scipy
 import torch as tr
 from auraloss.time import ESRLoss
+from pytorch_lightning.cli import OptimizerCallable
 from torch import Tensor as T
 from torch import nn
 
@@ -46,6 +47,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         fad_model_names: Optional[List[str]] = None,
         run_name: Optional[str] = None,
         use_model: bool = True,
+        model_opt: Optional[OptimizerCallable] = None,
+        synth_opt: Optional[OptimizerCallable] = None,
     ):
         super().__init__()
         if synth is None:
@@ -69,7 +72,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         if use_model:
             assert model is not None
             assert not use_p_loss
-        self.use_model = use_model
         log.info(f"Run name: {self.run_name}")
         assert ac.sr == spectral_visualizer.sr
 
@@ -87,6 +89,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.use_p_loss = use_p_loss
         self.log_envelope = log_envelope
         self.fad_model_names = fad_model_names
+        self.use_model = use_model
+        self.model_opt = model_opt
+        self.synth_opt = synth_opt
 
         self.loss_name = self.loss_func.__class__.__name__
         self.esr = ESRLoss()
@@ -291,6 +296,13 @@ class AcidDDSPLightingModule(pl.LightningModule):
             self.log(f"{stage}/audio_{self.loss_name}", loss, prog_bar=False)
 
         self.log(f"{stage}/loss", loss, prog_bar=False)
+        if stage == "train" and not self.automatic_optimization:
+            for opt in self.optimizers():
+                opt.zero_grad()
+            self.manual_backward(loss)
+            for opt in self.optimizers():
+                self.clip_gradients(opt)
+                opt.step()
 
         # Log audio metrics
         audio_metrics_hat = {}
@@ -382,6 +394,23 @@ class AcidDDSPLightingModule(pl.LightningModule):
         out = self.step(batch, stage="test")
         self.test_out_dicts.append(out)
         return out
+
+    def configure_optimizers(self) -> Tuple[tr.optim.Optimizer, ...]:
+        if self.model_opt is None or self.synth_opt is None:
+            log.info(f"Using one optimizer")
+            return super().configure_optimizers()
+        else:
+            assert self.trainer.accumulate_grad_batches == 1, \
+                "Grad accumulation is not supported with multiple optimizers"
+            self.automatic_optimization = False
+            self.model_opt = self.model_opt(self.model.parameters())
+            self.synth_opt = self.synth_opt(self.synth_hat.parameters())
+            log.info(
+                f"Using multiple optimizers: "
+                f"\n - model_opt initial LR: {self.model_opt.defaults['lr']:.4f}"
+                f"\n - synth_opt initial LR: {self.synth_opt.defaults['lr']:.4f}"
+            )
+            return self.model_opt, self.synth_opt
 
     def on_test_epoch_end(self) -> None:
         tsv_rows = []

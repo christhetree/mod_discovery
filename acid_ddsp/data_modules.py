@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 
 from audio_config import AudioConfig
-from datasets import AcidSynthDataset, PreprocDataset, SynthDataset, NSynthStringsDataset
+from datasets import AcidSynthDataset, PreprocDataset, SynthDataset, NSynthDataset
 from modulations import ModSignalGenerator
 
 logging.basicConfig()
@@ -222,38 +222,38 @@ class PreprocDataModule(pl.LightningDataModule):
         )
 
 
-class NSynthStringsDataModule(pl.LightningDataModule):
+class NSynthDataModule(pl.LightningDataModule):
     def __init__(
         self,
         batch_size: int,
         ac: AudioConfig,
-        nsynth_strings_dir: str,
+        data_dir: str,
         ext: str = "wav",
         num_workers: int = 0,
     ):
         super().__init__()
-        assert os.path.exists(nsynth_strings_dir)
+        assert os.path.exists(data_dir)
         self.batch_size = batch_size
         self.ac = ac
-        self.nsynth_strings_dir = nsynth_strings_dir
+        self.data_dir = data_dir
         self.ext = ext
         self.num_workers = num_workers
 
-        self.train_ds = NSynthStringsDataset(
+        self.train_ds = NSynthDataset(
             ac,
-            nsynth_strings_dir,
+            data_dir,
             ext,
             "train",
         )
-        self.val_ds = NSynthStringsDataset(
+        self.val_ds = NSynthDataset(
             ac,
-            nsynth_strings_dir,
+            data_dir,
             ext,
             "val",
         )
-        self.test_ds = NSynthStringsDataset(
+        self.test_ds = NSynthDataset(
             ac,
-            nsynth_strings_dir,
+            data_dir,
             ext,
             "test",
         )

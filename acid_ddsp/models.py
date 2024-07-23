@@ -134,6 +134,7 @@ class Spectral2DCNN(nn.Module):
             nn.PReLU(),
             nn.Linear(n_hidden, n_temp_params),
         )
+        assert n_temp_params == degree
         self.curves = PiecewiseSplines(n_frames, n_segments, degree)
 
         # Define global params
