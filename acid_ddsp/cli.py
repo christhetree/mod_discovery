@@ -188,10 +188,11 @@ class CustomLightningCLI(LightningCLI):
             f"{self.config.fit.custom.model_name} "
             f"{self.config.fit.custom.dataset_name} ================"
         )
-        # TODO(cm)
         try:
             log.info(
-                f"================ Starting LR = {self.config.fit.optimizer.init_args.lr:.5f} ================ "
+                f"================ {self.config.fit.optimizer.class_path} "
+                f"starting LR = {self.config.fit.optimizer.init_args.lr:.5f} "
+                f"================ "
             )
         except Exception:
             pass

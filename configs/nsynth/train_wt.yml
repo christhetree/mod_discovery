@@ -2,7 +2,7 @@ seed_everything: 42
 
 custom:
   project_name: acid_ddsp_2
-  model_name: spline_12d3__n_pos_4__lr_1e-3_1e-2
+  model_name: spline_12d3__n_pos_4__lr_5e-2_5e-3
   dataset_name: nsynth_vocal_synthetic_val__3s
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
@@ -11,7 +11,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [3]
+  devices: [1]
   max_epochs: 100
   num_sanity_val_steps: 0
   accumulate_grad_batches: 1
@@ -39,7 +39,8 @@ model:
     synth_hat: synth_wt.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
-    model_opt: adam_w__lr_1e-3.yml
-    synth_opt: adam_w__lr_1e-2.yml
+    synth_opt: sf_adam_w__lr_5e-2.yml
+    model_opt: sf_adam_w__lr_5e-3.yml
 
-#optimizer: adam_w__lr_1e-2.yml
+#optimizer: sf_adam_w.yml
+#optimizer: sgd.yml
