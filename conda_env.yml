@@ -16,13 +16,14 @@ dependencies:
     - auraloss
     - black
     - hypy_utils
-    - jsonargparse[signatures]
+    - jsonargparse[signatures]==4.27.7
     - librosa
     - matplotlib==3.7.3
     - numpy==1.23.5
     - nvitop
     - pandas
     - resampy
+    - schedulefree
     - scipy==1.11.2
     - tensorboard
     - wandb

@@ -66,6 +66,7 @@ referencing==0.34.0
 requests==2.31.0
 resampy==0.4.3
 rpds-py==0.18.0
+schedulefree==1.2.7
 scikit-learn==1.4.1.post1
 scipy==1.11.2
 sentry-sdk==1.44.1

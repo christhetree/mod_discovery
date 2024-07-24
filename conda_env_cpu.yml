@@ -8,7 +8,7 @@ dependencies:
     - auraloss
     - black
     - hypy_utils
-    - jsonargparse[signatures]
+    - jsonargparse[signatures]==4.27.7
     - librosa
     - matplotlib==3.7.3
     - numba
@@ -16,6 +16,7 @@ dependencies:
     - pandas
     - pytorch-lightning
     - resampy
+    - schedulefree
     - scipy==1.11.2
     - torch
     - torchaudio
