@@ -223,7 +223,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
             # Postprocess temp_params_hat
             temp_params_hat = model_out[self.temp_params_name_hat]
-            assert temp_params_hat.ndim == 3
             additive_args_hat[self.temp_params_name_hat] = temp_params_hat
             subtractive_args_hat[self.temp_params_name_hat] = temp_params_hat
 

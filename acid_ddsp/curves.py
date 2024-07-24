@@ -52,8 +52,47 @@ class PiecewiseSplines(nn.Module):
         return x
 
 
+class FourierSignal(nn.Module):
+    def __init__(
+        self,
+        n_frames: int,
+        n_bins: Optional[int] = None,
+    ):
+        super().__init__()
+        self.n_frames = n_frames
+        if n_bins is None:
+            n_bins = n_frames // 2 + 1
+        self.n_bins = n_bins
+
+    def forward(self, mag: T, phase: T) -> T:
+        assert mag.ndim == 2
+        assert mag.size(1) == self.n_bins
+        assert phase.ndim == 2
+        assert phase.size(1) == self.n_bins
+        mag = mag * self.n_frames
+        fourier_x = mag * tr.exp(1j * phase)
+        x = tr.fft.irfft(fourier_x, n=self.n_frames, dim=1)
+        return x
+
+
 if __name__ == "__main__":
-    n_frames = 100
+    n_frames = 200
+    n_bins = 50
+    mag = tr.rand(1, n_bins)
+    # phase = tr.zeros(1, n_bins)
+    phase = tr.rand(1, n_bins) * 2 * tr.pi
+
+    fs = FourierSignal(n_frames, n_bins=n_bins)
+    # mag = tr.tensor([1.0, 0.0, 0.0]).unsqueeze(0)
+    # phase = tr.tensor([0.0, 0.0, 0.0]).unsqueeze(0)
+    x = fs(mag, phase)
+    x = tr.sigmoid(x)
+
+    log.info(f"x.shape: {x.shape}")
+    import matplotlib.pyplot as plt
+    plt.plot(x[0].numpy())
+    plt.show()
+    exit()
 
     coeff = tr.tensor([[1.0, 0.0], [2.0, 0.0], [-1.0, -10.0]]).unsqueeze(0)
     log.info(f"coeff.shape: {coeff.shape}")

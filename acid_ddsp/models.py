@@ -7,7 +7,7 @@ from torch import Tensor as T
 from torch import nn
 from torch.nn import functional as F
 
-from curves import PiecewiseSplines
+from curves import PiecewiseSplines, FourierSignal
 from feature_extraction import LogMelSpecFeatureExtractor
 
 logging.basicConfig()
@@ -130,12 +130,15 @@ class Spectral2DCNN(nn.Module):
         n_hidden = (out_channels[-1] + n_temp_params) // 2
         self.out_temp = nn.Sequential(
             nn.Linear(out_channels[-1], n_hidden),
-            # nn.PReLU(num_parameters=n_segments),
+            nn.Dropout(p=dropout),
+            # nn.PReLU(num_parameters=n_hidden),
             nn.PReLU(),
             nn.Linear(n_hidden, n_temp_params),
         )
         assert n_temp_params == degree
         self.curves = PiecewiseSplines(n_frames, n_segments, degree)
+        # assert n_temp_params % 2 == 0
+        # self.curves = FourierSignal(n_frames, n_bins=n_temp_params // 2)
 
         # Define global params
         self.out_global = nn.ModuleDict()
@@ -180,6 +183,13 @@ class Spectral2DCNN(nn.Module):
         x = self.out_temp(x)
         spline_bias = out_dict.get("spline_bias")
         x = self.curves(x, spline_bias).unsqueeze(-1)
+
+        # Calc temporal params using Fourier signal
+        # x = self.out_temp(x)
+        # mag, phase = tr.chunk(x, 2, dim=1)
+        # # mag = tr.tanh(raw_mag) * 2.0
+        # phase = tr.sigmoid(phase) * 2 * tr.pi
+        # x = self.curves(mag, phase).unsqueeze(-1)
 
         if self.temp_params_act_name is None:
             out_temp = x
