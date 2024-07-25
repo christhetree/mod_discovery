@@ -73,6 +73,8 @@ class Spectral2DCNN(nn.Module):
         n_frames: int = 188,
         n_segments: int = 4,
         degree: int = 3,
+        filter_depth: int = 0,
+        filter_width: int = 0,
     ) -> None:
         super().__init__()
         self.fe = fe
@@ -89,6 +91,8 @@ class Spectral2DCNN(nn.Module):
         self.n_frames = n_frames
         self.n_segments = n_segments
         self.degree = degree
+        self.filter_depth = filter_depth
+        self.filter_width = filter_width
 
         # Define default params
         if out_channels is None:
@@ -136,6 +140,16 @@ class Spectral2DCNN(nn.Module):
             nn.Linear(n_hidden, n_temp_params),
         )
         assert n_temp_params == degree
+
+        n_filter_coeff = filter_depth * filter_width * 5
+        n_hidden = (out_channels[-1] + n_filter_coeff) // 2
+        self.filter_temp = nn.Sequential(
+            nn.Linear(out_channels[-1], n_hidden),
+            nn.Dropout(p=dropout),
+            nn.PReLU(),
+            nn.Linear(n_hidden, n_filter_coeff),
+        )
+
         self.curves = PiecewiseSplines(n_frames, n_segments, degree)
         # assert n_temp_params % 2 == 0
         # self.curves = FourierSignal(n_frames, n_bins=n_temp_params // 2)
@@ -204,6 +218,14 @@ class Spectral2DCNN(nn.Module):
         else:
             raise ValueError(f"Unknown activation: {self.temp_params_act_name}")
         out_dict[self.temporal_params_name] = out_temp
+
+        # Calc filter params
+        if self.filter_depth and self.filter_width:
+            x = self.filter_temp(latent)
+            x = x.view(
+                x.size(0), self.n_frames, self.filter_depth, self.filter_width, -1
+            )
+            out_dict["logits"] = x
 
         return out_dict
 

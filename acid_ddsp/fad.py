@@ -8,10 +8,6 @@ import torchaudio
 from torch import Tensor as T
 
 import fadtk
-from fadtk import (
-    FrechetAudioDistance,
-    cache_embedding_files,
-)
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -48,10 +44,12 @@ def calc_fad(
 
     fad_models = {m.name: m for m in fadtk.get_all_models()}
     fad_model = fad_models[fad_model_name]
-    cache_embedding_files(baseline_dir, fad_model, workers)
-    cache_embedding_files(eval_dir, fad_model, workers)
+    fadtk.cache_embedding_files(baseline_dir, fad_model, workers)
+    fadtk.cache_embedding_files(eval_dir, fad_model, workers)
 
-    fad = FrechetAudioDistance(fad_model, audio_load_worker=workers, load_model=False)
+    fad = fadtk.FrechetAudioDistance(
+        fad_model, audio_load_worker=workers, load_model=False
+    )
     score = fad.score(baseline_dir, eval_dir)
     if clean_up_baseline:
         shutil.rmtree(baseline_dir)

@@ -14,3 +14,5 @@ init_args:
   n_frames: 1500
   n_segments: 12
   degree: 3
+  filter_depth: 2
+  filter_width: 2

@@ -2,7 +2,7 @@ seed_everything: 42
 
 custom:
   project_name: acid_ddsp_2
-  model_name: spline_12d3__n_pos_4__lr_5e-2_5e-3
+  model_name: wt_spline_12d3__n_pos_4__filter_2x2_mean
 #  model_name: fourier_8_bounded__n_pos_4__lr_5e-2_5e-3
   dataset_name: nsynth_vocal_synthetic_val__3s
   cpu_batch_size: 5  # For now must be >= n_examples
@@ -12,7 +12,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [2]
+  devices: [5]
   max_epochs: 100
   num_sanity_val_steps: 0
   accumulate_grad_batches: 1

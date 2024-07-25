@@ -459,6 +459,7 @@ class WavetableSynth(SynthBase):
             wt=wt,
             is_trainable=is_trainable,
         )
+        self.lpc_func = sample_wise_lpc
 
     def additive_synthesis(
         self,
@@ -471,6 +472,51 @@ class WavetableSynth(SynthBase):
         wt_pos = additive_args["wt_pos"]
         dry_audio = self.osc(f0_hz, wt_pos, n_samples=n_samples, phase=phase)
         return dry_audio, {}
+
+    def _apply_filter(self, x: T, logits: T) -> T:
+        # TODO(cm): reduce duplicate code
+        assert logits.ndim == 3
+        assert logits.size(2) == 5
+        bs = logits.size(0)
+        n_frames = x.size(1)
+        a_logits = logits[..., :2]
+        a_coeff = calc_logits_to_biquad_a_coeff_triangle(
+            a_logits, self.ac.stability_eps
+        )
+        b_coeff = logits[..., 2:]
+        a_coeff = util.linear_interpolate_dim(
+            a_coeff, n_frames, dim=1, align_corners=True
+        )
+        assert a_coeff.shape == (bs, n_frames, 2)
+        b_coeff = util.linear_interpolate_dim(
+            b_coeff, n_frames, dim=1, align_corners=True
+        )
+        assert b_coeff.shape == (bs, n_frames, 3)
+        y_a = self.lpc_func(x, a_coeff)
+        assert not tr.isinf(y_a).any()
+        assert not tr.isnan(y_a).any()
+        y_ab = time_varying_fir(y_a, b_coeff)
+        return y_ab
+
+    def subtractive_synthesis(
+            self, x: T, subtractive_args: Dict[str, T]
+    ) -> (T, Dict[str, T]):
+        logits = subtractive_args.get("logits")
+        if logits is None:
+            return x, {}
+        assert logits.ndim == 5
+        filter_depth = logits.size(2)
+        filter_width = logits.size(3)
+        for depth_idx in range(filter_depth):
+            layer_x_s = []
+            for width_idx in range(filter_width):
+                curr_logits = logits[:, :, depth_idx, width_idx, :]
+                curr_x = self._apply_filter(x, curr_logits)
+                layer_x_s.append(curr_x)
+            # TODO(cm): could add a learnable attention over the filters
+            x = tr.stack(layer_x_s, dim=1)
+            x = tr.mean(x, dim=1)
+        return x, {}
 
     def forward(
         self,

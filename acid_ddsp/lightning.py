@@ -225,6 +225,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             temp_params_hat = model_out[self.temp_params_name_hat]
             additive_args_hat[self.temp_params_name_hat] = temp_params_hat
             subtractive_args_hat[self.temp_params_name_hat] = temp_params_hat
+            if "logits" in model_out:
+                subtractive_args_hat["logits"] = model_out["logits"]
 
             # Postprocess global_params_hat
             for p_name in self.global_param_names_hat:
@@ -399,8 +401,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             log.info(f"Using one optimizer")
             return super().configure_optimizers()
         else:
-            assert self.trainer.accumulate_grad_batches == 1, \
-                "Grad accumulation is not supported with multiple optimizers"
+            assert (
+                self.trainer.accumulate_grad_batches == 1
+            ), "Grad accumulation is not supported with multiple optimizers"
             self.automatic_optimization = False
             self.model_opt = self.model_opt(self.model.parameters())
             self.synth_opt = self.synth_opt(self.synth_hat.parameters())

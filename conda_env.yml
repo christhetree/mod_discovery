@@ -1,30 +1,35 @@
 name: acid
 channels:
   - defaults
-  - pytorch
-  - nvidia
+  - conda-forge
 dependencies:
   - python=3.10
   - pip
-  - pytorch
-  - torchaudio
-  - torchvision
-  - lightning
-  - numba
-  - cudatoolkit=11.8
+  - cuda-nvcc
+  - cuda-nvrtc
+  - cuda-version=12.4
   - pip:
     - auraloss
     - black
     - hypy_utils
-    - jsonargparse[signatures]==4.27.7
+    - jsonargparse[signatures]>=4.27.7
     - librosa
-    - matplotlib==3.7.3
-    - numpy==1.23.5
+    - lightning
+    - matplotlib
+    - numba
+    - numpy<2.0.0
     - nvitop
     - pandas
+    - pip-chill
     - resampy
     - schedulefree
-    - scipy==1.11.2
+    - scipy
+    - torch
+    - torchaudio
+    - torchvision
     - tensorboard
+    - uv
     - wandb
     - git+https://github.com/Neutone/neutone_sdk.git@c69108d6ad11910afdc3ce4ead0a647456e2addb
+
+# uv pip install torch lightning numba torchaudio torchvision auraloss black hypy_utils 'jsonargparse[signatures]>=4.27.7' librosa matplotlib 'numpy<2.0.0' nvitop pandas resampy schedulefree scipy tensorboard wandb pip-chill
