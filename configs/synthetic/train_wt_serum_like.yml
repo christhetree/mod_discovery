@@ -2,7 +2,7 @@ seed_everything: 42
 
 custom:
   project_name: acid_ddsp_2
-  model_name: raw_mod__n_pos_6__lr_1e-2
+  model_name: raw_mod__n_pos_4__lr_1e-2
 #  dataset_name: sines_2_1024
   # dataset_name: sine_saw_1024
   dataset_name: serum_basic_shapes_1024
