@@ -1,9 +1,9 @@
 class_path: synths.WavetableSynth
 init_args:
   ac: audio_config_wt.yml
-  n_pos: 2
+  n_pos: 4
   n_wt_samples: 1024
   aa_filter_n: 129
 #  wt_name: sines_2_1024.pt
-  wt_name: sine_saw_1024.pt
+  wt_name: serum_basic_shapes_1024__n_pos_4.pt
   is_trainable: false

@@ -82,6 +82,63 @@ class ModSignalGeneratorRandom(ModSignalGenerator):
         return mod_sig
 
 
+class ModSignalGeneratorLinear(ModSignalGeneratorRandom):
+    """
+    This is to generate a simple linear modulation signal
+    which can cover more than 50% of wavetable position during the sweep.
+    We should assess how this affects the learnt wavetable.
+    """
+    def __init__(
+        self,
+        min_start_val: float = 0.0,
+        max_start_val: float = 1.0,
+        min_corner_val: float = 0.0,
+        max_corner_val: float = 1.0,
+        min_end_val: float = 0.0,
+        max_end_val: float = 1.0,
+        min_attack_frac: float = 0.05,
+        max_attack_frac: float = 0.25,
+        min_alpha: float = 0.1,
+        max_alpha: float = 6.0,
+    ):
+        super().__init__(
+            min_start_val,
+            max_start_val,
+            min_corner_val,
+            max_corner_val,
+            min_end_val,
+            max_end_val,
+            min_attack_frac,
+            max_attack_frac,
+            min_alpha,
+            max_alpha,
+        )
+    
+    def forward(self, n_frames: int) -> T:
+        assert n_frames > 2
+        start_val = (
+            tr.rand((1,)) * (self.max_start_val - self.min_start_val)
+            + self.min_start_val
+        )
+        corner_val = tr.zeros((1,)) if start_val > 0.5 else tr.ones((1,))
+        end_val = start_val
+
+        corner_frac = (
+            tr.rand((1,)) * (self.max_attack_frac - self.min_attack_frac)
+            + self.min_attack_frac
+        )
+        corner_idx = (n_frames * corner_frac).int().clamp(1, n_frames - 2)
+
+        mod_sig = tr.zeros(n_frames)
+        mod_sig[:corner_idx] = tr.linspace(
+            start_val.item(), corner_val.item(), corner_idx.item()
+        )
+        mod_sig[corner_idx:] = tr.linspace(
+            corner_val.item(), end_val.item(), n_frames - corner_idx.item()
+        )
+        return mod_sig
+    
+
 class ModSignalGeneratorPointy(ModSignalGenerator):
     def __init__(
         self,
@@ -143,3 +200,14 @@ class ModSignalGeneratorPointy(ModSignalGenerator):
         # plt.show()
 
         return mod_sig
+
+
+if __name__ == "__main__":
+    n_frames = 1000
+    mod_sig_gen = ModSignalGeneratorLinear()
+    mod_sig = mod_sig_gen(n_frames)
+    import matplotlib.pyplot as plt
+
+    plt.plot(mod_sig)
+    plt.ylim(0, 1)
+    plt.savefig("modulation_pointy.png")

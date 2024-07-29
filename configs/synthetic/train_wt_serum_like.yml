@@ -25,7 +25,7 @@ data:
     batch_size: 32
     ac: audio_config_wt.yml
     # mod_sig_gen: mod_sig_gen.yml
-    mod_sig_gen: mod_sig_gen__pointy.yml
+    mod_sig_gen: mod_sig_gen__linear.yml
     train_n_per_epoch: 8000
     val_n_per_epoch: 2000
     num_workers: 4

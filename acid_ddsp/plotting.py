@@ -330,7 +330,7 @@ def plot_wavetable(wt: T, title: Optional[str] = None) -> Figure:
         ax = axs[idx, 0]
         ax.plot(wt[idx, :].numpy())
         ax.set_title(f"Position {idx}")
-        ax.set_ylim(-1.1, 1.1)
+        ax.set_ylim(-2.0, 2.0)
     if title is not None:
         fig.suptitle(title)
     fig.tight_layout()

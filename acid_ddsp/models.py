@@ -168,17 +168,17 @@ class Spectral2DCNN(nn.Module):
             out_dict[param_name] = p_val_hat
 
         # Calc temporal params
-        # x = self.out_temp(latent)
+        x = self.out_temp(latent)
 
         # Calc temporal params using piecewise splines
-        x = latent.swapaxes(1, 2)
-        assert x.size(-1) % self.n_segments == 0
-        x = x.view(x.size(0), x.size(1), self.n_segments, -1)
-        x = tr.mean(x, dim=-1)
-        x = x.swapaxes(1, 2)
-        x = self.out_temp(x)
-        spline_bias = out_dict.get("spline_bias")
-        x = self.curves(x, spline_bias).unsqueeze(-1)
+        # x = latent.swapaxes(1, 2)
+        # assert x.size(-1) % self.n_segments == 0
+        # x = x.view(x.size(0), x.size(1), self.n_segments, -1)
+        # x = tr.mean(x, dim=-1)
+        # x = x.swapaxes(1, 2)
+        # x = self.out_temp(x)
+        # spline_bias = out_dict.get("spline_bias")
+        # x = self.curves(x, spline_bias).unsqueeze(-1)
 
         if self.temp_params_act_name is None:
             out_temp = x

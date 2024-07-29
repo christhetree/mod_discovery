@@ -1,0 +1,12 @@
+class_path: modulations.ModSignalGeneratorLinear
+init_args:
+  min_start_val: 0.0
+  max_start_val: 1.0
+  min_corner_val: 0.0
+  max_corner_val: 1.0
+  min_end_val: 0.0
+  max_end_val: 1.0
+  min_attack_frac: 0.0
+  max_attack_frac: 1.0
+  min_alpha: 0.1
+  max_alpha: 6.0
