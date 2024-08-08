@@ -225,8 +225,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
             temp_params_hat = model_out[self.temp_params_name_hat]
             additive_args_hat[self.temp_params_name_hat] = temp_params_hat
             subtractive_args_hat[self.temp_params_name_hat] = temp_params_hat
-            if "logits" in model_out:
-                subtractive_args_hat["logits"] = model_out["logits"]
+            if "add_lfo" in model_out:
+                additive_args_hat["wt_pos"] = model_out["add_lfo"]
+            if "sub_lfo" in model_out:
+                subtractive_args_hat["logits"] = model_out["sub_lfo"]
 
             # Postprocess global_params_hat
             for p_name in self.global_param_names_hat:

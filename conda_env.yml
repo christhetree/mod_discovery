@@ -32,4 +32,4 @@ dependencies:
     - wandb
     - git+https://github.com/Neutone/neutone_sdk.git@c69108d6ad11910afdc3ce4ead0a647456e2addb
 
-# uv pip install torch lightning numba torchaudio torchvision auraloss black hypy_utils 'jsonargparse[signatures]>=4.27.7' librosa matplotlib 'numpy<2.0.0' nvitop pandas resampy schedulefree scipy tensorboard wandb pip-chill
+# uv pip install torch lightning numba torchaudio torchvision auraloss black hypy_utils 'jsonargparse[signatures]>=4.27.7' librosa matplotlib 'numpy<2.0.0' nvitop pandas resampy schedulefree scipy tensorboard wandb pip-chill git+https://github.com/kymatio/kymatio.git

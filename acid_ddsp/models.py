@@ -7,7 +7,7 @@ from torch import Tensor as T
 from torch import nn
 from torch.nn import functional as F
 
-from curves import PiecewiseSplines, FourierSignal
+from curves import PiecewiseSplines
 from feature_extraction import LogMelSpecFeatureExtractor
 
 logging.basicConfig()
@@ -87,12 +87,16 @@ class Spectral2DCNN(nn.Module):
         self.temporal_params_name = temp_params_name
         self.temp_params_act_name = temp_params_act_name
         self.dropout = dropout
-        assert n_frames % n_segments == 0
+        assert (
+            n_frames % n_segments == 0
+        ), f"n_frames = {n_frames}, n_segments = {n_segments}"
         self.n_frames = n_frames
         self.n_segments = n_segments
         self.degree = degree
         self.filter_depth = filter_depth
         self.filter_width = filter_width
+        self.n_filters = filter_depth * filter_width
+        self.n_curves = self.n_filters + 1
 
         # Define default params
         if out_channels is None:
@@ -107,8 +111,8 @@ class Spectral2DCNN(nn.Module):
         assert len(out_channels) == len(bin_dilations) == len(temp_dilations)
         if global_param_names is None:
             global_param_names = []
-        if "spline_bias" not in global_param_names:
-            global_param_names.append("spline_bias")
+        # if "spline_bias" not in global_param_names:
+        #     global_param_names.append("spline_bias")
         self.global_param_names = global_param_names
         if pool_size[1] == 1:
             log.info(
@@ -135,24 +139,42 @@ class Spectral2DCNN(nn.Module):
         self.out_temp = nn.Sequential(
             nn.Linear(out_channels[-1], n_hidden),
             nn.Dropout(p=dropout),
-            # nn.PReLU(num_parameters=n_hidden),
+            nn.PReLU(),
+            nn.Linear(n_hidden, n_hidden),
+            nn.Dropout(p=dropout),
             nn.PReLU(),
             nn.Linear(n_hidden, n_temp_params),
         )
-        assert n_temp_params == degree
+        # assert n_temp_params == degree
+        assert n_temp_params / degree == self.n_curves
 
-        n_filter_coeff = filter_depth * filter_width * 5
-        n_hidden = (out_channels[-1] + n_filter_coeff) // 2
-        self.filter_temp = nn.Sequential(
+        # Define filter temporal params
+        # n_filter_coeff = filter_depth * filter_width * 5
+        # n_hidden = (out_channels[-1] + n_filter_coeff) // 2
+        # self.filter_temp = nn.Sequential(
+        #     nn.Linear(out_channels[-1], n_hidden),
+        #     nn.Dropout(p=dropout),
+        #     nn.PReLU(),
+        #     nn.Linear(n_hidden, n_filter_coeff),
+        # )
+
+        # Define temporal params
+        # self.out_temp = nn.Linear(out_channels[-1], n_temp_params)
+        n_hidden = (out_channels[-1] + self.n_curves) // 2
+        self.out_bias = nn.Sequential(
             nn.Linear(out_channels[-1], n_hidden),
             nn.Dropout(p=dropout),
-            nn.PReLU(),
-            nn.Linear(n_hidden, n_filter_coeff),
+            nn.PReLU(num_parameters=n_hidden),
+            nn.Linear(n_hidden, self.n_curves),
         )
 
         self.curves = PiecewiseSplines(n_frames, n_segments, degree)
         # assert n_temp_params % 2 == 0
         # self.curves = FourierSignal(n_frames, n_bins=n_temp_params // 2)
+        n_logits = 5 * self.n_filters
+        self.sub_lfo_adapter = TemporalAdapter(
+            self.n_filters, n_logits, [(n_logits + self.n_filters) // 2] * 3, dropout
+        )
 
         # Define global params
         self.out_global = nn.ModuleDict()
@@ -184,19 +206,30 @@ class Spectral2DCNN(nn.Module):
         for param_name, mlp in self.out_global.items():
             p_val_hat = mlp(x).squeeze(-1)
             out_dict[param_name] = p_val_hat
+        spline_bias = self.out_bias(x)
 
         # Calc temporal params
         # x = self.out_temp(latent)
 
         # Calc temporal params using piecewise splines
         x = latent.swapaxes(1, 2)
-        assert x.size(-1) % self.n_segments == 0
+        assert (
+            x.size(-1) % self.n_segments == 0
+        ), f"x.size(-1) = {x.size(-1)}, self.n_segments = {self.n_segments}"
         x = x.view(x.size(0), x.size(1), self.n_segments, -1)
         x = tr.mean(x, dim=-1)
         x = x.swapaxes(1, 2)
         x = self.out_temp(x)
-        spline_bias = out_dict.get("spline_bias")
-        x = self.curves(x, spline_bias).unsqueeze(-1)
+        # spline_bias = out_dict.get("spline_bias")
+        # x = self.curves(x, spline_bias).unsqueeze(-1)
+
+        x = x.view(x.size(0), x.size(1), self.n_curves, self.degree)
+        x = tr.swapaxes(x, 1, 2)
+        x = tr.flatten(x, start_dim=0, end_dim=1)
+        spline_bias = tr.flatten(spline_bias)
+        x = self.curves(x, spline_bias)
+        x = x.view(-1, self.n_curves, x.size(1))
+        x = tr.swapaxes(x, 1, 2)
 
         # Calc temporal params using Fourier signal
         # x = self.out_temp(x)
@@ -218,14 +251,18 @@ class Spectral2DCNN(nn.Module):
         else:
             raise ValueError(f"Unknown activation: {self.temp_params_act_name}")
         out_dict[self.temporal_params_name] = out_temp
+        add_lfo = out_temp[:, :, :1]
+        out_dict["add_lfo"] = add_lfo
 
         # Calc filter params
         if self.filter_depth and self.filter_width:
-            x = self.filter_temp(latent)
+            # x = self.filter_temp(latent)
+            sub_lfo = out_temp[:, :, 1:]
+            x = self.sub_lfo_adapter(sub_lfo)
             x = x.view(
                 x.size(0), self.n_frames, self.filter_depth, self.filter_width, -1
             )
-            out_dict["logits"] = x
+            out_dict["sub_lfo"] = x
 
         return out_dict
 
