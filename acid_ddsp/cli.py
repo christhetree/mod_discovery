@@ -1,8 +1,10 @@
 import logging
 import os
+from contextlib import suppress
 from typing import Optional, Dict, Any
 
 import torch as tr
+import wandb
 import yaml
 from jsonargparse import lazy_instance
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
@@ -11,7 +13,7 @@ from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.strategies import DDPStrategy
 
 from acid_ddsp.paths import CONFIGS_DIR
-from callbacks import LogModSigAndSpecCallback, LogAudioCallback, LogWavetablesCallback
+from callbacks import LogWavetablesCallback, LogModSigAndSpecCallback, LogAudioCallback
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -38,13 +40,6 @@ class CustomLightningCLI(LightningCLI):
             LogAudioCallback(),
             LogWavetablesCallback(),
         ],
-        "logger": {
-            "class_path": "pytorch_lightning.loggers.TensorBoardLogger",
-            "init_args": {
-                "save_dir": "lightning_logs",
-                "name": None,
-            },
-        },
         "log_every_n_steps": 1,
         "precision": 32,
         "strategy": lazy_instance(DDPStrategy, find_unused_parameters=False),
@@ -165,11 +160,20 @@ class CustomLightningCLI(LightningCLI):
                 )
                 log.info(f"Setting checkpoint name to: {cb.filename}")
 
-        import torch as tr
         use_gpu = tr.cuda.is_available()
         if (use_gpu and self.config.fit.custom.use_wandb_gpu) or (
             not use_gpu and self.config.fit.custom.use_wandb_cpu
         ):
+            # Used directly by the callbacks
+            wandb.init(
+                dir="wandb_logs",
+                project=self.config.fit.custom.project_name,
+                name=f"{self.config.fit.custom.model_name}__"
+                f"{self.config.fit.custom.dataset_name}",
+            )
+            wandb.define_metric("*", step_metric="global_step")
+
+            # Used by lightning to log to wandb
             wandb_logger = WandbLogger(
                 save_dir="wandb_logs",
                 project=self.config.fit.custom.project_name,
@@ -188,14 +192,12 @@ class CustomLightningCLI(LightningCLI):
             f"{self.config.fit.custom.model_name} "
             f"{self.config.fit.custom.dataset_name} ================"
         )
-        try:
+        with suppress(Exception):
             log.info(
                 f"================ {self.config.fit.optimizer.class_path} "
                 f"starting LR = {self.config.fit.optimizer.init_args.lr:.5f} "
                 f"================ "
             )
-        except Exception:
-            pass
 
     # def after_validate(self) -> None:
     #     print("=================================================================")

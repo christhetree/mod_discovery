@@ -2,6 +2,7 @@ import logging
 import math
 import os
 from collections import defaultdict
+from contextlib import suppress
 from typing import Any, Dict, List
 
 import torch as tr
@@ -10,7 +11,6 @@ from auraloss.time import ESRLoss
 from matplotlib import pyplot as plt
 from pytorch_lightning import Trainer, Callback
 from pytorch_lightning.callbacks import LearningRateMonitor
-from pytorch_lightning.loggers import WandbLogger
 from torch import Tensor as T, nn
 
 import util
@@ -223,12 +223,12 @@ class LogModSigAndSpecCallback(Callback):
             images.append(img)
 
         if images:
-            for logger in trainer.loggers:
-                # TODO(cm): enable for tensorboard as well
-                if isinstance(logger, WandbLogger):
-                    logger.log_image(
-                        key="spectrograms", images=images, step=trainer.global_step
-                    )
+            wandb.log(
+                {
+                    "spectrograms": [wandb.Image(i) for i in images],
+                    "global_step": trainer.global_step,
+                }
+            )
 
         self.out_dicts.clear()
 
@@ -240,8 +240,8 @@ class LogAudioCallback(Callback):
         self.n_examples = n_examples
         self.render_time_sec = render_time_sec
         self.out_dicts = {}
-        columns = [f"idx_{idx}" for idx in range(n_examples)]
-        self.table = wandb.Table(columns=columns)
+        self.columns = ["row_id"] + [f"idx_{idx}" for idx in range(n_examples)]
+        self.rows = []
 
     def on_validation_batch_end(
         self,
@@ -322,63 +322,61 @@ class LogAudioCallback(Callback):
             img = fig2img(fig)
             images.append(img)
 
-        # import torchaudio
-        # import torch
-        # for idx, wet in enumerate(wet_waveforms):
-        #     torchaudio.save(f"../out/x_{idx}_dg_{pl_module.ac.min_dist_gain}.wav", torch.tensor(wet).T, pl_module.ac.sr)
-        # exit()
+        if images:
+            wandb.log(
+                {
+                    "waveforms": [wandb.Image(i) for i in images],
+                    "global_step": trainer.global_step,
+                }
+            )
 
-        for logger in trainer.loggers:
-            # TODO(cm): enable for tensorboard as well
-            if isinstance(logger, WandbLogger):
-                if images:
-                    logger.log_image(
-                        key="waveforms", images=images, step=trainer.global_step
+        data = defaultdict(list)
+        with suppress(Exception):
+            data["dry"].append(f"{trainer.global_step}_dry")
+            for idx, curr_dry in enumerate(dry_audio_waveforms):
+                data["dry"].append(
+                    wandb.Audio(
+                        curr_dry,
+                        caption=f"{trainer.global_step}_dry_{idx}",
+                        sample_rate=int(pl_module.ac.sr),
                     )
-
-                data = defaultdict(list)
-                # for idx, curr_dry in enumerate(dry_audio_waveforms):
-                #     data["dry"].append(
-                #         wandb.Audio(
-                #             curr_dry,
-                #             caption=f"dry_{idx}",
-                #             sample_rate=int(pl_module.ac.sr),
-                #         )
-                #     )
-                for idx, curr_wet in enumerate(wet_waveforms):
-                    data["wet"].append(
-                        wandb.Audio(
-                            curr_wet,
-                            caption=f"wet_{idx}",
-                            sample_rate=int(pl_module.ac.sr),
-                        )
-                    )
-                for idx, curr_wet_hat in enumerate(wet_hat_waveforms):
-                    data["wet_hat"].append(
-                        wandb.Audio(
-                            curr_wet_hat,
-                            caption=f"wet_hat_{idx}",
-                            sample_rate=int(pl_module.ac.sr),
-                        )
-                    )
-                # for idx, curr_wet_eval in enumerate(wet_eval_waveforms):
-                #     data["wet_eval"].append(
-                #         wandb.Audio(
-                #             curr_wet_eval,
-                #             caption=f"wet_eval_{idx}",
-                #             sample_rate=int(pl_module.ac.sr),
-                #         )
-                #     )
-                data = list(data.values())
-                for row in data:
-                    self.table.add_data(*row)
-                logger.log_table(
-                    key="audio",
-                    columns=self.table.columns,
-                    data=self.table.data,
-                    step=trainer.global_step,
                 )
-
+        data["wet"].append(f"{trainer.global_step}_wet")
+        for idx, curr_wet in enumerate(wet_waveforms):
+            data["wet"].append(
+                wandb.Audio(
+                    curr_wet,
+                    caption=f"{trainer.global_step}_wet_{idx}",
+                    sample_rate=int(pl_module.ac.sr),
+                )
+            )
+        data["wet_hat"].append(f"{trainer.global_step}_wet_hat")
+        for idx, curr_wet_hat in enumerate(wet_hat_waveforms):
+            data["wet_hat"].append(
+                wandb.Audio(
+                    curr_wet_hat,
+                    caption=f"{trainer.global_step}_wet_hat_{idx}",
+                    sample_rate=int(pl_module.ac.sr),
+                )
+            )
+        with suppress(Exception):
+            data["wet_eval"].append(f"{trainer.global_step}_wet_eval")
+            for idx, curr_wet_eval in enumerate(wet_eval_waveforms):
+                data["wet_eval"].append(
+                    wandb.Audio(
+                        curr_wet_eval,
+                        caption=f"{trainer.global_step}_wet_eval_{idx}",
+                        sample_rate=int(pl_module.ac.sr),
+                    )
+                )
+        data = list(data.values())
+        for row in data:
+            self.rows.append(row)
+        wandb.log(
+            {
+                "audio": wandb.Table(columns=self.columns, data=self.rows),
+            }
+        )
         self.out_dicts.clear()
 
 
@@ -390,13 +388,9 @@ class LogWavetablesCallback(Callback):
         img = fig2img(fig)
         images.append(img)
         wt_pitch_hz = tr.tensor([osc.wt_pitch_hz]).unsqueeze(1).to(osc.window.device)
-        wt_bounded = (
-            osc.get_anti_aliased_bounded_wt(wt_pitch_hz)
-            .detach()
-            .cpu()
-        )
+        wt_bounded = osc.get_anti_aliased_bounded_wt(wt_pitch_hz).detach().cpu()
         wt_bounded = wt_bounded[0]
-        fig = plot_wavetable(wt_bounded, f"{title}__b")
+        fig = plot_wavetable(wt_bounded, f"{title}__aa_bounded")
         img = fig2img(fig)
         images.append(img)
         return images
@@ -405,32 +399,25 @@ class LogWavetablesCallback(Callback):
         self, trainer: Trainer, pl_module: AcidDDSPLightingModule
     ) -> None:
         images = []
-        try:
+        with suppress(Exception):
             title = f"{trainer.global_step}_wt"
             osc = pl_module.synth.osc
             images += self.create_wt_images(osc, title)
-        except Exception as e:
-            log.error(f"Error getting synth wavetable: {e}")
 
-        try:
+        with suppress(Exception):
             title = f"{trainer.global_step}_wt_hat"
             osc_hat = pl_module.synth_hat.osc
             images += self.create_wt_images(osc_hat, title)
-        except Exception as e:
-            log.error(f"Error getting synth wavetable hat: {e}")
 
-        try:
+        with suppress(Exception):
             title = f"{trainer.global_step}_wt_eval"
             osc_eval = pl_module.synth_eval.osc
             images += self.create_wt_images(osc_eval, title)
-        except Exception as e:
-            log.debug(f"Error getting synth wavetable eval: {e}")
 
         if images:
-            for logger in trainer.loggers:
-                # TODO(cm): enable for tensorboard as well
-                if isinstance(logger, WandbLogger):
-                    if images:
-                        logger.log_image(
-                            key="wavetables", images=images, step=trainer.global_step
-                        )
+            wandb.log(
+                {
+                    "wavetables": [wandb.Image(i) for i in images],
+                    "global_step": trainer.global_step,
+                }
+            )

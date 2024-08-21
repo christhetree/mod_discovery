@@ -51,14 +51,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         synth_opt: Optional[OptimizerCallable] = None,
     ):
         super().__init__()
-        if synth is None:
-            synth = AcidSynthLPBiquad(ac)
-        if synth_hat is None:
-            synth_hat = AcidSynthLPBiquad(ac)
-        with suppress(Exception):
-            assert synth_hat.interp_logits == synth_eval.interp_logits
-        with suppress(Exception):
-            assert synth_hat.interp_coeff == synth.interp_coeff
+        assert synth_hat is not None
         if global_param_names is None:
             global_param_names = []
         if global_param_names_hat is None:
