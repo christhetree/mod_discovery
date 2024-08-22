@@ -40,6 +40,10 @@ class PiecewiseSplines(nn.Module):
         self.register_buffer("support", support)
 
     def forward(self, coeff: T, bias: Optional[T] = None) -> T:
+        bs = coeff.size(0)
+        n_dim = coeff.ndim
+        if n_dim == 4:
+            coeff = tr.flatten(coeff, start_dim=0, end_dim=1)
         assert coeff.ndim == 3
         assert coeff.size(1) == self.n_segments
         assert coeff.size(2) == self.degree
@@ -49,6 +53,8 @@ class PiecewiseSplines(nn.Module):
         if bias is not None:
             bias = bias.view(x.size(0), 1)
             x = x + bias
+        if n_dim == 4:
+            x = x.view(bs, -1, x.size(1))
         return x
 
 

@@ -1,6 +1,5 @@
 import logging
 import os
-from contextlib import suppress
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Mapping, Tuple
 
@@ -21,7 +20,7 @@ from fad import save_and_concat_fad_audio, calc_fad
 from feature_extraction import LogMelSpecFeatureExtractor
 from losses import MFCCL1
 from paths import OUT_DIR
-from synths import AcidSynthLPBiquad, SynthBase
+from synths import SynthBase
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -38,8 +37,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         synth: Optional[SynthBase] = None,
         synth_hat: Optional[SynthBase] = None,
         synth_eval: Optional[SynthBase] = None,
-        temp_params_name: Optional[str] = None,
-        temp_params_name_hat: str = "mod_sig",
+        temp_param_names: Optional[List[str]] = None,
+        temp_param_names_hat: Optional[List[str]] = None,
         global_param_names: Optional[List[str]] = None,
         global_param_names_hat: Optional[List[str]] = None,
         use_p_loss: bool = False,
@@ -52,6 +51,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
     ):
         super().__init__()
         assert synth_hat is not None
+        if temp_param_names is None:
+            temp_param_names = []
+        if temp_param_names_hat is None:
+            temp_param_names_hat = []
         if global_param_names is None:
             global_param_names = []
         if global_param_names_hat is None:
@@ -75,8 +78,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.synth = synth
         self.synth_hat = synth_hat
         self.synth_eval = synth_eval
-        self.temp_params_name = temp_params_name
-        self.temp_params_name_hat = temp_params_name_hat
+        self.temp_param_names = temp_param_names
+        self.temp_param_names_hat = temp_param_names_hat
         self.global_param_names = global_param_names
         self.global_param_names_hat = global_param_names_hat
         self.use_p_loss = use_p_loss
@@ -128,14 +131,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
         assert phase.shape == (batch_size, 1)
         assert phase_hat.shape == (batch_size, 1)
 
-        additive_args = {}
-        subtractive_args = {}
-        if self.temp_params_name is not None:
+        temp_params = {}
+        for temp_param_name in self.temp_param_names:
             temp_params = batch[self.temp_params_name]
             assert temp_params.size(0) == batch_size
             assert temp_params.ndim == 3
-            additive_args[self.temp_params_name] = temp_params
-            subtractive_args[self.temp_params_name] = temp_params
+            temp_params[temp_param_name] = temp_params
 
         global_params_0to1 = {p: batch[f"{p}_0to1"] for p in self.global_param_names}
         global_params = {
@@ -145,7 +146,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         if "q" in self.global_param_names:
             q_0to1 = batch["q_0to1"]
             q_mod_sig = q_0to1.unsqueeze(-1)
-            subtractive_args["q_mod_sig"] = q_mod_sig
+            temp_params["q_mod_sig"] = q_mod_sig
 
         # Generate ground truth wet audio
         with tr.no_grad():
@@ -154,8 +155,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 f0_hz,
                 note_on_duration,
                 phase,
-                additive_args,
-                subtractive_args,
+                temp_params,
                 global_params,
             )
             dry = synth_out["dry"]
@@ -167,6 +167,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         batch["dry"] = dry
         batch["wet"] = wet
         batch["envelope"] = envelope
+        batch["temp_params"] = temp_params
         return batch
 
     def step(self, batch: Dict[str, T], stage: str) -> Dict[str, T]:
@@ -198,14 +199,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # Get optional params
         dry = batch.get("dry")
         envelope = batch.get("envelope")
-        temp_params = None
-        if self.temp_params_name is not None:
-            temp_params = batch[self.temp_params_name]
+        temp_params = batch.get("temp_params", {})
 
         model_in = wet.unsqueeze(1)
-        additive_args_hat = {}
-        subtractive_args_hat = {}
-        temp_params_hat = None
+        temp_params_hat = {}
         global_params_0to1_hat = {}
         global_params_hat = {}
         log_spec_wet = None
@@ -215,13 +212,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
             model_out = self.model(model_in)
 
             # Postprocess temp_params_hat
-            temp_params_hat = model_out[self.temp_params_name_hat]
-            additive_args_hat[self.temp_params_name_hat] = temp_params_hat
-            subtractive_args_hat[self.temp_params_name_hat] = temp_params_hat
-            if "add_lfo" in model_out:
-                additive_args_hat["wt_pos"] = model_out["add_lfo"]
-            if "sub_lfo" in model_out:
-                subtractive_args_hat["logits"] = model_out["sub_lfo"]
+            for p_name in self.temp_param_names_hat:
+                temp_param_hat = model_out[p_name]
+                temp_params_hat[p_name] = temp_param_hat
+                if f"{p_name}_adapted" in model_out:
+                    temp_param_adapted_hat = model_out[f"{p_name}_adapted"]
+                    temp_params_hat[f"{p_name}_adapted"] = temp_param_adapted_hat
 
             # Postprocess global_params_hat
             for p_name in self.global_param_names_hat:
@@ -242,7 +238,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             if "q" in self.global_param_names_hat:
                 q_0to1_hat = global_params_0to1_hat["q"]
                 q_mod_sig_hat = q_0to1_hat.unsqueeze(-1)
-                subtractive_args_hat["q_mod_sig"] = q_mod_sig_hat
+                temp_params_hat["q_mod_sig"] = q_mod_sig_hat
 
         if log_spec_wet is None:
             log_spec_wet = self.spectral_visualizer(model_in)
@@ -255,8 +251,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             f0_hz,
             note_on_duration,
             phase_hat,
-            additive_args_hat,
-            subtractive_args_hat,
+            temp_params_hat,
             global_params_hat,
         )
         wet_hat = synth_out_hat["wet"]
@@ -269,11 +264,20 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # Compute loss
         if self.use_p_loss:
-            temp_params_hat = util.linear_interpolate_dim(
-                temp_params_hat, temp_params.size(1), dim=1, align_corners=True
-            )
-            assert temp_params.shape == temp_params_hat.shape
-            loss = self.loss_func(temp_params, temp_params)
+            loss = 0.0
+            for p_name in self.temp_param_names:
+                p_val = temp_params[p_name]
+                p_val_hat = temp_params_hat[p_name]
+                p_val_hat = util.linear_interpolate_dim(
+                    p_val_hat, p_val.size(1), dim=1, align_corners=True
+                )
+                p_loss = self.loss_func(p_val_hat, p_val)
+                self.log(
+                    f"{stage}/ploss_{self.loss_name}_{p_name}",
+                    p_loss,
+                    prog_bar=False,
+                )
+                loss += p_loss
 
             for p_name in self.global_param_names:
                 if not self.ac.is_fixed(p_name):
@@ -310,25 +314,26 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # Log temp_params metrics
         temp_param_metrics = {}
-        if (
-            self.temp_params_name is not None
-            and self.temp_params_name == self.temp_params_name_hat
-        ):
-            with tr.no_grad():
-                temp_params_hat = util.linear_interpolate_dim(
-                    temp_params_hat, temp_params.size(1), dim=1, align_corners=True
-                )
-                assert temp_params.shape == temp_params_hat.shape
-                temp_params_l1 = self.l1(temp_params_hat, temp_params)
-                temp_params_esr = self.esr(temp_params_hat, temp_params)
-            temp_param_metrics[f"{self.temp_params_name}_l1"] = temp_params_l1
-            temp_param_metrics[f"{self.temp_params_name}_esr"] = temp_params_esr
-            self.log(
-                f"{stage}/{self.temp_params_name}_l1", temp_params_l1, prog_bar=False
-            )
-            self.log(
-                f"{stage}/{self.temp_params_name}_esr", temp_params_esr, prog_bar=False
-            )
+        # TODO(cm)
+        # if (
+        #     self.temp_params_name is not None
+        #     and self.temp_params_name == self.temp_params_name_hat
+        # ):
+        #     with tr.no_grad():
+        #         temp_params_hat = util.linear_interpolate_dim(
+        #             temp_params_hat, temp_params.size(1), dim=1, align_corners=True
+        #         )
+        #         assert temp_params.shape == temp_params_hat.shape
+        #         temp_params_l1 = self.l1(temp_params_hat, temp_params)
+        #         temp_params_esr = self.esr(temp_params_hat, temp_params)
+        #     temp_param_metrics[f"{self.temp_params_name}_l1"] = temp_params_l1
+        #     temp_param_metrics[f"{self.temp_params_name}_esr"] = temp_params_esr
+        #     self.log(
+        #         f"{stage}/{self.temp_params_name}_l1", temp_params_l1, prog_bar=False
+        #     )
+        #     self.log(
+        #         f"{stage}/{self.temp_params_name}_esr", temp_params_esr, prog_bar=False
+        #     )
 
         # Log eval synth metrics if applicable
         wet_eval = None
@@ -341,8 +346,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     f0_hz,
                     note_on_duration,
                     phase_hat,
-                    additive_args_hat,
-                    subtractive_args_hat,
+                    temp_params_hat,
                     global_params_hat,
                 )
                 wet_eval = synth_out_eval["wet"]
@@ -358,6 +362,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             except Exception as e:
                 log.error(f"Error in eval synth: {e}")
 
+        temp_params_hat = {f"{k}_hat": v for k, v in temp_params_hat.items()}
         global_params_hat = {f"{k}_hat": v for k, v in global_params_hat.items()}
         audio_metrics_hat = {f"{k}_hat": v for k, v in audio_metrics_hat.items()}
         audio_metrics_eval = {f"{k}_eval": v for k, v in audio_metrics_eval.items()}
@@ -370,9 +375,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "envelope": envelope,
             "log_spec_wet": log_spec_wet,
             "log_spec_wet_hat": log_spec_wet_hat,
-            "temp_params": temp_params,
-            "temp_params_hat": temp_params_hat,
         }
+        out_dict.update(temp_params)
+        out_dict.update(temp_params_hat)
         out_dict.update(temp_param_metrics)
         out_dict.update(global_params)
         out_dict.update(global_params_hat)

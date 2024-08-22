@@ -60,12 +60,16 @@ class SynthBase(ABC, nn.Module):
         f0_hz: T,
         note_on_duration: T,  # TODO(cm): remove
         phase: T,
-        additive_args: Dict[str, T],
+        temp_params: Dict[str, T],
+        global_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
         pass
 
     def subtractive_synthesis(
-        self, x: T, subtractive_args: Dict[str, T]
+        self,
+        x: T,
+        temp_params: Dict[str, T],
+        global_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
         # By default, do not apply any subtractive synthesis
         return x, {}
@@ -76,18 +80,17 @@ class SynthBase(ABC, nn.Module):
         f0_hz: T,
         note_on_duration: T,
         phase: T,
-        additive_args: Dict[str, T],
-        subtractive_args: Dict[str, T],
+        temp_params: Dict[str, T],
         global_params: Dict[str, T],
         envelope: Optional[T] = None,
     ) -> Dict[str, T]:
         dry_audio, additive_out = self.additive_synthesis(
-            n_samples, f0_hz, note_on_duration, phase, additive_args
+            n_samples, f0_hz, note_on_duration, phase, temp_params, global_params
         )
         if envelope is not None:
             dry_audio *= envelope
         filtered_audio, subtractive_out = self.subtractive_synthesis(
-            dry_audio, subtractive_args
+            dry_audio, temp_params, global_params
         )
         synth_out = {
             "dry": dry_audio,
@@ -467,9 +470,10 @@ class WavetableSynth(SynthBase):
         f0_hz: T,
         note_on_duration: T,
         phase: T,
-        additive_args: Dict[str, T],
+        temp_params: Dict[str, T],
+        global_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
-        wt_pos = additive_args["wt_pos"]
+        wt_pos = temp_params["wt_pos"]
         dry_audio = self.osc(f0_hz, wt_pos, n_samples=n_samples, phase=phase)
         return dry_audio, {}
 
@@ -499,9 +503,13 @@ class WavetableSynth(SynthBase):
         return y_ab
 
     def subtractive_synthesis(
-            self, x: T, subtractive_args: Dict[str, T]
+        self,
+        x: T,
+        temp_params: Dict[str, T],
+        global_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
-        logits = subtractive_args.get("logits")
+        # TODO(cm): tmp
+        logits = temp_params.get("logits")
         if logits is None:
             return x, {}
         assert logits.ndim == 5
@@ -524,13 +532,12 @@ class WavetableSynth(SynthBase):
         f0_hz: T,
         note_on_duration: T,
         phase: T,
-        additive_args: Dict[str, T],
-        subtractive_args: Dict[str, T],
+        temp_params: Dict[str, T],
         global_params: Dict[str, T],
         envelope: Optional[T] = None,
     ) -> Dict[str, T]:
-        wt_pos = additive_args.get("wt_pos")
-        # TODO(cm): clean up
+        wt_pos = temp_params.get("add_lfo")
+        # TODO(cm): tmp
         if wt_pos is None:
             wt_pos = tr.full_like(f0_hz, -1.0).unsqueeze(1)
         else:
@@ -538,14 +545,20 @@ class WavetableSynth(SynthBase):
         wt_pos = util.linear_interpolate_dim(
             wt_pos, self.ac.n_samples, align_corners=True
         )
-        additive_args["wt_pos"] = wt_pos
+        temp_params["wt_pos"] = wt_pos
+        # TODO(cm): tmp
+        logits = temp_params.get("sub_lfo_adapted")
+        if logits is not None:
+            logits = logits.unsqueeze(2)
+            logits = logits.unsqueeze(3)
+            temp_params["logits"] = logits
+
         synth_out = super().forward(
             n_samples,
             f0_hz,
             note_on_duration,
             phase,
-            additive_args,
-            subtractive_args,
+            temp_params,
             global_params,
             envelope,
         )
@@ -553,36 +566,36 @@ class WavetableSynth(SynthBase):
         return synth_out
 
 
-if __name__ == "__main__":
-    tr.manual_seed(0)
-    ac = AudioConfig()
-    # synth = AcidSynthLPBiquad(ac, make_scriptable=True)
-    # synth = AcidSynthLPBiquadFSM(ac, win_len=128, overlap=0.75, oversampling_factor=1)
-    synth = AcidSynthLearnedBiquadCoeff(ac, make_scriptable=True)
-    # synth = AcidSynthLearnedBiquadCoeff(ac, make_scriptable=False)
-    # synth = AcidSynthLearnedBiquadCoeffFSM(
-    #     ac, win_len=128, overlap=0.75, oversampling_factor=1
-    # )
-    # synth = AcidSynthLSTM(ac, 64)
-    scripted = tr.jit.script(synth)
-    f0_hz = tr.tensor([220.0])
-    note_on_duration = tr.tensor([0.100])
-    phase = tr.tensor([0.0]).unsqueeze(1)
-    # subtractive_args = {
-    #     "w_mod_sig": tr.tensor([[0.5]]),
-    #     "q_mod_sig": tr.tensor([[0.5]]),
-    # }
-    subtractive_args = {
-        "logits": tr.rand((1, 10, 5)),
-    }
-    global_params = {
-        "osc_shape": tr.tensor([0.5]),
-        "osc_gain": tr.tensor([0.5]),
-        "dist_gain": tr.tensor([0.5]),
-        "learned_alpha": tr.tensor([0.5]),
-    }
-    synth_out = scripted(
-        f0_hz, note_on_duration, phase, subtractive_args, global_params
-    )
-    print(synth_out["wet"])
-    # tr.jit.save(scripted, "synth.ts")
+# if __name__ == "__main__":
+#     tr.manual_seed(0)
+#     ac = AudioConfig()
+#     # synth = AcidSynthLPBiquad(ac, make_scriptable=True)
+#     # synth = AcidSynthLPBiquadFSM(ac, win_len=128, overlap=0.75, oversampling_factor=1)
+#     synth = AcidSynthLearnedBiquadCoeff(ac, make_scriptable=True)
+#     # synth = AcidSynthLearnedBiquadCoeff(ac, make_scriptable=False)
+#     # synth = AcidSynthLearnedBiquadCoeffFSM(
+#     #     ac, win_len=128, overlap=0.75, oversampling_factor=1
+#     # )
+#     # synth = AcidSynthLSTM(ac, 64)
+#     scripted = tr.jit.script(synth)
+#     f0_hz = tr.tensor([220.0])
+#     note_on_duration = tr.tensor([0.100])
+#     phase = tr.tensor([0.0]).unsqueeze(1)
+#     # subtractive_args = {
+#     #     "w_mod_sig": tr.tensor([[0.5]]),
+#     #     "q_mod_sig": tr.tensor([[0.5]]),
+#     # }
+#     subtractive_args = {
+#         "logits": tr.rand((1, 10, 5)),
+#     }
+#     global_params = {
+#         "osc_shape": tr.tensor([0.5]),
+#         "osc_gain": tr.tensor([0.5]),
+#         "dist_gain": tr.tensor([0.5]),
+#         "learned_alpha": tr.tensor([0.5]),
+#     }
+#     synth_out = scripted(
+#         f0_hz, note_on_duration, phase, subtractive_args, global_params
+#     )
+#     print(synth_out["wet"])
+#     # tr.jit.save(scripted, "synth.ts")
