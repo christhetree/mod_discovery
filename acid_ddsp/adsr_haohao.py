@@ -3,19 +3,17 @@ Differentiable ADSR envelope shaper.
 Code largely influenced by https://github.com/hyakuchiki/diffsynth/blob/master/diffsynth/modules/envelope.py.
 """
 
-import os
-
 import librosa as li
 import numpy as np
 import torch
-import yaml
 from torch import nn
 
-with open(
-    os.path.join(os.path.dirname(os.path.realpath(__file__)), "../config.yaml"), "r"
-) as stream:
-    config = yaml.safe_load(stream)
-device = config["device"]
+# with open(
+#     os.path.join(os.path.dirname(os.path.realpath(__file__)), "../config.yaml"), "r"
+# ) as stream:
+#     config = yaml.safe_load(stream)
+# device = config["device"]
+device = "cpu"
 
 
 def amplitude_to_db(amplitude):
@@ -28,6 +26,7 @@ def amplitude_to_db(amplitude):
 def extract_loudness(
     audio, sampling_rate, block_size=None, n_fft=2048, frame_rate=None
 ):
+    device = audio.device
     assert (block_size is None) != (
         frame_rate is None
     ), "Specify exactly one of block_size or frame_rate"
@@ -69,7 +68,9 @@ def extract_loudness(
 
     # Perceptual weighting.
     frequencies = li.fft_frequencies(sr=sampling_rate, n_fft=n_fft)
-    a_weighting = li.A_weighting(frequencies)[None, :, None]
+    a_weighting = torch.from_numpy(li.A_weighting(frequencies)[None, :, None]).to(
+        device
+    )
     loudness = power_db + a_weighting
 
     loudness = torch.mean(torch.pow(10, loudness / 10.0), axis=1)
@@ -77,7 +78,7 @@ def extract_loudness(
 
     # Remove temporary batch dimension.
     loudness = loudness[0] if is_1d else loudness
-    loudness = loudness.numpy()
+    # loudness = loudness.numpy()
 
     return loudness
 

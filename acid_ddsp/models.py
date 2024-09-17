@@ -7,6 +7,7 @@ from torch import Tensor as T
 from torch import nn
 from torch.nn import functional as F
 
+from adsr_haohao import extract_loudness
 from curves import PiecewiseSplines
 from feature_extraction import LogMelSpecFeatureExtractor
 
@@ -120,7 +121,7 @@ class Spectral2DCNN(nn.Module):
                     "act": "sigmoid",
                     "adapt_dim": 0,
                     "adapt_act": "none",
-                }
+                },
             }
         self.temp_params = temp_params
         if global_param_names is None:
@@ -134,6 +135,7 @@ class Spectral2DCNN(nn.Module):
 
         # Define CNN
         layers = []
+        loudness_layers = []
         curr_n_bins = fe.n_bins
         for out_ch, b_dil, t_dil in zip(out_channels, bin_dilations, temp_dilations):
             layers.append(
@@ -141,9 +143,15 @@ class Spectral2DCNN(nn.Module):
                     in_ch, out_ch, kernel_size, b_dil, t_dil, pool_size, use_ln
                 )
             )
+            loudness_layers.append(
+                Spectral2DCNNBlock(
+                    in_ch, out_ch, (1, kernel_size[1]), 1, t_dil, (1, 1), use_ln
+                )
+            )
             in_ch = out_ch
             curr_n_bins = curr_n_bins // pool_size[0]
         self.cnn = nn.Sequential(*layers)
+        self.loudness_cnn = nn.Sequential(*loudness_layers)
 
         # Define temporal params
         self.out_temp = nn.ModuleDict()
@@ -195,6 +203,19 @@ class Spectral2DCNN(nn.Module):
                     get_activation(adapt_act),
                 )
 
+        n_hidden = (out_channels[-1] + self.degree) // 2
+        self.loudness_mlp = nn.Sequential(
+            nn.Linear(out_channels[-1], n_hidden),
+            nn.Dropout(p=dropout),
+            nn.PReLU(),
+            nn.Linear(n_hidden, n_hidden),
+            nn.Dropout(p=dropout),
+            nn.PReLU(),
+            nn.Linear(n_hidden, self.degree),
+        )
+        self.loudness_spline = PiecewiseSplines(n_frames - 1, 4, degree)
+        # self.loudness_spline = PiecewiseSplines(n_frames - 1, 36, degree)
+
         # Define global params
         self.out_global = nn.ModuleDict()
         for param_name in global_param_names:
@@ -219,6 +240,28 @@ class Spectral2DCNN(nn.Module):
         out_dict["log_spec_wet"] = log_spec
         n_frames = log_spec.size(-1)
         assert n_frames == self.n_frames
+
+        # Extract envelope by conditioning on loudness
+        loudness = extract_loudness(
+            x.squeeze(1), sampling_rate=self.fe.sr, block_size=self.fe.hop_len
+        ).unsqueeze(1).unsqueeze(1).float()
+        x = self.loudness_cnn(loudness)
+        x = x.squeeze(2)
+        x = tr.swapaxes(x, 1, 2)
+        x = self.loudness_mlp(x)
+
+        chunks = tr.tensor_split(x, 4, dim=1)
+        # chunks = tr.tensor_split(x, 36, dim=1)
+        chunks = [tr.mean(c, dim=1) for c in chunks]
+        x = tr.stack(chunks, dim=1)
+        x = tr.swapaxes(x, 1, 2)
+        x = x.view(x.size(0), 1, self.degree, x.size(2))
+        x = tr.swapaxes(x, 2, 3)
+
+        x = self.loudness_spline(x)
+        x = tr.swapaxes(x, 1, 2)
+        env = tr.sigmoid(x).squeeze(-1)
+        out_dict["envelope"] = env
 
         # Calc latent
         x = self.cnn(log_spec)

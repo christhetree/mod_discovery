@@ -545,6 +545,11 @@ class WavetableSynth(SynthBase):
         wt_pos = util.linear_interpolate_dim(
             wt_pos, self.ac.n_samples, align_corners=True
         )
+        assert envelope is not None  # TODO(cm): tmp
+        if envelope is not None:
+            envelope = util.linear_interpolate_dim(
+                envelope, n_samples, align_corners=True
+            )
         temp_params["wt_pos"] = wt_pos
         # TODO(cm): tmp
         logits = temp_params.get("sub_lfo_adapted")

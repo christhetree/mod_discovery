@@ -240,6 +240,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 q_mod_sig_hat = q_0to1_hat.unsqueeze(-1)
                 temp_params_hat["q_mod_sig"] = q_mod_sig_hat
 
+            assert envelope is None  # TODO(cm): tmp
+            envelope = model_out["envelope"]
+
         if log_spec_wet is None:
             log_spec_wet = self.spectral_visualizer(model_in)
         assert log_spec_wet.ndim == 4
@@ -253,6 +256,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             phase_hat,
             temp_params_hat,
             global_params_hat,
+            envelope,
         )
         wet_hat = synth_out_hat["wet"]
         with tr.no_grad():
