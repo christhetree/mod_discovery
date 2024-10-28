@@ -15,10 +15,8 @@ log.setLevel(level=os.environ.get('LOGLEVEL', 'INFO'))
 torch.set_float32_matmul_precision("high")
 
 if __name__ == "__main__":
-    # config_name = "synthetic/train.yml"
-    # config_name = "synthetic/train_wt.yml"
-    config_name = "nsynth/train_wt.yml"
-    # config_name = "abstract_303/train.yml"
+    # config_name = "nsynth/train.yml"
+    config_name = "serum/train.yml"
 
     config_path = os.path.join(CONFIGS_DIR, config_name)
     cli = CustomLightningCLI(args=["fit", "-c", config_path],

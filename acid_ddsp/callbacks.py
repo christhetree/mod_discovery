@@ -89,6 +89,10 @@ class LogModSigAndSpecCallback(Callback):
             log_spec_wet_hat = out_dict.get("log_spec_wet_hat")
 
             # TODO(cm): tmp
+            if log_spec_wet.size(0) == 0:
+                log.warning(f"example_idx={example_idx} not in out_dicts")
+                continue
+
             # temp_params = out_dict.get("temp_params")
             # temp_params_hat = out_dict.get("temp_params_hat")
             # mod_sig_esr = -1
@@ -230,7 +234,7 @@ class LogModSigAndSpecCallback(Callback):
             img = fig2img(fig)
             images.append(img)
 
-        if images:
+        if images and wandb.run:
             wandb.log(
                 {
                     "spectrograms": [wandb.Image(i) for i in images],
@@ -249,6 +253,8 @@ class LogAudioCallback(Callback):
         self.render_time_sec = render_time_sec
         self.out_dicts = {}
         self.columns = ["row_id"] + [f"idx_{idx}" for idx in range(n_examples)]
+        # TODO(cm): tmp
+        # self.columns = ["row_id"] + [f"idx_{idx}" for idx in range(3)]
         self.rows = []
 
     def on_validation_batch_end(
@@ -301,6 +307,11 @@ class LogAudioCallback(Callback):
             waveforms = []
             labels = []
 
+            # TODO(cm): tmp
+            if wet_hat.size(0) == 0:
+                log.warning(f"example_idx={example_idx} not in out_dicts")
+                continue
+
             if dry is not None:
                 dry = dry[0:1]
                 waveforms.append(dry)
@@ -330,7 +341,7 @@ class LogAudioCallback(Callback):
             img = fig2img(fig)
             images.append(img)
 
-        if images:
+        if images and wandb.run:
             wandb.log(
                 {
                     "waveforms": [wandb.Image(i) for i in images],
@@ -382,12 +393,13 @@ class LogAudioCallback(Callback):
         data = list(data.values())
         for row in data:
             self.rows.append(row)
-        wandb.log(
-            {
-                "audio": wandb.Table(columns=self.columns, data=self.rows),
-            }
-        )
-        self.out_dicts.clear()
+        if wandb.run:
+            wandb.log(
+                {
+                    "audio": wandb.Table(columns=self.columns, data=self.rows),
+                }
+            )
+            self.out_dicts.clear()
 
 
 class LogWavetablesCallback(Callback):
@@ -424,7 +436,7 @@ class LogWavetablesCallback(Callback):
             osc_eval = pl_module.synth_eval.osc
             images += self.create_wt_images(osc_eval, title)
 
-        if images:
+        if images and wandb.run:
             wandb.log(
                 {
                     "wavetables": [wandb.Image(i) for i in images],

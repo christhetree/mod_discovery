@@ -4,46 +4,52 @@ custom:
   project_name: acid_ddsp_2
 #  model_name: testing
   model_name: wt_4__filter_1x1__spline_36d3__env4d3
-#  dataset_name: nsynth_vocal_synthetic_val__3s
-  dataset_name: nsynth_test__3s
-  cpu_batch_size: 5  # For now must be >= n_examples
+#  model_name: wt_4__filter_1x1__spline_36d3__env4d3__jtfs
+  dataset_name: serum_v1
+  cpu_batch_size: 5
   use_wandb_cpu: false
   use_wandb_gpu: true
 
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [1]
+  devices: [6]
   max_epochs: 100
   num_sanity_val_steps: 0
-  accumulate_grad_batches: 1
   gradient_clip_val: 0.5
+
+  accumulate_grad_batches: 1
+#  accumulate_grad_batches: 4
+#  accumulate_grad_batches: 11
 
 data:
   class_path: acid_ddsp.data_modules.NSynthDataModule
   init_args:
-    batch_size: 32
-    ac: audio_config_wt.yml
-#    data_dir: ../data/nsynth_vocal_synthetic_val
-    data_dir: ../data/nsynth_test
+#    batch_size: 32
+    batch_size: 8
+#    batch_size: 3
+    ac: audio_config.yml
+    data_dir: ../data/serum-nsynth-v1
     num_workers: 4
 
 model:
   class_path: acid_ddsp.lightning.PreprocLightningModule
   init_args:
-    ac: audio_config_wt.yml
+    ac: audio_config.yml
     spectral_visualizer: log_mel_spec.yml
 #    log_envelope: true
 
     # use_model: false
     use_model: true
-    model: spectral_2dcnn_wt.yml
+    model: spectral_2dcnn.yml
     temp_param_names_hat: [add_lfo, sub_lfo]
-    synth_hat: synth_wt.yml
+    synth_hat: synth.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
-    synth_opt: sf_adam_w__lr_5e-2.yml
-    model_opt: sf_adam_w__lr_5e-3.yml
+#    loss_func: jtfs_small.yml
+#    loss_func: jtfs_dtfa.yml
 
-#optimizer: sf_adam_w.yml
-#optimizer: sgd.yml
+    synth_opt: ../opt/sf_adam_w__lr_5e-2.yml
+    model_opt: ../opt/sf_adam_w__lr_5e-3.yml
+
+#optimizer: ../opt/sf_adam_w__lr_5e-3.yml

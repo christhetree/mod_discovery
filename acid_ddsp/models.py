@@ -260,6 +260,7 @@ class Spectral2DCNN(nn.Module):
 
         x = self.loudness_spline(x)
         x = tr.swapaxes(x, 1, 2)
+        # TODO(cm): env should start at 0, not 0.5
         env = tr.sigmoid(x).squeeze(-1)
         out_dict["envelope"] = env
 

@@ -126,7 +126,9 @@ class NSynthDataset(Dataset):
         super().__init__()
         assert os.path.exists(data_dir)
         self.fnames = sorted(glob.glob(f"{data_dir}/*.{ext}"))
-        
+        # self.fnames = self.fnames[:5000]
+
+        # TODO(cm): randomize this more?
         # easy train-test split
         if split == "train":
             self.fnames = self.fnames[:int(0.7 * len(self.fnames))]
@@ -147,7 +149,7 @@ class NSynthDataset(Dataset):
         assert sr == self.ac.sr
         audio = audio.squeeze(0)
 
-        # let's pad all nsynth data to the same length, 4 seconds
+        # Pad all nsynth data to the same length
         if audio.size(0) < self.ac.n_samples:
             audio = tr.nn.functional.pad(audio, (0, self.ac.n_samples - audio.size(0)))
         elif audio.size(0) > self.ac.n_samples:
@@ -158,7 +160,8 @@ class NSynthDataset(Dataset):
 
         # NOTE: NSynth strings filenames are of the form:
         # "<inst_name>_<inst_type>_<inst_str>-<pitch>-<velocity>"
-        midi_note = int(os.path.basename(fname).split("-")[1])
+        # midi_note = int(os.path.basename(fname).split("-")[1])
+        midi_note = int(os.path.basename(fname).split("-")[-2].split("_")[-1])
         f0_hz = tr.tensor(librosa.midi_to_hz(midi_note)).float()
 
         # gudgud96: I am not too sure why phase_hat is needed yet...
