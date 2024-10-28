@@ -242,9 +242,14 @@ class Spectral2DCNN(nn.Module):
         assert n_frames == self.n_frames
 
         # Extract envelope by conditioning on loudness
-        loudness = extract_loudness(
-            x.squeeze(1), sampling_rate=self.fe.sr, block_size=self.fe.hop_len
-        ).unsqueeze(1).unsqueeze(1).float()
+        loudness = (
+            extract_loudness(
+                x.squeeze(1), sampling_rate=self.fe.sr, block_size=self.fe.hop_len
+            )
+            .unsqueeze(1)
+            .unsqueeze(1)
+            .float()
+        )
         x = self.loudness_cnn(loudness)
         x = x.squeeze(2)
         x = tr.swapaxes(x, 1, 2)

@@ -23,13 +23,15 @@ trainer:
 #  accumulate_grad_batches: 11
 
 data:
-  class_path: acid_ddsp.data_modules.NSynthDataModule
+  class_path: acid_ddsp.data_modules.SerumDataModule
   init_args:
 #    batch_size: 32
     batch_size: 8
 #    batch_size: 3
     ac: audio_config.yml
     data_dir: ../data/serum-nsynth-v1
+    preset_params_path: ../data/preset_params_v2.json
+    note_on_duration: 3.0
     num_workers: 4
 
 model:

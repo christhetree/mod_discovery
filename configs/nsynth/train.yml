@@ -30,6 +30,7 @@ data:
     ac: audio_config.yml
 #    data_dir: ../data/nsynth_vocal_synthetic_val
     data_dir: ../data/nsynth_test
+    note_on_duration: 2.999
     num_workers: 4
 
 model:

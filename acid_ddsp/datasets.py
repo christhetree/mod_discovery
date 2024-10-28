@@ -1,4 +1,5 @@
 import glob
+import json
 import logging
 import os
 from typing import Dict, List
@@ -39,8 +40,8 @@ class SynthDataset(Dataset):
     def __getitem__(self, idx: int) -> Dict[str, T]:
         f0_hz = util.sample_log_uniform(self.ac.min_f0_hz, self.ac.max_f0_hz)
         f0_hz = tr.tensor(f0_hz)
-        phase = (tr.rand((1,)) * 2 * tr.pi)
-        phase_hat = (tr.rand((1,)) * 2 * tr.pi)
+        phase = tr.rand((1,)) * 2 * tr.pi
+        phase_hat = tr.rand((1,)) * 2 * tr.pi
         mod_sig = self.mod_sig_gen(self.ac.n_samples).unsqueeze(-1)
         return {
             "f0_hz": f0_hz,
@@ -122,6 +123,7 @@ class NSynthDataset(Dataset):
         data_dir: str,
         ext: str = "wav",
         split: str = "train",
+        note_on_duration: float = 3.0,
     ):
         super().__init__()
         assert os.path.exists(data_dir)
@@ -131,14 +133,21 @@ class NSynthDataset(Dataset):
         # TODO(cm): randomize this more?
         # easy train-test split
         if split == "train":
-            self.fnames = self.fnames[:int(0.7 * len(self.fnames))]
+            self.fnames = self.fnames[: int(0.7 * len(self.fnames))]
         elif split == "val":
-            self.fnames = self.fnames[int(0.7 * len(self.fnames)):int(0.9 * len(self.fnames))]
+            self.fnames = self.fnames[
+                int(0.7 * len(self.fnames)) : int(0.9 * len(self.fnames))
+            ]
         else:
-            self.fnames = self.fnames[int(0.9 * len(self.fnames)):]
-        
+            self.fnames = self.fnames[int(0.9 * len(self.fnames)) :]
+
         self.ac = ac
-        self.note_on_duration = tr.tensor(2.999)    # TODO: configure this
+        self.note_on_duration = tr.tensor(note_on_duration)
+
+    def get_pitch(self, fname: str) -> float:
+        midi_note = int(os.path.basename(fname).split("-")[-2].split("_")[-1])
+        f0_hz = tr.tensor(librosa.midi_to_hz(midi_note)).float()
+        return f0_hz
 
     def __len__(self) -> int:
         return len(self.fnames)
@@ -153,23 +162,66 @@ class NSynthDataset(Dataset):
         if audio.size(0) < self.ac.n_samples:
             audio = tr.nn.functional.pad(audio, (0, self.ac.n_samples - audio.size(0)))
         elif audio.size(0) > self.ac.n_samples:
-            audio = audio[:self.ac.n_samples]
-        
-        assert sr == self.ac.sr    
+            audio = audio[: self.ac.n_samples]
+
+        assert sr == self.ac.sr
         assert audio.shape[0] == self.ac.n_samples
 
         # NOTE: NSynth strings filenames are of the form:
         # "<inst_name>_<inst_type>_<inst_str>-<pitch>-<velocity>"
         # midi_note = int(os.path.basename(fname).split("-")[1])
-        midi_note = int(os.path.basename(fname).split("-")[-2].split("_")[-1])
-        f0_hz = tr.tensor(librosa.midi_to_hz(midi_note)).float()
+        f0_hz = self.get_pitch(fname)
 
         # gudgud96: I am not too sure why phase_hat is needed yet...
-        phase_hat = (tr.rand((1,)) * 2 * tr.pi)
+        phase_hat = tr.rand((1,)) * 2 * tr.pi
         return {
             "wet": audio,
             "f0_hz": f0_hz,
             "note_on_duration": self.note_on_duration,
             "phase_hat": phase_hat,
-            "type": "nsynth_strings",
         }
+
+
+class SerumDataset(NSynthDataset):
+    def __init__(
+        self,
+        ac: AudioConfig,
+        data_dir: str,
+        preset_params_path: str,
+        ext: str = "wav",
+        split: str = "train",
+        note_on_duration: float = 3.0,
+    ):
+        super().__init__(ac, data_dir, ext, split, note_on_duration)
+        with open(preset_params_path, "r") as f:
+            self.preset_params = json.load(f)
+
+    def get_pitch(self, fname: str) -> int:
+        fname = os.path.basename(fname)
+        preset_name_str = fname.split("_")
+        if len(preset_name_str) != 2:
+            assert len(preset_name_str) == 3, f"Error processing {fname}"
+            preset_name = "_".join(preset_name_str[:2])
+            pitch, velocity = preset_name_str[2].split("-")
+        else:
+            preset_name = preset_name_str[0]
+            pitch, velocity = preset_name_str[1].split("-")
+
+        pitch = int(pitch)
+        pitch_corr_a = self.preset_params[preset_name]["pitch"]["A Osc"][
+            "pitch_correction"
+        ]
+        pitch_fine_a = self.preset_params[preset_name]["pitch"]["A Osc"]["pitch_fine"]
+        pitch_corr_b = self.preset_params[preset_name]["pitch"]["B Osc"][
+            "pitch_correction"
+        ]
+        pitch_fine_b = self.preset_params[preset_name]["pitch"]["B Osc"]["pitch_fine"]
+        if pitch_fine_a or pitch_fine_b:
+            log.info(
+                f"Fine tuning detected for {preset_name}: "
+                f"A Osc: {pitch_fine_a}, B Osc: {pitch_fine_b}"
+            )
+
+        osc_pitch_a = pitch + pitch_corr_a
+        f0_hz = tr.tensor(librosa.midi_to_hz(osc_pitch_a)).float()
+        return f0_hz

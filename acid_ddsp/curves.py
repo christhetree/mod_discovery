@@ -30,9 +30,7 @@ class PiecewiseSplines(nn.Module):
 
         support = tr.linspace(self.min_t, self.max_t, n_frames).view(1, -1, 1, 1)
         support = support.repeat(1, 1, n_segments, degree)
-        segment_offsets = tr.linspace(0.0, 1.0, n_segments + 1)[:-1].view(
-            1, 1, -1, 1
-        )
+        segment_offsets = tr.linspace(0.0, 1.0, n_segments + 1)[:-1].view(1, 1, -1, 1)
         support = support - segment_offsets
         support = tr.clamp(support, min=self.min_t, max=self.max_t / n_segments)
         exponent = tr.arange(start=1, end=degree + 1).int().view(1, 1, 1, -1)
@@ -96,6 +94,7 @@ if __name__ == "__main__":
 
     log.info(f"x.shape: {x.shape}")
     import matplotlib.pyplot as plt
+
     plt.plot(x[0].numpy())
     plt.show()
     exit()
@@ -121,5 +120,6 @@ if __name__ == "__main__":
     x = x[0].numpy()
 
     import matplotlib.pyplot as plt
+
     plt.plot(x)
     plt.show()

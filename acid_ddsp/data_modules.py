@@ -7,7 +7,13 @@ import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 
 from audio_config import AudioConfig
-from datasets import AcidSynthDataset, PreprocDataset, SynthDataset, NSynthDataset
+from datasets import (
+    AcidSynthDataset,
+    PreprocDataset,
+    SynthDataset,
+    NSynthDataset,
+    SerumDataset,
+)
 from modulations import ModSignalGenerator
 
 logging.basicConfig()
@@ -229,6 +235,7 @@ class NSynthDataModule(pl.LightningDataModule):
         ac: AudioConfig,
         data_dir: str,
         ext: str = "wav",
+        note_on_duration: float = 3.0,
         num_workers: int = 0,
     ):
         super().__init__()
@@ -244,18 +251,94 @@ class NSynthDataModule(pl.LightningDataModule):
             data_dir,
             ext,
             "train",
+            note_on_duration,
         )
         self.val_ds = NSynthDataset(
             ac,
             data_dir,
             ext,
             "val",
+            note_on_duration,
         )
         self.test_ds = NSynthDataset(
             ac,
             data_dir,
             ext,
             "test",
+            note_on_duration,
+        )
+
+    def train_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.train_ds,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+            drop_last=False,
+        )
+
+    def val_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.train_ds,
+            batch_size=self.batch_size,
+            shuffle=True,  # To ensure different visualizations
+            num_workers=self.num_workers,
+            drop_last=False,
+        )
+
+    def test_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.train_ds,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            drop_last=False,
+        )
+
+
+class SerumDataModule(pl.LightningDataModule):
+    def __init__(
+        self,
+        batch_size: int,
+        ac: AudioConfig,
+        data_dir: str,
+        preset_params_path: str,
+        ext: str = "wav",
+        note_on_duration: float = 3.0,
+        num_workers: int = 0,
+    ):
+        super().__init__()
+        assert os.path.exists(data_dir)
+        self.batch_size = batch_size
+        self.ac = ac
+        self.data_dir = data_dir
+        self.preset_params_path = preset_params_path
+        self.ext = ext
+        self.num_workers = num_workers
+
+        self.train_ds = SerumDataset(
+            ac,
+            data_dir,
+            preset_params_path,
+            ext,
+            "train",
+            note_on_duration,
+        )
+        self.val_ds = SerumDataset(
+            ac,
+            data_dir,
+            preset_params_path,
+            ext,
+            "val",
+            note_on_duration,
+        )
+        self.test_ds = SerumDataset(
+            ac,
+            data_dir,
+            preset_params_path,
+            ext,
+            "test",
+            note_on_duration,
         )
 
     def train_dataloader(self) -> DataLoader:

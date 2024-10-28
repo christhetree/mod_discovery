@@ -197,7 +197,11 @@ class LogModSigAndSpecCallback(Callback):
             #     # )
 
             # TODO(cm): tmp
-            temp_params_hat_all = [out_dict["add_lfo_hat"], out_dict["sub_lfo_hat"], out_dict["sub_lfo_adapted_hat"]]
+            temp_params_hat_all = [
+                out_dict["add_lfo_hat"],
+                out_dict["sub_lfo_hat"],
+                out_dict["sub_lfo_adapted_hat"],
+            ]
             colors = ["red", "blue", "cyan"]
 
             # if temp_params_hat is not None:
