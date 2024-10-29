@@ -239,7 +239,8 @@ class Spectral2DCNN(nn.Module):
         log_spec = self.fe(x)
         out_dict["log_spec_wet"] = log_spec
         n_frames = log_spec.size(-1)
-        assert n_frames == self.n_frames
+        assert n_frames == self.n_frames, \
+            f"Expected n_frames: {self.n_frames} but got: {n_frames}"
 
         # Extract envelope by conditioning on loudness
         loudness = (

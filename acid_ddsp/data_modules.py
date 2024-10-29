@@ -235,7 +235,6 @@ class NSynthDataModule(pl.LightningDataModule):
         ac: AudioConfig,
         data_dir: str,
         ext: str = "wav",
-        note_on_duration: float = 3.0,
         num_workers: int = 0,
     ):
         super().__init__()
@@ -251,21 +250,18 @@ class NSynthDataModule(pl.LightningDataModule):
             data_dir,
             ext,
             "train",
-            note_on_duration,
         )
         self.val_ds = NSynthDataset(
             ac,
             data_dir,
             ext,
             "val",
-            note_on_duration,
         )
         self.test_ds = NSynthDataset(
             ac,
             data_dir,
             ext,
             "test",
-            note_on_duration,
         )
 
     def train_dataloader(self) -> DataLoader:
@@ -304,7 +300,6 @@ class SerumDataModule(pl.LightningDataModule):
         data_dir: str,
         preset_params_path: str,
         ext: str = "wav",
-        note_on_duration: float = 3.0,
         num_workers: int = 0,
     ):
         super().__init__()
@@ -322,7 +317,6 @@ class SerumDataModule(pl.LightningDataModule):
             preset_params_path,
             ext,
             "train",
-            note_on_duration,
         )
         self.val_ds = SerumDataset(
             ac,
@@ -330,7 +324,6 @@ class SerumDataModule(pl.LightningDataModule):
             preset_params_path,
             ext,
             "val",
-            note_on_duration,
         )
         self.test_ds = SerumDataset(
             ac,
@@ -338,7 +331,6 @@ class SerumDataModule(pl.LightningDataModule):
             preset_params_path,
             ext,
             "test",
-            note_on_duration,
         )
 
     def train_dataloader(self) -> DataLoader:

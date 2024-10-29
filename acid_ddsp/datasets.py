@@ -123,7 +123,6 @@ class NSynthDataset(Dataset):
         data_dir: str,
         ext: str = "wav",
         split: str = "train",
-        note_on_duration: float = 3.0,
     ):
         super().__init__()
         assert os.path.exists(data_dir)
@@ -142,7 +141,7 @@ class NSynthDataset(Dataset):
             self.fnames = self.fnames[int(0.9 * len(self.fnames)) :]
 
         self.ac = ac
-        self.note_on_duration = tr.tensor(note_on_duration)
+        self.note_on_duration = tr.tensor(ac.note_on_duration)
 
     def get_pitch(self, fname: str) -> float:
         midi_note = int(os.path.basename(fname).split("-")[-2].split("_")[-1])
@@ -190,9 +189,8 @@ class SerumDataset(NSynthDataset):
         preset_params_path: str,
         ext: str = "wav",
         split: str = "train",
-        note_on_duration: float = 3.0,
     ):
-        super().__init__(ac, data_dir, ext, split, note_on_duration)
+        super().__init__(ac, data_dir, ext, split)
         with open(preset_params_path, "r") as f:
             self.preset_params = json.load(f)
 

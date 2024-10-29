@@ -148,7 +148,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
             synth_out = self.synth(
                 self.ac.n_samples,
                 f0_hz,
-                note_on_duration,
                 phase,
                 temp_params,
                 global_params,
@@ -171,13 +170,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
             self.global_n = (
                 self.global_step * self.trainer.accumulate_grad_batches * batch_size
             )
-        self.log(f"global_n", float(self.global_n), sync_dist=True)
+        self.log(f"global_n", float(self.global_n))
 
         batch = self.preprocess_batch(batch)
 
         # Get mandatory params
         f0_hz = batch["f0_hz"]
-        note_on_duration = batch["note_on_duration"]
         wet = batch["wet"]
         phase_hat = batch["phase_hat"]
         global_params_0to1 = {
@@ -247,7 +245,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         synth_out_hat = self.synth_hat(
             self.ac.n_samples,
             f0_hz,
-            note_on_duration,
             phase_hat,
             temp_params_hat,
             global_params_hat,
@@ -343,7 +340,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 synth_out_eval = self.synth_eval(
                     self.ac.n_samples,
                     f0_hz,
-                    note_on_duration,
                     phase_hat,
                     temp_params_hat,
                     global_params_hat,

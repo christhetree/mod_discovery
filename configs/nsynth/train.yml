@@ -5,8 +5,8 @@ custom:
 #  model_name: testing
   model_name: wt_4__filter_1x1__spline_36d3__env4d3
 #  model_name: wt_4__filter_1x1__spline_36d3__env4d3__jtfs
-#  dataset_name: nsynth_vocal_synthetic_val__3s
-  dataset_name: nsynth_test__3s
+#  dataset_name: nsynth_vocal_synthetic_val
+  dataset_name: nsynth_test
   cpu_batch_size: 5
   use_wandb_cpu: false
   use_wandb_gpu: true
@@ -30,7 +30,6 @@ data:
     ac: audio_config.yml
 #    data_dir: ../data/nsynth_vocal_synthetic_val
     data_dir: ../data/nsynth_test
-    note_on_duration: 2.999
     num_workers: 4
 
 model:
@@ -38,7 +37,7 @@ model:
   init_args:
     ac: audio_config.yml
     spectral_visualizer: log_mel_spec.yml
-#    log_envelope: true
+    log_envelope: true
 
     # use_model: false
     use_model: true

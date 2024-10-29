@@ -58,7 +58,6 @@ class SynthBase(ABC, nn.Module):
         self,
         n_samples: int,
         f0_hz: T,
-        note_on_duration: T,  # TODO(cm): remove
         phase: T,
         temp_params: Dict[str, T],
         global_params: Dict[str, T],
@@ -78,14 +77,14 @@ class SynthBase(ABC, nn.Module):
         self,
         n_samples: int,
         f0_hz: T,
-        note_on_duration: T,
         phase: T,
         temp_params: Dict[str, T],
         global_params: Dict[str, T],
         envelope: Optional[T] = None,
+        note_on_duration: Optional[T] = None,
     ) -> Dict[str, T]:
         dry_audio, additive_out = self.additive_synthesis(
-            n_samples, f0_hz, note_on_duration, phase, temp_params, global_params
+            n_samples, f0_hz, phase, temp_params, global_params
         )
         if envelope is not None:
             dry_audio *= envelope
@@ -112,12 +111,12 @@ class AcidSynthBase(SynthBase):
         self,
         n_samples: int,
         f0_hz: T,
-        note_on_duration: T,
         phase: T,
-        additive_args: Dict[str, T],
+        temp_params: Dict[str, T],
+        global_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
-        osc_shape = additive_args["osc_shape"]
-        osc_gain = additive_args["osc_gain"]
+        osc_shape = global_params["osc_shape"]
+        osc_gain = global_params["osc_gain"]
         dry_audio = self.osc(f0_hz, osc_shape, n_samples=n_samples, phase=phase)
         dry_audio *= osc_gain.unsqueeze(-1)
         return dry_audio, {}
@@ -136,15 +135,14 @@ class AcidSynthBase(SynthBase):
         self,
         n_samples: int,
         f0_hz: T,
-        note_on_duration: T,
         phase: T,
-        additive_args: Dict[str, T],
-        subtractive_args: Dict[str, T],
+        temp_params: Dict[str, T],
         global_params: Dict[str, T],
         envelope: Optional[T] = None,
+        note_on_duration: Optional[T] = None,
     ) -> Dict[str, T]:
         assert False  # TODO(cm): check additive args
-        osc_shape = additive_args.get("osc_shape")
+        osc_shape = global_params.get("osc_shape")
         if osc_shape is None:
             assert self.ac.is_fixed("osc_shape")
             osc_shape = tr.full_like(f0_hz, self.ac.min_osc_shape)
@@ -163,21 +161,19 @@ class AcidSynthBase(SynthBase):
             assert self.ac.is_fixed("learned_alpha")
             learned_alpha = tr.full_like(f0_hz, self.ac.min_learned_alpha)
         assert (
-            note_on_duration.shape
-            == osc_shape.shape
+            osc_shape.shape
             == osc_gain.shape
             == dist_gain.shape
             == learned_alpha.shape
         )
         if envelope is None:
+            assert note_on_duration is not None
             envelope = self.env_gen(learned_alpha, note_on_duration, n_samples)
         synth_out = super().forward(
             n_samples,
             f0_hz,
-            note_on_duration,
             phase,
-            additive_args,
-            subtractive_args,
+            temp_params,
             global_params,
             envelope,
         )
@@ -468,7 +464,6 @@ class WavetableSynth(SynthBase):
         self,
         n_samples: int,
         f0_hz: T,
-        note_on_duration: T,
         phase: T,
         temp_params: Dict[str, T],
         global_params: Dict[str, T],
@@ -530,11 +525,11 @@ class WavetableSynth(SynthBase):
         self,
         n_samples: int,
         f0_hz: T,
-        note_on_duration: T,
         phase: T,
         temp_params: Dict[str, T],
         global_params: Dict[str, T],
         envelope: Optional[T] = None,
+        note_on_duration: Optional[T] = None,
     ) -> Dict[str, T]:
         wt_pos = temp_params.get("add_lfo")
         # TODO(cm): tmp
@@ -561,7 +556,6 @@ class WavetableSynth(SynthBase):
         synth_out = super().forward(
             n_samples,
             f0_hz,
-            note_on_duration,
             phase,
             temp_params,
             global_params,
