@@ -6,6 +6,8 @@ import torch as tr
 import torch.nn.functional as F
 from torch import Tensor as T, nn
 
+from adsr_naotake import ADSREnvelope
+
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
@@ -134,6 +136,128 @@ class ExpDecayEnv(ADSRLite):
         assert alpha.min() >= 0.0
         envelope = self.ramp(note_on_duration, alpha, n_samples, inverse=True)
         return envelope
+
+
+class ADSR(nn.Module):
+    def __init__(self, n_frames: int):
+        super().__init__()
+        self.n_frames = n_frames
+        self.register_buffer("ramp", tr.linspace(0, 1.0, n_frames))
+
+    def forward(
+            self,
+            note_off: T,
+            attack: T,
+            decay: T,
+            sustain: T,
+            release: T,
+            floor: Optional[T] = None,
+            peak: Optional[T] = None,
+            pow: float = 1.0,
+    ):
+        env = self.make_env(
+            self.ramp,
+            note_off,
+            attack,
+            decay,
+            sustain,
+            release,
+            floor,
+            peak,
+            pow,
+        )
+        return env
+
+    @staticmethod
+    def soft_clamp_min(x: T, min_val: float, t: float = 100.0):
+        return tr.sigmoid((min_val - x) * t) * (min_val - x) + x
+
+    @staticmethod
+    def power_function(x: T, pow: float = 2.0) -> T:
+        assert x.ndim == 3
+        if pow > 0:  # convex
+            # transpose
+            if x.squeeze()[0] > x.squeeze()[-1]:
+                y_intercept = x.squeeze()[-1]
+                y = x - x[:, -1, :]
+                max_val = y.squeeze()[0]
+                y = y / max_val
+            else:
+                y_intercept = x.squeeze()[0]
+                y = x - x[:, 0, :]
+                max_val = y.squeeze()[-1]
+                y = y / max_val
+            y = y ** pow
+            # transpose back
+            y = y * max_val + y_intercept
+        else:
+            # transpose
+            if x.squeeze()[0] > x.squeeze()[-1]:
+                max_val = x.squeeze()[0]
+                y = x - x[:, 0, :]
+                y_intercept = y.squeeze()[-1]
+                y = y / -y_intercept
+            else:
+                max_val = x.squeeze()[-1]
+                y = x - x[:, -1, :]
+                y_intercept = y.squeeze()[0]
+                y = y / -y_intercept
+
+            y = -(y ** -pow)
+
+            # transpose back
+            y = y * -y_intercept + max_val
+
+        return y
+
+    @staticmethod
+    def make_env(
+            ramp: T,
+            note_off: T,
+            attack: T,
+            decay: T,
+            sustain: T,
+            release: T,
+            floor: Optional[T] = None,
+            peak: Optional[T] = None,
+            # pow: float = 1.0,
+            soft_clip_t: float = 100.0,
+            eps: float = 1e-6,
+    ):
+        bs = attack.size(0)
+        if floor is None:
+            floor = tr.zeros_like(attack)
+        if peak is None:
+            peak = tr.ones_like(attack)
+        note_off = tr.clip(note_off, min=0.0, max=1.0).view(-1, 1, 1)
+        attack = tr.clip(attack, min=0.0, max=1.0).view(-1, 1, 1)
+        decay = tr.clip(decay, min=0.0, max=1.0).view(-1, 1, 1)
+        sustain = tr.clip(sustain, min=0.0, max=1.0).view(-1, 1, 1)
+        release = tr.clip(release, min=0.0).view(-1, 1, 1)
+        peak = tr.clip(peak, min=0.0, max=1.0).view(-1, 1, 1)
+        floor = tr.clip(floor, min=0.0, max=1.0).view(-1, 1, 1)
+
+        x = ramp.view(1, -1, 1).repeat(bs, 1, 1)
+        # Offset 0 to epsilon value, so when attack = 0, first ADSR value is not 0 but 1
+        x[:, 0, :] = eps
+
+        A = x / (attack + eps)
+        # A = self.power_function(A, pow=pow)
+        A = tr.clip(A, max=1.0)
+
+        D = (x - attack) * (sustain - 1.0) / (decay + eps)
+        # D = self.power_function(D, pow=pow)
+        D = tr.clip(D, max=0.0)
+        D = ADSR.soft_clamp_min(D, sustain - 1.0, soft_clip_t)
+
+        S = (x - note_off) * (-sustain / (release + eps))
+        S = tr.clip(S, max=0.0)
+        S = ADSR.soft_clamp_min(S, -sustain, soft_clip_t)
+
+        env = (A + D + S) * (peak - floor) + floor
+        env = tr.clip(env, min=0.0, max=1.0)
+        env = env.squeeze(2)
+        return env
 
 
 class SquareSawVCOLite(nn.Module):
@@ -364,44 +488,62 @@ class FourierWavetableOsc(WavetableOsc):
 
 
 if __name__ == "__main__":
-    bs = 2
-    sr = 48000
-    n_sec = 4.0
-    n_samples = int(sr * n_sec)
-    n_wt_samples = 1024
-    f0_hz = tr.tensor([220.0])
-    f0_hz = f0_hz.repeat(bs)
+    # bs = 2
+    # sr = 48000
+    # n_sec = 4.0
+    # n_samples = int(sr * n_sec)
+    # n_wt_samples = 1024
+    # f0_hz = tr.tensor([220.0])
+    # f0_hz = f0_hz.repeat(bs)
+    #
+    # # wt_pos = tr.linspace(-1.0, -1.0, n_samples).unsqueeze(0)
+    # # wt_pos = tr.linspace(1.0, 1.0, n_samples).unsqueeze(0)
+    # wt_pos = tr.linspace(-1.0, 1.0, n_samples).unsqueeze(0)
+    # wt_pos = wt_pos.repeat(bs, 1)
+    #
+    # osc = WavetableOsc(sr, n_pos=2, n_wt_samples=n_wt_samples)
+    # audio = osc(f0_hz, wt_pos, n_samples=n_samples)
+    #
+    # # import matplotlib.pyplot as plt
+    # # plt.plot(audio[0, :1000].detach().numpy())
+    # # plt.show()
+    # # plt.plot(audio[0, -1000:].detach().numpy())
+    # # plt.show()
+    #
+    # import torchaudio
+    #
+    # torchaudio.save("../out/audio.wav", audio[0:1, :], sr)
+    # exit()
 
-    # wt_pos = tr.linspace(-1.0, -1.0, n_samples).unsqueeze(0)
-    # wt_pos = tr.linspace(1.0, 1.0, n_samples).unsqueeze(0)
-    wt_pos = tr.linspace(-1.0, 1.0, n_samples).unsqueeze(0)
-    wt_pos = wt_pos.repeat(bs, 1)
-
-    osc = WavetableOsc(sr, n_pos=2, n_wt_samples=n_wt_samples)
-    audio = osc(f0_hz, wt_pos, n_samples=n_samples)
-
-    # import matplotlib.pyplot as plt
-    # plt.plot(audio[0, :1000].detach().numpy())
-    # plt.show()
-    # plt.plot(audio[0, -1000:].detach().numpy())
-    # plt.show()
-
-    import torchaudio
-
-    torchaudio.save("../out/audio.wav", audio[0:1, :], sr)
-    exit()
-
-    adsr = ADSRLite(10, eps=1e-3)
-    exp_decay = ExpDecayEnv(10, eps=1e-3)
+    note_off = tr.tensor([0.75, 0.75])
     attack = tr.tensor([0.1, 0.2])
-    decay = tr.tensor([0.1, 0.2])
-    sustain = tr.tensor([0.2, 0.3])
-    release = tr.tensor([0.1, 0.2])
-    alpha = tr.tensor([1.0, 2.5])
+    decay = tr.tensor([0.0, 0.2])
+    sustain = tr.tensor([0.5, 0.3])
+    release = tr.tensor([2.0, 0.2])
+    # floor = tr.tensor([0.1, 0.2])
+    # peak = tr.tensor([0.3, 0.5])
+    pow = tr.tensor([1.0, 2.5])
     note_on_duration = tr.tensor([0.1, 1.0])
     n_samples = 10
-    # envelope = adsr(attack, decay, sustain, release, alpha, note_on_duration, n_samples)
-    envelope = exp_decay(alpha, note_on_duration, n_samples)
+
+    adsr = ADSR(100)
+    envelope = adsr(note_off, attack, decay, sustain, release, pow=pow)
+
+    # adsr = ADSREnvelope()
+    # envelope = adsr(
+    #     floor=tr.zeros_like(attack).view(-1, 1, 1),
+    #     peak=tr.ones_like(attack).view(-1, 1, 1),
+    #     attack=attack.view(-1, 1, 1),
+    #     decay=decay.view(-1, 1, 1),
+    #     sus_level=sustain.view(-1, 1, 1),
+    #     release=release.view(-1, 1, 1),
+    #     note_off=0.8,
+    #     n_frames=100,
+    # )
+
+    # exp_decay = ExpDecayEnv(10, eps=1e-3)
+    # envelope = exp_decay(alpha, note_on_duration, n_samples)
+
     import matplotlib.pyplot as plt
 
     plt.plot(envelope[0].numpy())
