@@ -145,15 +145,15 @@ class ADSR(nn.Module):
         self.register_buffer("ramp", tr.linspace(0, 1.0, n_frames))
 
     def forward(
-            self,
-            note_off: T,
-            attack: T,
-            decay: T,
-            sustain: T,
-            release: T,
-            floor: Optional[T] = None,
-            peak: Optional[T] = None,
-            pow: float = 1.0,
+        self,
+        note_off: T,
+        attack: T,
+        decay: T,
+        sustain: T,
+        release: T,
+        floor: Optional[T] = None,
+        peak: Optional[T] = None,
+        pow: float = 1.0,
     ):
         env = self.make_env(
             self.ramp,
@@ -187,7 +187,7 @@ class ADSR(nn.Module):
                 y = x - x[:, 0, :]
                 max_val = y.squeeze()[-1]
                 y = y / max_val
-            y = y ** pow
+            y = y**pow
             # transpose back
             y = y * max_val + y_intercept
         else:
@@ -203,7 +203,7 @@ class ADSR(nn.Module):
                 y_intercept = y.squeeze()[0]
                 y = y / -y_intercept
 
-            y = -(y ** -pow)
+            y = -(y**-pow)
 
             # transpose back
             y = y * -y_intercept + max_val
@@ -212,17 +212,17 @@ class ADSR(nn.Module):
 
     @staticmethod
     def make_env(
-            ramp: T,
-            note_off: T,
-            attack: T,
-            decay: T,
-            sustain: T,
-            release: T,
-            floor: Optional[T] = None,
-            peak: Optional[T] = None,
-            # pow: float = 1.0,
-            soft_clip_t: float = 100.0,
-            eps: float = 1e-6,
+        ramp: T,
+        note_off: T,
+        attack: T,
+        decay: T,
+        sustain: T,
+        release: T,
+        floor: Optional[T] = None,
+        peak: Optional[T] = None,
+        # pow: float = 1.0,
+        soft_clip_t: float = 100.0,
+        eps: float = 1e-6,
     ):
         bs = attack.size(0)
         if floor is None:

@@ -11,6 +11,7 @@ from acid_ddsp.synth_modules import (
     SquareSawVCOLite,
     ExpDecayEnv,
     WavetableOsc,
+    ADSR,
 )
 from audio_config import AudioConfig
 from filters import (
@@ -161,10 +162,7 @@ class AcidSynthBase(SynthBase):
             assert self.ac.is_fixed("learned_alpha")
             learned_alpha = tr.full_like(f0_hz, self.ac.min_learned_alpha)
         assert (
-            osc_shape.shape
-            == osc_gain.shape
-            == dist_gain.shape
-            == learned_alpha.shape
+            osc_shape.shape == osc_gain.shape == dist_gain.shape == learned_alpha.shape
         )
         if envelope is None:
             assert note_on_duration is not None
@@ -459,6 +457,7 @@ class WavetableSynth(SynthBase):
             is_trainable=is_trainable,
         )
         self.lpc_func = sample_wise_lpc
+        self.adsr = ADSR(n_frames=ac.n_samples)
 
     def additive_synthesis(
         self,
@@ -540,8 +539,21 @@ class WavetableSynth(SynthBase):
         wt_pos = util.linear_interpolate_dim(
             wt_pos, self.ac.n_samples, align_corners=True
         )
-        assert envelope is not None  # TODO(cm): tmp
-        if envelope is not None:
+        if envelope is None:
+            attack = global_params["attack"]
+            decay = global_params["decay"]
+            sustain = global_params["sustain"]
+            release = global_params["release"]
+            note_off = tr.full_like(attack, self.ac.note_off)
+            envelope = self.adsr(
+                note_off,
+                attack,
+                decay,
+                sustain,
+                release,
+                note_on_duration,
+            )
+        else:
             envelope = util.linear_interpolate_dim(
                 envelope, n_samples, align_corners=True
             )

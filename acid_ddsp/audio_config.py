@@ -71,6 +71,7 @@ class AudioConfig:
         self.stability_eps = stability_eps
 
         self.n_samples = int(sr * buffer_size_seconds)
+        self.note_off = note_on_duration / buffer_size_seconds
         self.min_w = self.calc_w(min_w_hz)
         self.max_w = self.calc_w(max_w_hz)
 

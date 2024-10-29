@@ -3,13 +3,16 @@ import os
 from typing import Optional, List, Tuple, Dict
 
 import torch as tr
+import torchaudio
 from torch import Tensor as T
 from torch import nn
 from torch.nn import functional as F
+from torchaudio.transforms import AmplitudeToDB
 
 from adsr_haohao import extract_loudness
 from curves import PiecewiseSplines
 from feature_extraction import LogMelSpecFeatureExtractor
+import librosa as li
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -151,7 +154,23 @@ class Spectral2DCNN(nn.Module):
             in_ch = out_ch
             curr_n_bins = curr_n_bins // pool_size[0]
         self.cnn = nn.Sequential(*layers)
+
+        # ADSR
+        self.loudness_extractor = LoudnessExtractor(
+            sr=fe.sr, n_fft=fe.n_fft, hop_len=fe.hop_len
+        )
         self.loudness_cnn = nn.Sequential(*loudness_layers)
+        n_hidden = (out_channels[-1] + 4) // 2
+        self.loudness_mlp = nn.Sequential(
+            nn.Linear(out_channels[-1], n_hidden),
+            nn.Dropout(p=dropout),
+            nn.PReLU(),
+            nn.Linear(n_hidden, n_hidden),
+            nn.Dropout(p=dropout),
+            nn.PReLU(),
+            nn.Linear(n_hidden, 4),
+            nn.Sigmoid(),
+        )
 
         # Define temporal params
         self.out_temp = nn.ModuleDict()
@@ -203,18 +222,17 @@ class Spectral2DCNN(nn.Module):
                     get_activation(adapt_act),
                 )
 
-        n_hidden = (out_channels[-1] + self.degree) // 2
-        self.loudness_mlp = nn.Sequential(
-            nn.Linear(out_channels[-1], n_hidden),
-            nn.Dropout(p=dropout),
-            nn.PReLU(),
-            nn.Linear(n_hidden, n_hidden),
-            nn.Dropout(p=dropout),
-            nn.PReLU(),
-            nn.Linear(n_hidden, self.degree),
-        )
-        self.loudness_spline = PiecewiseSplines(n_frames - 1, 4, degree)
-        # self.loudness_spline = PiecewiseSplines(n_frames - 1, 36, degree)
+        # n_hidden = (out_channels[-1] + self.degree) // 2
+        # self.loudness_mlp = nn.Sequential(
+        #     nn.Linear(out_channels[-1], n_hidden),
+        #     nn.Dropout(p=dropout),
+        #     nn.PReLU(),
+        #     nn.Linear(n_hidden, n_hidden),
+        #     nn.Dropout(p=dropout),
+        #     nn.PReLU(),
+        #     nn.Linear(n_hidden, self.degree),
+        # )
+        # self.loudness_spline = PiecewiseSplines(n_frames - 1, 4, degree)
 
         # Define global params
         self.out_global = nn.ModuleDict()
@@ -239,36 +257,50 @@ class Spectral2DCNN(nn.Module):
         log_spec = self.fe(x)
         out_dict["log_spec_wet"] = log_spec
         n_frames = log_spec.size(-1)
-        assert n_frames == self.n_frames, \
-            f"Expected n_frames: {self.n_frames} but got: {n_frames}"
+        assert (
+            n_frames == self.n_frames
+        ), f"Expected n_frames: {self.n_frames} but got: {n_frames}"
 
+        # loudness_2 = (
+        #     extract_loudness(
+        #         x.squeeze(1), sampling_rate=self.fe.sr, block_size=self.fe.hop_len, n_fft=self.fe.n_fft
+        #     )
+        #     .unsqueeze(1)
+        #     .unsqueeze(1)
+        #     .float()
+        # )
         # Extract envelope by conditioning on loudness
-        loudness = (
-            extract_loudness(
-                x.squeeze(1), sampling_rate=self.fe.sr, block_size=self.fe.hop_len
-            )
-            .unsqueeze(1)
-            .unsqueeze(1)
-            .float()
-        )
+        loudness = self.loudness_extractor(x.squeeze(1))
+        loudness = loudness.unsqueeze(1).unsqueeze(1)
         x = self.loudness_cnn(loudness)
         x = x.squeeze(2)
-        x = tr.swapaxes(x, 1, 2)
+        x = tr.mean(x, dim=-1)
         x = self.loudness_mlp(x)
+        attack = x[:, 0]
+        decay = x[:, 1]
+        sustain = x[:, 2]
+        release = x[:, 3]
+        out_dict["attack"] = attack
+        out_dict["decay"] = decay
+        out_dict["sustain"] = sustain
+        out_dict["release"] = release
 
-        chunks = tr.tensor_split(x, 4, dim=1)
-        # chunks = tr.tensor_split(x, 36, dim=1)
-        chunks = [tr.mean(c, dim=1) for c in chunks]
-        x = tr.stack(chunks, dim=1)
-        x = tr.swapaxes(x, 1, 2)
-        x = x.view(x.size(0), 1, self.degree, x.size(2))
-        x = tr.swapaxes(x, 2, 3)
-
-        x = self.loudness_spline(x)
-        x = tr.swapaxes(x, 1, 2)
+        # x = tr.swapaxes(x, 1, 2)
+        # x = self.loudness_mlp(x)
+        #
+        # chunks = tr.tensor_split(x, 4, dim=1)
+        # # chunks = tr.tensor_split(x, 36, dim=1)
+        # chunks = [tr.mean(c, dim=1) for c in chunks]
+        # x = tr.stack(chunks, dim=1)
+        # x = tr.swapaxes(x, 1, 2)
+        # x = x.view(x.size(0), 1, self.degree, x.size(2))
+        # x = tr.swapaxes(x, 2, 3)
+        #
+        # x = self.loudness_spline(x)
+        # x = tr.swapaxes(x, 1, 2)
         # TODO(cm): env should start at 0, not 0.5
-        env = tr.sigmoid(x).squeeze(-1)
-        out_dict["envelope"] = env
+        # env = tr.sigmoid(x).squeeze(-1)
+        # out_dict["envelope"] = env
 
         # Calc latent
         x = self.cnn(log_spec)
@@ -316,6 +348,41 @@ class Spectral2DCNN(nn.Module):
         for dil in dilations[1:]:
             rf = rf + ((kernel_size - 1) * dil)
         return rf
+
+
+class LoudnessExtractor(nn.Module):
+    def __init__(
+        self, sr: float, n_fft: int = 2048, hop_len: int = 512, top_db: float = 80.0
+    ):
+        super().__init__()
+        assert n_fft % hop_len == 0, "n_fft must be divisible by hop_len"
+        self.sr = sr
+        self.n_fft = n_fft
+        self.hop_len = hop_len
+        self.top_db = top_db
+        self.amp_to_db = AmplitudeToDB(stype="amplitude", top_db=top_db)
+        frequencies = li.fft_frequencies(sr=sr, n_fft=n_fft)
+        a_weighting = li.A_weighting(frequencies, min_db=-top_db)
+        self.register_buffer(
+            "a_weighting", tr.from_numpy(a_weighting).view(1, -1, 1).float()
+        )
+
+    def forward(self, x: T) -> T:
+        assert x.ndim == 2
+        x = tr.stft(
+            x,
+            n_fft=self.n_fft,
+            hop_length=self.hop_len,
+            center=True,
+            pad_mode="reflect",
+            return_complex=True,
+        ).abs()
+        x = self.amp_to_db(x)
+        x = x + self.a_weighting
+        x = tr.pow(10, x / 20.0)  # TODO(cm): undo dB for taking mean?
+        x = tr.mean(x, dim=-2)
+        x = self.amp_to_db(x)
+        return x
 
 
 if __name__ == "__main__":
