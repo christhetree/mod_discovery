@@ -280,10 +280,10 @@ class Spectral2DCNN(nn.Module):
         decay = x[:, 1]
         sustain = x[:, 2]
         release = x[:, 3]
-        out_dict["attack"] = attack
-        out_dict["decay"] = decay
-        out_dict["sustain"] = sustain
-        out_dict["release"] = release
+        out_dict["attack_0to1"] = attack
+        out_dict["decay_0to1"] = decay
+        out_dict["sustain_0to1"] = sustain
+        out_dict["release_0to1"] = release
 
         # x = tr.swapaxes(x, 1, 2)
         # x = self.loudness_mlp(x)
@@ -366,6 +366,7 @@ class LoudnessExtractor(nn.Module):
         self.register_buffer(
             "a_weighting", tr.from_numpy(a_weighting).view(1, -1, 1).float()
         )
+        self.register_buffer("hann", tr.hann_window(n_fft, periodic=True))
 
     def forward(self, x: T) -> T:
         assert x.ndim == 2
@@ -373,6 +374,7 @@ class LoudnessExtractor(nn.Module):
             x,
             n_fft=self.n_fft,
             hop_length=self.hop_len,
+            window=self.hann,
             center=True,
             pad_mode="reflect",
             return_complex=True,

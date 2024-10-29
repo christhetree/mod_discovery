@@ -224,11 +224,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
                         p_val_l1 = self.l1(p_val_0to1_hat, p_val_0to1)
                     self.log(f"{stage}/{p_name}_l1", p_val_l1, prog_bar=False)
 
-            global_params_hat["attack"] = model_out.get("attack")
-            global_params_hat["decay"] = model_out.get("decay")
-            global_params_hat["sustain"] = model_out.get("sustain")
-            global_params_hat["release"] = model_out.get("release")
-
             # Postprocess log_spec_wet
             log_spec_wet = model_out.get("log_spec_wet")
 

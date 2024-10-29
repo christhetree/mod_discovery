@@ -3,8 +3,8 @@ seed_everything: 42
 custom:
   project_name: acid_ddsp_2
 #  model_name: testing
-  model_name: wt_4__filter_1x1__spline_36d3__env4d3
-#  model_name: wt_4__filter_1x1__spline_36d3__env4d3__jtfs
+  model_name: wt_4__filter_1x1__spline_48d3__adsr_linear
+#  model_name: wt_4__filter_1x1__spline_36d3__adsr_linear_jtfs
 #  dataset_name: nsynth_vocal_synthetic_val
   dataset_name: nsynth_test
   cpu_batch_size: 5
@@ -43,6 +43,7 @@ model:
     use_model: true
     model: spectral_2dcnn.yml
     temp_param_names_hat: [add_lfo, sub_lfo]
+    global_param_names_hat: [attack, decay, sustain, release]
     synth_hat: synth.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
