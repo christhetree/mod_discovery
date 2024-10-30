@@ -20,5 +20,5 @@ init_args:
   global_param_names: []
   dropout: 0.25
   n_frames: 6001
-  n_segments: 36
+  n_segments: 48
   degree: 3

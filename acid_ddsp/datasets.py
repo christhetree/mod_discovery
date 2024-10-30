@@ -2,6 +2,7 @@ import glob
 import json
 import logging
 import os
+import random
 from typing import Dict, List
 
 import librosa
@@ -123,15 +124,18 @@ class NSynthDataset(Dataset):
         data_dir: str,
         ext: str = "wav",
         split: str = "train",
+        shuffle_seed: int = 42,
     ):
         super().__init__()
         assert os.path.exists(data_dir)
-        self.fnames = sorted(glob.glob(f"{data_dir}/*.{ext}"))
-        # self.fnames = self.fnames[:5000]
+        fnames = sorted(glob.glob(f"{data_dir}/*.{ext}"))
+        rand = random.Random(shuffle_seed)
+        rand.shuffle(fnames)
+        # fnames = fnames[:5000]  # TODO(cm): tmp
+        self.fnames = fnames
 
-        # TODO(cm): randomize this more?
-        # easy train-test split
         if split == "train":
+            log.info(f"Found {len(self.fnames)} files")
             self.fnames = self.fnames[: int(0.7 * len(self.fnames))]
         elif split == "val":
             self.fnames = self.fnames[
@@ -141,9 +145,10 @@ class NSynthDataset(Dataset):
             self.fnames = self.fnames[int(0.9 * len(self.fnames)) :]
 
         self.ac = ac
+        self.shuffle_seed = shuffle_seed
         self.note_on_duration = tr.tensor(ac.note_on_duration)
 
-    def get_pitch(self, fname: str) -> float:
+    def get_f0_hz(self, fname: str) -> float:
         midi_note = int(os.path.basename(fname).split("-")[-2].split("_")[-1])
         f0_hz = tr.tensor(librosa.midi_to_hz(midi_note)).float()
         return f0_hz
@@ -169,13 +174,13 @@ class NSynthDataset(Dataset):
         # NOTE: NSynth strings filenames are of the form:
         # "<inst_name>_<inst_type>_<inst_str>-<pitch>-<velocity>"
         # midi_note = int(os.path.basename(fname).split("-")[1])
-        f0_hz = self.get_pitch(fname)
+        f0_hz = self.get_f0_hz(fname)
 
         # gudgud96: I am not too sure why phase_hat is needed yet...
         phase_hat = tr.rand((1,)) * 2 * tr.pi
         return {
             "wet": audio,
-            "f0_hz": f0_hz,
+            "f0_hz": tr.tensor(f0_hz).float(),
             "note_on_duration": self.note_on_duration,
             "phase_hat": phase_hat,
         }
@@ -193,33 +198,93 @@ class SerumDataset(NSynthDataset):
         super().__init__(ac, data_dir, ext, split)
         with open(preset_params_path, "r") as f:
             self.preset_params = json.load(f)
+        # TODO(cm): cleanup
+        for k, v in self.preset_params.items():
+            on_a_0to1 = float(v["parameters"][212]["text"])
+            on_a = round(on_a_0to1)
 
-    def get_pitch(self, fname: str) -> int:
+            oct_a_0to1 = float(v["parameters"][3]["text"])
+            oct_a = round(oct_a_0to1 * 8.0) - 4
+            semi_a_0to1 = float(v["parameters"][4]["text"])
+            semi_a = round(semi_a_0to1 * 24.0) - 12
+
+            pitch_correction_a = oct_a * 12 + semi_a
+            pitch_correction_a_2 = v["pitch"]["A Osc"]["pitch_correction"]
+            assert pitch_correction_a == pitch_correction_a_2
+
+            cents_a_0to1 = float(v["parameters"][5]["text"])
+            cents_a = round(cents_a_0to1 * 200.0) - 100
+            cents_a_2 = v["pitch"]["A Osc"]["pitch_fine"]
+            assert cents_a == cents_a_2
+
+            coarse_a_0to1 = float(v["parameters"][10]["text"])
+            coarse_a = round(coarse_a_0to1 * 128.0 - 64.0, 6)
+            # if coarse_a != 0.0:
+            #     log.info(f"Coarse tuning detected for {k}: {coarse_a}")
+            v["pitch"]["A Osc"]["on"] = on_a
+            v["pitch"]["A Osc"]["coarse"] = coarse_a
+
+            on_b_0to1 = float(v["parameters"][213]["text"])
+            on_b = round(on_b_0to1)
+
+            oct_b_0to1 = float(v["parameters"][16]["text"])
+            oct_b = round(oct_b_0to1 * 8.0) - 4
+            semi_b_0to1 = float(v["parameters"][17]["text"])
+            semi_b = round(semi_b_0to1 * 24.0) - 12
+
+            pitch_correction_b = oct_b * 12 + semi_b
+            pitch_correction_b_2 = v["pitch"]["B Osc"]["pitch_correction"]
+            assert pitch_correction_b == pitch_correction_b_2
+
+            cents_b_0to1 = float(v["parameters"][18]["text"])
+            cents_b = round(cents_b_0to1 * 200.0) - 100
+            cents_b_2 = v["pitch"]["B Osc"]["pitch_fine"]
+            assert cents_b == cents_b_2
+
+            coarse_b_0to1 = float(v["parameters"][23]["text"])
+            coarse_b = round(coarse_b_0to1 * 128.0 - 64.0, 6)
+            v["pitch"]["B Osc"]["on"] = on_b
+            v["pitch"]["B Osc"]["coarse"] = coarse_b
+
+            if not on_a and not on_b:
+                log.debug(f"Neither A nor B Osc is on for {k}")
+
+    def get_f0_hz(self, fname: str) -> float:
         fname = os.path.basename(fname)
         preset_name_str = fname.split("_")
         if len(preset_name_str) != 2:
             assert len(preset_name_str) == 3, f"Error processing {fname}"
             preset_name = "_".join(preset_name_str[:2])
-            pitch, velocity = preset_name_str[2].split("-")
+            keyboard_pitch, velocity = preset_name_str[2].split("-")
         else:
             preset_name = preset_name_str[0]
-            pitch, velocity = preset_name_str[1].split("-")
+            keyboard_pitch, velocity = preset_name_str[1].split("-")
 
-        pitch = int(pitch)
-        pitch_corr_a = self.preset_params[preset_name]["pitch"]["A Osc"][
-            "pitch_correction"
-        ]
-        pitch_fine_a = self.preset_params[preset_name]["pitch"]["A Osc"]["pitch_fine"]
-        pitch_corr_b = self.preset_params[preset_name]["pitch"]["B Osc"][
-            "pitch_correction"
-        ]
-        pitch_fine_b = self.preset_params[preset_name]["pitch"]["B Osc"]["pitch_fine"]
-        if pitch_fine_a or pitch_fine_b:
-            log.info(
-                f"Fine tuning detected for {preset_name}: "
-                f"A Osc: {pitch_fine_a}, B Osc: {pitch_fine_b}"
-            )
+        keyboard_pitch = int(keyboard_pitch)
 
-        osc_pitch_a = pitch + pitch_corr_a
-        f0_hz = tr.tensor(librosa.midi_to_hz(osc_pitch_a)).float()
+        pitch_data_a = self.preset_params[preset_name]["pitch"]["A Osc"]
+        pitch_data_b = self.preset_params[preset_name]["pitch"]["B Osc"]
+
+        if pitch_data_a["on"]:
+            f0_hz = self.calc_f0_hz(keyboard_pitch, pitch_data_a)
+        elif pitch_data_b["on"]:
+            f0_hz = self.calc_f0_hz(keyboard_pitch, pitch_data_b)
+        else:
+            f0_hz = float(librosa.midi_to_hz(keyboard_pitch))
+
+        return f0_hz
+
+    @staticmethod
+    def calc_f0_hz(keyboard_pitch: int, pitch_data: Dict[str, int | float]) -> float:
+        pitch_correction = pitch_data["pitch_correction"]
+        cents = pitch_data["pitch_fine"]
+        coarse = pitch_data["coarse"]
+        pitch = keyboard_pitch + pitch_correction + coarse + (cents / 100.0)
+        pitch_int = int(pitch)
+        pitch_frac = pitch - pitch_int
+        pitch_int_f0_hz = float(librosa.midi_to_hz(pitch_int))
+        pitch_int_f0_hz_p1 = float(librosa.midi_to_hz(pitch_int + 1))
+        delta_hz = pitch_int_f0_hz_p1 - pitch_int_f0_hz
+        f0_hz_frac = pitch_frac * delta_hz
+        f0_hz = pitch_int_f0_hz + f0_hz_frac
         return f0_hz

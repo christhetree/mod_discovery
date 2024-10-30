@@ -3,7 +3,7 @@ import os
 from typing import Optional
 
 import torch as tr
-from kymatio.torch import TimeFrequencyScattering
+from kymatio.torch import TimeFrequencyScattering, Scattering1D
 from torch import Tensor as T
 from torch import nn
 from torchaudio.transforms import MFCC
@@ -36,6 +36,45 @@ class MFCCL1(nn.Module):
 
     def forward(self, x_hat: T, x: T) -> T:
         return self.l1(self.mfcc(x_hat), self.mfcc(x))
+
+
+class Scat1DLoss(nn.Module):
+    def __init__(
+        self,
+        shape: int,
+        J: int,
+        Q1: int,
+        Q2: int,
+        T: Optional[str | int] = None,
+        max_order: int = 2,
+        p: int = 2,
+    ):
+        super().__init__()
+        self.max_order = max_order
+        self.p = p
+        self.scat_1d = Scattering1D(
+            shape=(shape,),
+            J=J,
+            Q=(Q1, Q2),
+            T=T,
+            max_order=max_order,
+        )
+
+    def forward(self, x: T, x_target: T) -> T:
+        assert x.ndim == x_target.ndim == 3
+        assert x.size(1) == x_target.size(1) == 1
+        Sx = self.scat_1d(x)
+        Sx_target = self.scat_1d(x_target)
+        Sx = Sx[:, :, 1:, :]  # Remove the 0th order coefficients
+        Sx_target = Sx_target[:, :, 1:, :]  # Remove the 0th order coefficients
+
+        if self.max_order == 1:
+            dist = tr.linalg.norm(Sx_target - Sx, ord=self.p, dim=(-2, -1))
+        else:
+            dist = tr.linalg.norm(Sx_target - Sx, ord=self.p, dim=-1)
+
+        dist = tr.mean(dist)
+        return dist
 
 
 class JTFSLoss(nn.Module):
