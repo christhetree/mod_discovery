@@ -11,6 +11,7 @@ from acid_ddsp.synth_modules import (
     SquareSawVCOLite,
     ExpDecayEnv,
     WavetableOsc,
+    WavetableOscShan,
     ADSR,
 )
 from audio_config import AudioConfig
@@ -575,6 +576,40 @@ class WavetableSynth(SynthBase):
         )
         synth_out["wet"] = synth_out["filtered_audio"]
         return synth_out
+
+
+class WavetableSynthShan(WavetableSynth):
+    """
+    From Differentiable Wavetable Synthesis, Shan et al.
+    Main difference with our WavetableSynth is that Shan et al. uses weighted sum
+    (attention) instead of grid_sample to aggregate across wavetable positions.
+    """
+    def __init__(
+        self,
+        ac: AudioConfig,
+        n_pos: int,
+        n_wt_samples: int,
+        aa_filter_n: int,
+        wt_name: Optional[str] = None,
+        is_trainable: bool = True,
+    ):
+        super().__init__(ac, n_pos, n_wt_samples, aa_filter_n, wt_name, is_trainable)
+        wt = None
+        if wt_name is not None:
+            wt_path = os.path.join(WAVETABLES_DIR, wt_name)
+            assert os.path.isfile(wt_path)
+            log.info(f"Loading wavetable from {wt_path}")
+            wt = tr.load(wt_path)
+            assert wt.shape == (n_pos, n_wt_samples)
+            
+        self.osc = WavetableOscShan(
+            ac.sr,
+            n_pos=n_pos,
+            n_wt_samples=n_wt_samples,
+            aa_filter_n=aa_filter_n,
+            wt=wt,
+            is_trainable=is_trainable,
+        )
 
 
 # if __name__ == "__main__":
