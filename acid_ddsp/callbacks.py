@@ -198,15 +198,16 @@ class LogModSigAndSpecCallback(Callback):
 
             # TODO(cm): tmp
             temp_params_hat_all = [
-                out_dict["add_lfo_hat"],
-                out_dict["sub_lfo_hat"],
-                out_dict["sub_lfo_adapted_hat"],
+                (out_dict["add_lfo_hat"], out_dict.get("add_lfo_hat_seg_indices")),
+                (out_dict["sub_lfo_hat"], out_dict.get("sub_lfo_hat_seg_indices")),
+                (out_dict["sub_lfo_adapted_hat"], None),
             ]
             colors = ["red", "blue", "cyan"]
 
             # if temp_params_hat is not None:
-            for temp_params_hat, color in zip(temp_params_hat_all, colors):
+            for (temp_params_hat, seg_indices), color in zip(temp_params_hat_all, colors):
                 assert temp_params_hat.ndim == 3
+                n_frames = temp_params_hat.size(1)
                 temp_params_hat = util.linear_interpolate_dim(
                     temp_params_hat, pl_module.ac.n_samples, dim=1, align_corners=True
                 )
@@ -217,6 +218,12 @@ class LogModSigAndSpecCallback(Callback):
                         # label=f"{pl_module.temp_params_name_hat}_{idx}",
                         color=color,
                     )
+                # TODO(cm): tmp
+                if seg_indices is not None:
+                    for seg_idx in seg_indices[0, :]:
+                        x = int(seg_idx / n_frames * pl_module.ac.n_samples)
+                        y = temp_params_hat_np[x, 0]
+                        ax[2].plot(x, y, "x", color=color)
                 ax[2].set(aspect=temp_params_hat.size(1))
 
             ax[2].set_xlabel("n_samples")

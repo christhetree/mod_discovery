@@ -2,6 +2,7 @@ import logging
 import os
 from typing import Optional
 
+import numpy as np
 import torch as tr
 from kymatio.torch import TimeFrequencyScattering, Scattering1D
 from torch import Tensor as T
@@ -48,10 +49,14 @@ class Scat1DLoss(nn.Module):
         T: Optional[str | int] = None,
         max_order: int = 2,
         p: int = 2,
+        # use_o2_only: bool = False,
     ):
         super().__init__()
+        if use_o2_only:
+            assert max_order == 2
         self.max_order = max_order
         self.p = p
+        # self.use_o2_only = use_o2_only
         self.scat_1d = Scattering1D(
             shape=(shape,),
             J=J,
@@ -59,12 +64,21 @@ class Scat1DLoss(nn.Module):
             T=T,
             max_order=max_order,
         )
+        meta = self.scat_1d.meta()
+        # self.o2_cf_hz = {idx: round(xi[1] * 16000, 6) for idx, xi in enumerate(meta["xi"]) if not np.isnan(xi[1])}
+        # self.o2_indices = [idx for idx, order in enumerate(meta["order"]) if order == 2]
+        # # self.o2_indices = [idx for idx, cf_hz in self.o2_cf_hz.items() if cf_hz < 5]
+        # log.info(f"number of o2_indices = {len(self.o2_indices)}")
 
     def forward(self, x: T, x_target: T) -> T:
         assert x.ndim == x_target.ndim == 3
         assert x.size(1) == x_target.size(1) == 1
         Sx = self.scat_1d(x)
         Sx_target = self.scat_1d(x_target)
+        # if self.use_o2_only:
+        #     Sx = Sx[:, :, self.o2_indices, :]
+        #     Sx_target = Sx_target[:, :, self.o2_indices, :]
+        # else:
         Sx = Sx[:, :, 1:, :]  # Remove the 0th order coefficients
         Sx_target = Sx_target[:, :, 1:, :]  # Remove the 0th order coefficients
 

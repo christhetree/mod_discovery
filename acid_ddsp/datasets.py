@@ -150,7 +150,7 @@ class NSynthDataset(Dataset):
 
     def get_f0_hz(self, fname: str) -> float:
         midi_note = int(os.path.basename(fname).split("-")[-2].split("_")[-1])
-        f0_hz = tr.tensor(librosa.midi_to_hz(midi_note)).float()
+        f0_hz = librosa.midi_to_hz(midi_note)
         return f0_hz
 
     def __len__(self) -> int:

@@ -370,6 +370,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "envelope": envelope,
             "log_spec_wet": log_spec_wet,
             "log_spec_wet_hat": log_spec_wet_hat,
+            # "add_lfo_hat_seg_indices": model_out["add_lfo_seg_indices"],
+            # "sub_lfo_hat_seg_indices": model_out["sub_lfo_seg_indices"],
         }
         out_dict.update(temp_params)
         out_dict.update(temp_params_hat)

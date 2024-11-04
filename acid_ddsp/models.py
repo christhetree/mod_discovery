@@ -175,6 +175,7 @@ class Spectral2DCNN(nn.Module):
         # Define temporal params
         self.out_temp = nn.ModuleDict()
         self.splines = nn.ModuleDict()
+        # self.spline_mlps = nn.ModuleDict()
         self.spline_biases = nn.ModuleDict()
         self.spline_acts = nn.ModuleDict()
         self.adapters = nn.ModuleDict()
@@ -197,6 +198,17 @@ class Spectral2DCNN(nn.Module):
             )
             # Make splines
             self.splines[name] = PiecewiseSplines(n_frames, n_segments, degree)
+            # n_hidden = (out_channels[-1] + n_segments) // 2
+            # self.spline_mlps[name] = nn.Sequential(
+            #     nn.Linear(out_channels[-1], n_hidden),
+            #     nn.Dropout(p=dropout),
+            #     nn.PReLU(),
+            #     nn.Linear(n_hidden, n_hidden),
+            #     nn.Dropout(p=dropout),
+            #     nn.PReLU(),
+            #     nn.Linear(n_hidden, n_segments),
+            #     nn.Softmax(dim=-1),
+            # )
             n_hidden = (out_channels[-1] + dim) // 2
             self.spline_biases[name] = nn.Sequential(
                 nn.Linear(out_channels[-1], n_hidden),
@@ -311,8 +323,30 @@ class Spectral2DCNN(nn.Module):
 
         # Calc temporal params
         for name, temp_param in self.temp_params.items():
+            # segment_intervals = self.spline_mlps[name](global_latent)
+            # min_segment_interval = 0.04
+            # scaling_factor = 1.0 - (self.n_segments * min_segment_interval)
+            # assert scaling_factor > 0
+            # segment_intervals = segment_intervals * scaling_factor + min_segment_interval
+
             dim = temp_param["dim"]
+            assert dim == 1  # TODO(cm): tmp
             x = self.out_temp[name](latent)
+
+            # x_s = []
+            # seg_end_indices_all = []
+            # for curr_seg_intervals, curr_x in zip(segment_intervals, x):
+            #     seg_lens = (curr_seg_intervals * self.n_frames).long()
+            #     seg_end_indices = tr.cumsum(seg_lens, dim=0)[:-1]
+            #     seg_end_indices_all.append(seg_end_indices)
+            #     chunks = tr.tensor_split(curr_x, seg_end_indices.tolist(), dim=0)
+            #     chunks = [tr.mean(c, dim=0) for c in chunks]
+            #     chunks = tr.stack(chunks, dim=0)
+            #     x_s.append(chunks)
+            # x = tr.stack(x_s, dim=0)
+            # seg_end_indices_all = tr.stack(seg_end_indices_all, dim=0)
+            # out_dict[f"{name}_seg_indices"] = seg_end_indices_all
+
             chunks = tr.tensor_split(x, self.n_segments, dim=1)
             chunks = [tr.mean(c, dim=1) for c in chunks]
             x = tr.stack(chunks, dim=1)
@@ -320,10 +354,10 @@ class Spectral2DCNN(nn.Module):
             #  I'm trying to prevent flattening occurring along the temporal axis
             x = tr.swapaxes(x, 1, 2)
             x = x.view(x.size(0), dim, self.degree, x.size(2))
-            x = tr.swapaxes(x, 2, 3)
-
+            coeff = tr.swapaxes(x, 2, 3)
             spline_bias = self.spline_biases[name](global_latent)
-            x = self.splines[name](x, spline_bias)
+            # x = self.splines[name](segment_intervals, coeff, spline_bias)
+            x = self.splines[name](coeff, spline_bias)
             x = tr.swapaxes(x, 1, 2)
             x = self.spline_acts[name](x)
 

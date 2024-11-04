@@ -19,6 +19,8 @@ init_args:
       adapt_act: none
   global_param_names: []
   dropout: 0.25
-  n_frames: 6001
-  n_segments: 48
+#  n_frames: 6001
+#  n_segments: 48
+  n_frames: 4501
+  n_segments: 36
   degree: 3
