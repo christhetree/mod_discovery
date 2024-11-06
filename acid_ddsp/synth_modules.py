@@ -423,8 +423,8 @@ class WavetableOsc(nn.Module):
             assert n_samples is not None
             wt_pos = wt_pos.unsqueeze(1)
             wt_pos = wt_pos.expand(-1, n_samples)
-        assert wt_pos.min() >= -1.0
-        assert wt_pos.max() <= 1.0
+        assert wt_pos.min() >= -1.0, f"wt_pos.min() = {wt_pos.min()}"
+        assert wt_pos.max() <= 1.0, f"wt_pos.max() = {wt_pos.max()}"
 
         arg = SquareSawVCOLite.calc_osc_arg(self.sr, f0_hz, n_samples, phase)
         arg = arg % (2 * tr.pi)

@@ -4,6 +4,8 @@ import os
 from typing import Optional
 
 import torch as tr
+from sympy import Piecewise
+from sympy.integrals.manualintegrate import PiecewiseRule
 from torch import Tensor as T
 from torch import nn
 from torch.nn import functional as F
@@ -110,47 +112,127 @@ class PiecewiseSplines(nn.Module):
     #     return x
 
 
-def create_support(seg_intervals: T, knots: T) -> (T, T):
-    assert seg_intervals.ndim == 2
-    n_frames = seg_intervals.size(1) + 1
-    assert knots.ndim == 2
-    n_segments = knots.size(1) + 1
-    assert n_segments < n_frames
-    support = tr.cumsum(seg_intervals, dim=1)
-    support = F.pad(support, (1, 0), value=0.0).unsqueeze(1)
-    max_t = tr.max(support, dim=2, keepdim=True).values
-    support = support.repeat(1, n_segments, 1)
-    seg_starts = F.pad(knots, (1, 0), value=0.0).unsqueeze(2)
-    seg_ends = tr.roll(seg_starts, shifts=-1, dims=1)
-    seg_ends[:, -1, :] = max_t
-    seg_ranges = seg_ends - seg_starts
-    mask = (support >= seg_starts) & (support < seg_ends)
-    mask[:, -1, -1] = True
-    support = support - seg_starts
-    support = support / seg_ranges
-    support = support * mask
-    return support, mask
+class PiecewiseBezier(nn.Module):
+    def __init__(
+        self,
+        n_frames: int,
+        n_segments: int,
+        degree: int,
+        eps: float = 1e-6,
+    ):
+        super().__init__()
+        assert n_frames >= 2
+        assert n_segments >= 1
+        assert n_segments < n_frames
+        assert degree >= 1
+        self.n_frames = n_frames
+        self.n_segments = n_segments
+        self.degree = degree
+        self.eps = eps
 
+        seg_intervals = tr.full((1, n_frames - 1), 1.0 / (n_frames - 1))
+        knots = tr.linspace(0.0, 1.0, n_segments + 1)[1:-1].view(1, -1)
+        support, mask = self.create_support(seg_intervals, knots)
+        assert support.min() == 0.0
+        assert support.max() == 1.0
+        assert mask.sum() == n_frames
+        self.register_buffer("support", support)
+        self.register_buffer("mask", mask)
 
-def create_bezier(support: T, control_points: T, bin_coeff: T, exp: T) -> T:
-    assert support.ndim == 3
-    bs, n_segments, n_frames = support.size()
-    assert control_points.ndim == 4
-    assert control_points.size(0) == bs
-    assert control_points.size(1) == n_segments
-    degree = control_points.size(2) - 1
-    dim = control_points.size(3)
-    assert bin_coeff.size() == (degree + 1,)
-    assert exp.size() == (degree + 1,)
-    t = support.unsqueeze(3)
-    bin_coeff = bin_coeff.view(1, 1, 1, -1)
-    exp = exp.view(1, 1, 1, -1)
-    bernstein_basis = bin_coeff * (t**exp) * ((1.0 - t) ** (degree - exp))
-    control_points = control_points.unsqueeze(2)
-    bernstein_basis = bernstein_basis.unsqueeze(-1)
-    bezier = control_points * bernstein_basis
-    bezier = bezier.sum(dim=-2)
-    return bezier
+        bin_coeff = []
+        for i in range(degree + 1):
+            bin_coeff.append(math.comb(degree, i))
+        bin_coeff = tr.tensor(bin_coeff).float()
+        exp = tr.arange(start=0, end=degree + 1).float()
+        self.register_buffer("bin_coeff", bin_coeff)
+        self.register_buffer("exp", exp)
+
+    def forward(self, coeff: T, last_seg_last_p: T) -> T:
+        bs = coeff.size(0)
+        n_dim = coeff.ndim
+        if n_dim == 4:
+            coeff = tr.flatten(coeff, start_dim=0, end_dim=1)
+            last_seg_last_p = last_seg_last_p.view(bs, 1)
+        assert coeff.ndim == 3
+        assert coeff.size(1) == self.n_segments
+        assert coeff.size(2) == self.degree
+        assert last_seg_last_p.size() == (bs, 1)
+        p0 = coeff[:, :, 0:1]
+        last_p = tr.roll(p0, shifts=-1, dims=1)
+        last_p[:, -1, :] = last_seg_last_p
+        control_points = tr.cat((coeff, last_p), dim=2)
+        control_points *= (1.0 - self.eps)
+        x = self.make_bezier_from_control_points(control_points)
+        assert x.min() >= 0.0, f"x.min(): {x.min()}"
+        assert x.max() <= 1.0, f"x.max(): {x.max()}"
+        if n_dim == 4:
+            x = x.view(bs, -1, x.size(1))
+        return x
+
+    def make_bezier_from_control_points(self, control_points: T) -> T:
+        assert control_points.ndim == 3
+        bs = control_points.size(0)
+        assert control_points.size(1) == self.n_segments
+        assert control_points.size(2) == self.degree + 1
+        control_points = control_points.unsqueeze(-1)
+        support = self.support.repeat(bs, 1, 1)
+        bezier = self.create_bezier(support, control_points, self.bin_coeff, self.exp)
+        bezier = bezier.squeeze(-1)
+        bezier = bezier * self.mask
+        bezier = bezier.sum(dim=1)
+        return bezier
+
+    @staticmethod
+    def create_support(seg_intervals: T, knots: T) -> (T, T):
+        assert seg_intervals.ndim == 2
+        n_frames = seg_intervals.size(1) + 1
+        assert knots.ndim == 2
+        n_segments = knots.size(1) + 1
+        assert n_segments < n_frames
+        support = tr.cumsum(seg_intervals, dim=1)
+        support = F.pad(support, (1, 0), value=0.0).unsqueeze(1)
+        max_t = tr.max(support, dim=2, keepdim=True).values
+        support = support.repeat(1, n_segments, 1)
+        seg_starts = F.pad(knots, (1, 0), value=0.0).unsqueeze(2)
+        seg_ends = tr.roll(seg_starts, shifts=-1, dims=1)
+        seg_ends[:, -1, :] = max_t
+        seg_ranges = seg_ends - seg_starts
+        mask = (support >= seg_starts) & (support < seg_ends)
+        mask[:, -1, -1] = True
+        support = support - seg_starts
+        support = support / seg_ranges
+        support = support * mask
+        return support, mask
+
+    @staticmethod
+    def create_bezier(support: T, control_points: T, bin_coeff: T, exp: T) -> T:
+        assert support.ndim == 3
+        bs, n_segments, n_frames = support.size()
+        assert control_points.ndim == 4
+        assert control_points.size(0) == bs
+        assert control_points.size(1) == n_segments
+        degree = control_points.size(2) - 1
+        dim = control_points.size(3)
+        assert bin_coeff.size() == (degree + 1,)
+        assert exp.size() == (degree + 1,)
+        t = support.unsqueeze(3)
+        bin_coeff = bin_coeff.view(1, 1, 1, -1)
+        exp = exp.view(1, 1, 1, -1)
+        bernstein_basis = bin_coeff * (t ** exp) * ((1.0 - t) ** (degree - exp))
+        control_points = control_points.unsqueeze(2)
+        bernstein_basis = bernstein_basis.unsqueeze(-1)
+        bezier = control_points * bernstein_basis
+        bezier = bezier.sum(dim=-2)
+        return bezier
+
+    # @staticmethod
+    # def logits_to_control_points(logits: T, n_segments: int, degree: int) -> T:
+    #     assert logits.ndim == 3
+    #     bs = logits.size(0)
+    #     n_frames = logits.size(1)
+    #     assert logits.size(2) == n_segments * (degree + 1)
+    #     control_points = logits.view(bs, n_frames, n_segments, degree + 1)
+    #     return control_points
 
 
 class FourierSignal(nn.Module):
@@ -224,31 +306,34 @@ if __name__ == "__main__":
     control_points = tr.tensor(
         [[0.0, 1.0, 1.0, 0.0], [1.0, 3.0, 3.0, -0.6], [-0.2, 0.0, 0.0, 0.7]]
         # [[0.0, 1.0, 1.0, 0.0], [0.5, 3.0, 3.0, 0.6]]
+        # [[0.0, 1.0, 1.0, 0.0]]
     )
-    control_points = control_points.unsqueeze(0).unsqueeze(-1)
+    control_points = control_points.unsqueeze(0)
     bs = control_points.size(0)
     n_segments = control_points.size(1)
     degree = control_points.size(2) - 1
 
     n_frames = 1000
-    seg_intervals = tr.full((bs, n_frames - 1), 1.0 / (n_frames - 1))
-    knots = tr.linspace(0.0, 1.0, n_segments + 1)[1:-1].view(1, -1)
+    bezier_module = PiecewiseBezier(n_frames, n_segments, degree)
+    x = bezier_module.make_bezier_from_control_points(control_points)
 
-    support, mask = create_support(seg_intervals, knots)
+    # seg_intervals = tr.full((bs, n_frames - 1), 1.0 / (n_frames - 1))
+    # knots = tr.linspace(0.0, 1.0, n_segments + 1)[1:-1].view(1, -1)
+    # support, mask = PiecewiseBezier.create_support(seg_intervals, knots)
     # exit()
 
 
     # support = tr.linspace(0.0, 1.0, n_frames).view(1, 1, -1).repeat(bs, n_segments, 1)
-    bin_coeff = []
-    for i in range(degree + 1):
-        bin_coeff.append(math.comb(degree, i))
-    bin_coeff = tr.tensor(bin_coeff)
-    exp = tr.arange(start=0, end=degree + 1).float()
-    x = create_bezier(support, control_points, bin_coeff, exp)
-    # x = x.view(1, -1)
-    x = x.squeeze(-1)
-    x = x * mask
-    x = x.sum(dim=1)
+    # bin_coeff = []
+    # for i in range(degree + 1):
+    #     bin_coeff.append(math.comb(degree, i))
+    # bin_coeff = tr.tensor(bin_coeff)
+    # exp = tr.arange(start=0, end=degree + 1).float()
+    # x = PiecewiseBezier.create_bezier(support, control_points, bin_coeff, exp)
+    # # x = x.view(1, -1)
+    # x = x.squeeze(-1)
+    # x = x * mask
+    # x = x.sum(dim=1)
 
     log.info(f"x.shape: {x.shape}")
 

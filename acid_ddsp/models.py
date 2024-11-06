@@ -10,7 +10,7 @@ from torch.nn import functional as F
 from torchaudio.transforms import AmplitudeToDB
 
 from adsr_haohao import extract_loudness
-from curves import PiecewiseSplines
+from curves import PiecewiseSplines, PiecewiseBezier
 from feature_extraction import LogMelSpecFeatureExtractor
 import librosa as li
 
@@ -185,7 +185,8 @@ class Spectral2DCNN(nn.Module):
             adapt_dim = temp_param["adapt_dim"]
             adapt_act = temp_param["adapt_act"]
             # Make frame by frame spline params
-            actual_dim = dim * self.degree  # Needed for non-linear splines
+            # actual_dim = dim * self.degree  # Needed for non-linear splines
+            actual_dim = dim * self.degree * self.n_segments  # For Bezier global
             n_hidden = (out_channels[-1] + actual_dim) // 2
             self.out_temp[name] = nn.Sequential(
                 nn.Linear(out_channels[-1], n_hidden),
@@ -195,9 +196,11 @@ class Spectral2DCNN(nn.Module):
                 nn.Dropout(p=dropout),
                 nn.PReLU(),
                 nn.Linear(n_hidden, actual_dim),
+                nn.Sigmoid(),  # For Bezier
             )
             # Make splines
-            self.splines[name] = PiecewiseSplines(n_frames, n_segments, degree)
+            # self.splines[name] = PiecewiseSplines(n_frames, n_segments, degree)
+            self.splines[name] = PiecewiseBezier(n_frames, n_segments, degree)
             # n_hidden = (out_channels[-1] + n_segments) // 2
             # self.spline_mlps[name] = nn.Sequential(
             #     nn.Linear(out_channels[-1], n_hidden),
@@ -218,6 +221,7 @@ class Spectral2DCNN(nn.Module):
                 nn.Dropout(p=dropout),
                 nn.PReLU(),
                 nn.Linear(n_hidden, dim),
+                nn.Sigmoid(),  # For Bezier
             )
             self.spline_acts[name] = get_activation(act)
             # Make adapters (changes dimensions of mod sig from N to M)
@@ -331,7 +335,7 @@ class Spectral2DCNN(nn.Module):
 
             dim = temp_param["dim"]
             assert dim == 1  # TODO(cm): tmp
-            x = self.out_temp[name](latent)
+            # x = self.out_temp[name](latent)
 
             # x_s = []
             # seg_end_indices_all = []
@@ -347,14 +351,19 @@ class Spectral2DCNN(nn.Module):
             # seg_end_indices_all = tr.stack(seg_end_indices_all, dim=0)
             # out_dict[f"{name}_seg_indices"] = seg_end_indices_all
 
-            chunks = tr.tensor_split(x, self.n_segments, dim=1)
-            chunks = [tr.mean(c, dim=1) for c in chunks]
-            x = tr.stack(chunks, dim=1)
-            # TODO(cm): check whether this is required,
-            #  I'm trying to prevent flattening occurring along the temporal axis
-            x = tr.swapaxes(x, 1, 2)
-            x = x.view(x.size(0), dim, self.degree, x.size(2))
-            coeff = tr.swapaxes(x, 2, 3)
+            # chunks = tr.tensor_split(x, self.n_segments, dim=1)
+            # chunks = [tr.mean(c, dim=1) for c in chunks]
+            # x = tr.stack(chunks, dim=1)
+            # # TODO(cm): check whether this is required,
+            # #  I'm trying to prevent flattening occurring along the temporal axis
+            # x = tr.swapaxes(x, 1, 2)
+            # x = x.view(x.size(0), dim, self.degree, x.size(2))
+            # coeff = tr.swapaxes(x, 2, 3)
+
+            # For Bezier global
+            coeff = self.out_temp[name](global_latent)
+            coeff = coeff.view(x.size(0), dim, self.n_segments, self.degree)
+
             spline_bias = self.spline_biases[name](global_latent)
             # x = self.splines[name](segment_intervals, coeff, spline_bias)
             x = self.splines[name](coeff, spline_bias)
