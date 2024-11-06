@@ -7,6 +7,9 @@ custom:
   model_name: wt_4__filter_1x1__spline_36d3__adsr_linear
 #  dataset_name: serum_v1__5k
   dataset_name: serum_v1__3s_5k
+#  dataset_name: serum_v1__BA_Angggeerrrrr
+#  dataset_name: serum_v1__BA_Digimods
+#  dataset_name: serum_v1__BA_DarkWobble
   cpu_batch_size: 5
   use_wandb_cpu: false
   use_wandb_gpu: true
@@ -14,7 +17,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [6]
+  devices: [4]
   max_epochs: 100
   num_sanity_val_steps: 1
   gradient_clip_val: 0.5

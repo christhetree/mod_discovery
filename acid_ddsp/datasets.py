@@ -129,6 +129,9 @@ class NSynthDataset(Dataset):
         super().__init__()
         assert os.path.exists(data_dir)
         fnames = sorted(glob.glob(f"{data_dir}/*.{ext}"))
+        # fnames = [f for f in fnames if "BA Angggeerrrrr 1999 [GI]" in f]
+        # fnames = [f for f in fnames if "BA Digimods [ASL]" in f]
+        # fnames = [f for f in fnames if "BA DarkWobble [CFA]" in f]
         rand = random.Random(shuffle_seed)
         rand.shuffle(fnames)
         # fnames = fnames[:5000]  # TODO(cm): tmp
