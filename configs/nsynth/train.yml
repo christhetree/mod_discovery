@@ -5,7 +5,7 @@ custom:
 #  model_name: testing
 #  model_name: wt_4__filter_1x1__spline_4d3_knotsv3__adsr_linear
 #  model_name: wt_4__filter_1x1__bezier_48d3__adsr_linear
-  model_name: wt_4__filter_1x1__bezier_12d3_global__adsr_linear
+  model_name: wt_4__filter_1x1__bezier_4d3k4__adsr_linear
 #  dataset_name: nsynth_vocal_synthetic_val
   dataset_name: nsynth_test
 #  dataset_name: nsynth_test__512
@@ -16,7 +16,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [5]
+  devices: [6]
   max_epochs: 100
   num_sanity_val_steps: 1
   gradient_clip_val: 0.5

@@ -119,3 +119,18 @@ def extract_model_and_synth_from_config(
         lm.load_state_dict(ckpt_data["state_dict"])
 
     return lm.model, lm.synth_hat
+
+
+def stable_softmax(logits: T, tau: float = 1.0) -> T:
+    assert tau > 0, f"Invalid temperature: {tau}, must be > 0"
+    # Subtract the max logit for numerical stability
+    max_logit = tr.max(logits, dim=-1, keepdim=True).values
+    logits = logits - max_logit
+    # Apply temperature scaling
+    scaled_logits = logits / tau
+    # Compute the exponential
+    exp_logits = tr.exp(scaled_logits)
+    # Normalize the probabilities
+    sum_exp_logits = tr.sum(exp_logits, dim=-1, keepdim=True)
+    softmax_probs = exp_logits / sum_exp_logits
+    return softmax_probs
