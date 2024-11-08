@@ -464,7 +464,13 @@ class WavetableOscShan(WavetableOsc):
     ):
         super().__init__(sr, n_pos, n_wt_samples, wt, aa_filter_n, is_trainable)
     
-    def _wavetable_osc_shan(self, wavetable, freq, sr):
+    def _wavetable_osc_shan(
+        wavetable: T, 
+        freq: T, 
+        sr: int,
+        n_samples: Optional[int] = None,
+        phase: Optional[T] = None,
+    ):
         """
         Wavetable synthesis oscilator with batch linear interpolation
         Input: 
@@ -476,10 +482,9 @@ class WavetableOscShan(WavetableOsc):
 
         """
         bs, n_wavetable, wt_len = wavetable.shape
-        increment = freq / sr * wt_len
-        index = tr.cumsum(increment, dim=1)
-        index -= increment[:, 0].unsqueeze(-1)                      # start from 0
-        index = index % wt_len
+        arg = SquareSawVCOLite.calc_osc_arg(sr, f0_hz, n_samples, phase)
+        arg = arg % (2 * tr.pi)
+        index = arg / (2 * tr.pi) * wt_len 
 
         # batch linear interpolation implementation
         index_low = tr.floor(index.clone())                         # (bs, n_samples)
@@ -488,13 +493,13 @@ class WavetableOscShan(WavetableOsc):
         index_low = index_low.long()
         index_high = index_high.long()
 
-        index_low = index_low.unsqueeze(1).expand(-1, 2, -1)        # (bs, n_wavetable, n_samples)
-        index_high = index_high.unsqueeze(1).expand(-1, 2, -1)      # (bs, n_wavetable, n_samples)
+        index_low = index_low.unsqueeze(1).expand(-1, n_wavetable, -1)        # (bs, n_wavetable, n_samples)
+        index_high = index_high.unsqueeze(1).expand(-1, n_wavetable, -1)      # (bs, n_wavetable, n_samples)
         index_high = index_high % wt_len
-        alpha = alpha.unsqueeze(1).expand(-1, 2, -1)                # (bs, n_wavetable, n_samples)
+        alpha = alpha.unsqueeze(1).expand(-1, n_wavetable, -1)                # (bs, n_wavetable, n_samples)
 
-        indexed_wavetables_low = tr.gather(wavetable, 2, index_low)   # (bs, n_wavetable, n_samples)
-        indexed_wavetables_high = tr.gather(wavetable, 2, index_high)  # (bs, n_wavetable, n_samples)
+        indexed_wavetables_low = tr.gather(wavetable, 2, index_low)           # (bs, n_wavetable, n_samples)
+        indexed_wavetables_high = tr.gather(wavetable, 2, index_high)         # (bs, n_wavetable, n_samples)
 
         signal = indexed_wavetables_low + alpha * (indexed_wavetables_high - indexed_wavetables_low)
         return signal
@@ -516,14 +521,11 @@ class WavetableOscShan(WavetableOsc):
         max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
         wt = self.get_anti_aliased_bounded_wt(max_f0_hz)
 
-        audio = self._wavetable_osc_shan(wt, f0_hz, self.sr)
+        audio = WavetableOscShan._wavetable_osc_shan(wt, f0_hz, self.sr, n_samples, phase)
         if attention_matrix is not None:
             # if attention matrix is provided, it must be of shape (bs, n_wavetables, n_samples)
             assert attention_matrix.ndim == 3
-            assert attention_matrix.size(0) == audio.size(0)
-            assert attention_matrix.size(1) == audio.size(1)
-            assert attention_matrix.size(2) == audio.size(2)
-
+            assert attention_matrix.shape == audio.shape, f"Attention matrix must be the same as audio shape, given attention matrix: {attention_matrix.shape}, audio: {audio.shape}"
             audio = tr.einsum("bns,bns->bs", audio, attention_matrix)
         else:
             # if not attention matrix is provided, we simply take the mean of the wavetables
