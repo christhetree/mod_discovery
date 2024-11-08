@@ -610,6 +610,18 @@ class WavetableSynthShan(WavetableSynth):
             wt=wt,
             is_trainable=is_trainable,
         )
+    
+    def additive_synthesis(
+        self,
+        n_samples: int,
+        f0_hz: T,
+        phase: T,
+        temp_params: Dict[str, T],
+        global_params: Dict[str, T],
+    ) -> (T, Dict[str, T]):
+        attention_matrix = temp_params.get("attention_matrix")
+        dry_audio = self.osc(f0_hz, attention_matrix, n_samples=n_samples, phase=phase)
+        return dry_audio, {}
 
 
 # if __name__ == "__main__":

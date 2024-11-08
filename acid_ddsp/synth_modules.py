@@ -482,7 +482,7 @@ class WavetableOscShan(WavetableOsc):
 
         """
         bs, n_wavetable, wt_len = wavetable.shape
-        arg = SquareSawVCOLite.calc_osc_arg(sr, f0_hz, n_samples, phase)
+        arg = SquareSawVCOLite.calc_osc_arg(sr, freq, n_samples, phase)
         arg = arg % (2 * tr.pi)
         index = arg / (2 * tr.pi) * wt_len 
 
