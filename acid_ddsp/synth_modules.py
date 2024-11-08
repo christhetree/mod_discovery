@@ -507,10 +507,9 @@ class WavetableOscShan(WavetableOsc):
     def forward(
         self,
         f0_hz: T,
-        wt_pos: Optional[T] = None,
+        attention_matrix: Optional[T] = None,
         n_samples: Optional[int] = None,
         phase: Optional[T] = None,
-        attention_matrix: Optional[T] = None,
     ) -> T:
         assert 1 <= f0_hz.ndim <= 2
         if f0_hz.ndim == 1:
