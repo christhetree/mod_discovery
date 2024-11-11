@@ -128,21 +128,20 @@ class NSynthDataset(Dataset):
     ):
         super().__init__()
         assert os.path.exists(data_dir)
-        fnames = sorted(glob.glob(f"{data_dir}/*.{ext}"))
-        rand = random.Random(shuffle_seed)
-        rand.shuffle(fnames)
+        # rand = random.Random(shuffle_seed)
+        # rand.shuffle(fnames)
         # fnames = fnames[:5000]  # TODO(cm): tmp
-        self.fnames = fnames
 
         if split == "train":
-            log.info(f"Found {len(self.fnames)} files")
-            self.fnames = self.fnames[: int(0.7 * len(self.fnames))]
+            data_dir_new = os.path.join(data_dir, "nsynth-train/audio")
         elif split == "val":
-            self.fnames = self.fnames[
-                int(0.7 * len(self.fnames)) : int(0.9 * len(self.fnames))
-            ]
+            data_dir_new = os.path.join(data_dir, "nsynth-valid/audio")
         else:
-            self.fnames = self.fnames[int(0.9 * len(self.fnames)) :]
+            data_dir_new = os.path.join(data_dir, "nsynth-test/audio")
+        
+        fnames = sorted(glob.glob(f"{data_dir_new}/*.{ext}"))
+        self.fnames = fnames
+        log.info(f"Split: {split} Found {len(self.fnames)} files")
 
         self.ac = ac
         self.shuffle_seed = shuffle_seed

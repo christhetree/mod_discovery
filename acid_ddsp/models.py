@@ -87,6 +87,7 @@ class Spectral2DCNN(nn.Module):
         n_frames: int = 188,
         n_segments: int = 4,
         degree: int = 3,
+        wt_n_pos: int = -1,
     ) -> None:
         super().__init__()
         self.fe = fe
@@ -99,6 +100,7 @@ class Spectral2DCNN(nn.Module):
         self.n_frames = n_frames
         self.n_segments = n_segments
         self.degree = degree
+        self.wt_n_pos = wt_n_pos
 
         # Define default params
         if out_channels is None:
@@ -139,6 +141,7 @@ class Spectral2DCNN(nn.Module):
         # Define CNN
         layers = []
         loudness_layers = []
+        wt_attn_layers = []
         curr_n_bins = fe.n_bins
         for out_ch, b_dil, t_dil in zip(out_channels, bin_dilations, temp_dilations):
             layers.append(
@@ -155,11 +158,18 @@ class Spectral2DCNN(nn.Module):
             curr_n_bins = curr_n_bins // pool_size[0]
         self.cnn = nn.Sequential(*layers)
 
+        wt_attn_layers.append(
+            Spectral2DCNNBlock(
+                1, self.wt_n_pos, (1, kernel_size[1]), 1, t_dil, (1, 1), use_ln
+            )
+        )
+
         # ADSR
         self.loudness_extractor = LoudnessExtractor(
             sr=fe.sr, n_fft=fe.n_fft, hop_len=fe.hop_len
         )
         self.loudness_cnn = nn.Sequential(*loudness_layers)
+        self.wt_attn_cnn = nn.Sequential(*wt_attn_layers)
         n_hidden = (out_channels[-1] + 4) // 2
         self.loudness_mlp = nn.Sequential(
             nn.Linear(out_channels[-1], n_hidden),
@@ -269,6 +279,15 @@ class Spectral2DCNN(nn.Module):
         #     .unsqueeze(1)
         #     .float()
         # )
+
+        # Extract wt_attn
+        # downsample x by a factor of 32
+        x_downsample = F.interpolate(x, scale_factor=1/32, mode='nearest')
+        wt_attn = self.wt_attn_cnn(x_downsample.unsqueeze(1)).squeeze(2)
+        wt_attn = tr.softmax(wt_attn, dim=1)
+        wt_attn = F.interpolate(wt_attn, scale_factor=32, mode='linear')
+        out_dict["attention_matrix"] = wt_attn
+
         # Extract envelope by conditioning on loudness
         loudness = self.loudness_extractor(x.squeeze(1))
         loudness = loudness.unsqueeze(1).unsqueeze(1)

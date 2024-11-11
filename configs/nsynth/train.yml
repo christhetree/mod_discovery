@@ -3,8 +3,8 @@ seed_everything: 42
 custom:
   project_name: acid_ddsp_2
 #  model_name: testing
-#  model_name: wt_4__filter_1x1__spline_48d3__adsr_linear
-  model_name: wt_4__filter_1x1__spline_48d3__adsr_linear_scat1d_Q24_T32_O1
+  model_name: wt_4__filter_1x1__spline_48d3__adsr_linear__npos=5
+  # model_name: wt_4__filter_1x1__spline_48d3__adsr_linear_scat1d_Q24_T32_O1
 #  dataset_name: nsynth_vocal_synthetic_val
   dataset_name: nsynth_test
   cpu_batch_size: 5
@@ -14,7 +14,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [4]
+  devices: [0]
   max_epochs: 50
   num_sanity_val_steps: 0
   gradient_clip_val: 0.5
@@ -24,10 +24,10 @@ trainer:
 data:
   class_path: acid_ddsp.data_modules.NSynthDataModule
   init_args:
-    batch_size: 32
+    batch_size: 16
     ac: audio_config.yml
 #    data_dir: ../data/nsynth_vocal_synthetic_val
-    data_dir: ../data/nsynth_test
+    data_dir: ../../nsynth/
     num_workers: 4
 
 model:
@@ -40,14 +40,14 @@ model:
     # use_model: false
     use_model: true
     model: spectral_2dcnn.yml
-    temp_param_names_hat: [add_lfo, sub_lfo]
+    temp_param_names_hat: [add_lfo, sub_lfo, attention_matrix]
     global_param_names_hat: [attack, decay, sustain, release]
     synth_hat: synth.yml
 
-#    loss_func: auraloss.freq.MultiResolutionSTFTLoss
-    loss_func: scat1d_dtfa.yml
-#    loss_func: jtfs_small.yml
-#    loss_func: jtfs_dtfa.yml
+    loss_func: auraloss.freq.MultiResolutionSTFTLoss
+#   loss_func: scat1d_dtfa.yml
+#   loss_func: jtfs_small.yml
+#   loss_func: jtfs_dtfa.yml
 
     synth_opt: ../opt/sf_adam_w__lr_5e-2.yml
     model_opt: ../opt/sf_adam_w__lr_5e-3.yml
