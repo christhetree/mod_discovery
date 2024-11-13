@@ -448,6 +448,91 @@ class WavetableOsc(nn.Module):
         return audio
 
 
+class WavetableOscShan(WavetableOsc):
+    """
+    Wavetable Oscillator from Differentiable Wavetable Synthesis, Shan et al.
+    that uses weighted sum instead of grid_sample.
+    """
+    def __init__(
+        self,
+        sr: int,
+        n_pos: Optional[int] = None,
+        n_wt_samples: Optional[int] = None,
+        wt: Optional[T] = None,
+        aa_filter_n: Optional[int] = None,
+        is_trainable: bool = True,
+    ):
+        super().__init__(sr, n_pos, n_wt_samples, wt, aa_filter_n, is_trainable)
+    
+    def _wavetable_osc_shan(
+        wavetable: T, 
+        freq: T, 
+        sr: int,
+        n_samples: Optional[int] = None,
+        phase: Optional[T] = None,
+    ):
+        """
+        Wavetable synthesis oscilator with batch linear interpolation
+        Input: 
+            wavetable: (batch_size, n_wavetable, wavetable_len,)
+            freq: (batch_size, n_samples)
+            sr: int
+        Output:
+            signal: (batch_size, n_wavetable, n_samples)
+
+        """
+        bs, n_wavetable, wt_len = wavetable.shape
+        arg = SquareSawVCOLite.calc_osc_arg(sr, freq, n_samples, phase)
+        arg = arg % (2 * tr.pi)
+        index = arg / (2 * tr.pi) * wt_len 
+
+        # batch linear interpolation implementation
+        index_low = tr.floor(index.clone())                         # (bs, n_samples)
+        index_high = tr.ceil(index.clone())                         # (bs, n_samples)
+        alpha = index - index_low                                   # (bs, n_samples)
+        index_low = index_low.long()
+        index_high = index_high.long()
+
+        index_low = index_low.unsqueeze(1).expand(-1, n_wavetable, -1)        # (bs, n_wavetable, n_samples)
+        index_high = index_high.unsqueeze(1).expand(-1, n_wavetable, -1)      # (bs, n_wavetable, n_samples)
+        index_high = index_high % wt_len
+        alpha = alpha.unsqueeze(1).expand(-1, n_wavetable, -1)                # (bs, n_wavetable, n_samples)
+
+        indexed_wavetables_low = tr.gather(wavetable, 2, index_low)           # (bs, n_wavetable, n_samples)
+        indexed_wavetables_high = tr.gather(wavetable, 2, index_high)         # (bs, n_wavetable, n_samples)
+
+        signal = indexed_wavetables_low + alpha * (indexed_wavetables_high - indexed_wavetables_low)
+        return signal
+    
+    def forward(
+        self,
+        f0_hz: T,
+        attention_matrix: Optional[T] = None,
+        n_samples: Optional[int] = None,
+        phase: Optional[T] = None,
+    ) -> T:
+        assert 1 <= f0_hz.ndim <= 2
+        if f0_hz.ndim == 1:
+            assert n_samples is not None
+            f0_hz = f0_hz.unsqueeze(1)
+            f0_hz = f0_hz.expand(-1, n_samples)
+        
+        max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
+        wt = self.get_anti_aliased_bounded_wt(max_f0_hz)
+
+        audio = WavetableOscShan._wavetable_osc_shan(wt, f0_hz, self.sr, n_samples, phase)
+        if attention_matrix is not None:
+            # if attention matrix is provided, it must be of shape (bs, n_wavetables, n_samples)
+            assert attention_matrix.ndim == 3
+            assert attention_matrix.shape == audio.shape, f"Attention matrix must be the same as audio shape, given attention matrix: {attention_matrix.shape}, audio: {audio.shape}"
+            audio = tr.einsum("bns,bns->bs", audio, attention_matrix)
+        else:
+            # if not attention matrix is provided, we simply take the mean of the wavetables
+            audio = audio.mean(dim=1)
+
+        return audio
+
+
 class FourierWavetableOsc(WavetableOsc):
     def __init__(
         self,
@@ -488,6 +573,7 @@ class FourierWavetableOsc(WavetableOsc):
 
 
 if __name__ == "__main__":
+    # ============ Test WavetableOsc ============
     # bs = 2
     # sr = 48000
     # n_sec = 4.0
@@ -514,6 +600,29 @@ if __name__ == "__main__":
     #
     # torchaudio.save("../out/audio.wav", audio[0:1, :], sr)
     # exit()
+
+    # ============ Test WavetableOscShan ============
+    # bs = 3
+    # sr = 48000
+    # n_sec = 4.0
+    # n_samples = int(sr * n_sec)
+    # n_wt_samples = 1024
+    # f0_hz = tr.tensor([220.0, 440.0, 880.0])
+    
+    # # prepare some wavetables for test
+    # wt_sin = tr.sin(tr.linspace(0, 2 * tr.pi, n_wt_samples))
+    # wt_square = tr.sign(tr.sin(tr.linspace(0, 2 * tr.pi, n_wt_samples)))
+    # wt = tr.stack([wt_sin, wt_square], dim=0)
+    # osc = WavetableOscShan(sr, n_pos=2, n_wt_samples=n_wt_samples, wt=wt)
+    # audio = osc(f0_hz=f0_hz, wt_pos=None, n_samples=n_samples)
+    # audio = audio.reshape(-1, audio.size(-1))
+    # import soundfile as sf
+    # for idx, audio in enumerate(audio):
+    #     import matplotlib.pyplot as plt
+    #     plt.plot(audio.detach().numpy().squeeze()[:1000])
+    #     sf.write(f"audio_{idx}.wav", audio.squeeze().detach().numpy(), sr)
+    # plt.savefig("audio.png")
+    # plt.close()
 
     note_off = tr.tensor([0.75, 0.75])
     attack = tr.tensor([0.1, 0.2])
