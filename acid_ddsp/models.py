@@ -2,17 +2,15 @@ import logging
 import os
 from typing import Optional, List, Tuple, Dict
 
+import librosa as li
 import torch as tr
-import torchaudio
 from torch import Tensor as T
 from torch import nn
 from torch.nn import functional as F
 from torchaudio.transforms import AmplitudeToDB
 
-from adsr_haohao import extract_loudness
-from curves import PiecewiseSplines, PiecewiseBezier
+from curves import PiecewiseBezier
 from feature_extraction import LogMelSpecFeatureExtractor
-import librosa as li
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -27,8 +25,33 @@ def get_activation(act_name: str) -> nn.Module:
         return nn.Sigmoid()
     elif act_name == "tanh":
         return nn.Tanh()
+    elif act_name == "softmax":
+        return nn.Softmax(dim=-1)
     else:
         raise ValueError(f"Unknown activation: {act_name}")
+
+
+class BidirectionalLSTM(nn.Module):
+    def __init__(
+        self,
+        input_size: int,
+        hidden_size: int,
+        num_layers: int = 1,
+        batch_first: bool = True,
+    ):
+        super().__init__()
+        self.lstm = nn.LSTM(
+            input_size,
+            hidden_size,
+            num_layers=num_layers,
+            batch_first=batch_first,
+            bidirectional=True,
+        )
+
+    def forward(self, x: T) -> T:
+        # LSTM returns output and (hidden, cell) states, we only need the output
+        output, _ = self.lstm(x)
+        return output
 
 
 class Spectral2DCNNBlock(nn.Module):
@@ -175,7 +198,7 @@ class Spectral2DCNN(nn.Module):
         # Define temporal params
         self.out_temp = nn.ModuleDict()
         self.splines = nn.ModuleDict()
-        self.spline_mlps = nn.ModuleDict()
+        # self.spline_mlps = nn.ModuleDict()
         self.spline_biases = nn.ModuleDict()
         self.spline_acts = nn.ModuleDict()
         self.adapters = nn.ModuleDict()
@@ -189,6 +212,7 @@ class Spectral2DCNN(nn.Module):
             # actual_dim = dim * self.degree * self.n_segments  # For Bezier global
             n_hidden = (out_channels[-1] + actual_dim) // 2
             self.out_temp[name] = nn.Sequential(
+                BidirectionalLSTM(out_channels[-1], out_channels[-1] // 2),
                 nn.Linear(out_channels[-1], n_hidden),
                 nn.Dropout(p=dropout),
                 nn.PReLU(),
@@ -200,16 +224,16 @@ class Spectral2DCNN(nn.Module):
             # Make splines
             # self.splines[name] = PiecewiseSplines(n_frames, n_segments, degree)
             self.splines[name] = PiecewiseBezier(n_frames, n_segments, degree)
-            n_hidden = (out_channels[-1] + n_segments) // 2
-            self.spline_mlps[name] = nn.Sequential(
-                nn.Linear(out_channels[-1], n_hidden),
-                nn.Dropout(p=dropout),
-                nn.PReLU(),
-                nn.Linear(n_hidden, n_hidden),
-                nn.Dropout(p=dropout),
-                nn.PReLU(),
-                nn.Linear(n_hidden, n_segments),
-            )
+            # n_hidden = (out_channels[-1] + n_segments) // 2
+            # self.spline_mlps[name] = nn.Sequential(
+            #     nn.Linear(out_channels[-1], n_hidden),
+            #     nn.Dropout(p=dropout),
+            #     nn.PReLU(),
+            #     nn.Linear(n_hidden, n_hidden),
+            #     nn.Dropout(p=dropout),
+            #     nn.PReLU(),
+            #     nn.Linear(n_hidden, n_segments),
+            # )
             n_hidden = (out_channels[-1] + dim) // 2
             self.spline_biases[name] = nn.Sequential(
                 nn.Linear(out_channels[-1], n_hidden),
@@ -324,7 +348,8 @@ class Spectral2DCNN(nn.Module):
 
         # Calc temporal params
         for name, temp_param in self.temp_params.items():
-            si_logits = self.spline_mlps[name](global_latent)
+            # si_logits = self.spline_mlps[name](global_latent)
+            si_logits = None
 
             # segment_intervals = self.spline_mlps[name](global_latent)
             # min_segment_interval = 0.04

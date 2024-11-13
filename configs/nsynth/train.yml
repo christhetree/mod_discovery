@@ -3,12 +3,10 @@ seed_everything: 42
 custom:
   project_name: acid_ddsp_2
 #  model_name: testing
-#  model_name: wt_4__filter_1x1__spline_4d3_knotsv3__adsr_linear
-#  model_name: wt_4__filter_1x1__bezier_48d3__adsr_linear
-  model_name: wt_4__filter_1x1__bezier_4d3k4__adsr_linear
+  model_name: wt_4__bezier_p12d3__lstm
+#  model_name: wt_4_shan__bezier_p12d3__lstm
 #  dataset_name: nsynth_vocal_synthetic_val
   dataset_name: nsynth_test
-#  dataset_name: nsynth_test__512
   cpu_batch_size: 5
   use_wandb_cpu: false
   use_wandb_gpu: true
@@ -16,11 +14,10 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [6]
+  devices: [7]
   max_epochs: 100
   num_sanity_val_steps: 1
   gradient_clip_val: 0.5
-
   accumulate_grad_batches: 1
 
 data:
@@ -42,9 +39,11 @@ model:
     # use_model: false
     use_model: true
     model: spectral_2dcnn.yml
+    synth_hat: synth.yml
+#    model: spectral_2dcnn_shan.yml
+#    synth_hat: synth_shan.yml
     temp_param_names_hat: [add_lfo, sub_lfo]
     global_param_names_hat: [attack, decay, sustain, release]
-    synth_hat: synth.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
 #    loss_func: scat1d_dtfa.yml

@@ -468,7 +468,15 @@ class WavetableSynth(SynthBase):
         temp_params: Dict[str, T],
         global_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
-        wt_pos = temp_params["wt_pos"]
+        wt_pos = temp_params["add_lfo"]
+        # if wt_pos is None:
+        #     wt_pos = tr.full_like(f0_hz, -1.0).unsqueeze(1)
+        # else:
+        wt_pos = wt_pos.squeeze(2) * 2.0 - 1.0
+        wt_pos = util.linear_interpolate_dim(
+            wt_pos, self.ac.n_samples, align_corners=True
+        )
+        temp_params["wt_pos"] = wt_pos
         dry_audio = self.osc(f0_hz, wt_pos, n_samples=n_samples, phase=phase)
         return dry_audio, {}
 
@@ -531,15 +539,6 @@ class WavetableSynth(SynthBase):
         envelope: Optional[T] = None,
         note_on_duration: Optional[T] = None,
     ) -> Dict[str, T]:
-        wt_pos = temp_params.get("add_lfo")
-        # TODO(cm): tmp
-        if wt_pos is None:
-            wt_pos = tr.full_like(f0_hz, -1.0).unsqueeze(1)
-        else:
-            wt_pos = wt_pos.squeeze(2) * 2.0 - 1.0  # TODO(cm): use tanh instead
-        wt_pos = util.linear_interpolate_dim(
-            wt_pos, self.ac.n_samples, align_corners=True
-        )
         if envelope is None:
             attack = global_params["attack"]
             decay = global_params["decay"]
@@ -558,7 +557,6 @@ class WavetableSynth(SynthBase):
             envelope = util.linear_interpolate_dim(
                 envelope, n_samples, align_corners=True
             )
-        temp_params["wt_pos"] = wt_pos
         # TODO(cm): tmp
         logits = temp_params.get("sub_lfo_adapted")
         if logits is not None:
@@ -619,7 +617,12 @@ class WavetableSynthShan(WavetableSynth):
         temp_params: Dict[str, T],
         global_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
-        attention_matrix = temp_params.get("attention_matrix")
+        attention_matrix = temp_params["add_lfo_adapted"]
+        attention_matrix = tr.swapaxes(attention_matrix, 1, 2)
+        attention_matrix = util.linear_interpolate_dim(
+            attention_matrix, self.ac.n_samples, align_corners=True
+        )
+        temp_params["attention_matrix"] = attention_matrix
         dry_audio = self.osc(f0_hz, attention_matrix, n_samples=n_samples, phase=phase)
         return dry_audio, {}
 
