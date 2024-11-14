@@ -188,13 +188,15 @@ class PiecewiseBezier(nn.Module):
     ) -> T:
         bs = coeff_logits.size(0)
         n_dim = coeff_logits.ndim
+        n_ch = 1
         if n_dim == 4:
+            n_ch = coeff_logits.size(1)
             coeff_logits = tr.flatten(coeff_logits, start_dim=0, end_dim=1)
-            last_seg_last_p_logits = last_seg_last_p_logits.view(bs, 1)
+            last_seg_last_p_logits = last_seg_last_p_logits.view(bs * n_ch, 1)
         assert coeff_logits.ndim == 3
         assert coeff_logits.size(1) == self.n_segments
         assert coeff_logits.size(2) == self.degree
-        assert last_seg_last_p_logits.size() == (bs, 1)
+        assert last_seg_last_p_logits.size() == (bs * n_ch, 1)
         coeff = self.logits_to_control_points(coeff_logits)
         last_seg_last_p = self.logits_to_control_points(last_seg_last_p_logits)
         p0 = coeff[:, :, 0:1]
@@ -204,7 +206,7 @@ class PiecewiseBezier(nn.Module):
 
         if support_logits is None:
             # assert False
-            support = self.support.repeat(bs, 1, 1)
+            support = self.support.repeat(bs * n_ch, 1, 1)
             mask = self.mask
         else:
             seg_intervals = self.logits_to_seg_intervals(support_logits)
@@ -214,7 +216,7 @@ class PiecewiseBezier(nn.Module):
         assert x.min() >= 0.0, f"x.min(): {x.min()}"
         assert x.max() <= 1.0, f"x.max(): {x.max()}"
         if n_dim == 4:
-            x = x.view(bs, -1, x.size(1))
+            x = x.view(bs, n_ch, x.size(1))
         return x
 
     @staticmethod

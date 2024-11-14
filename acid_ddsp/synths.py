@@ -618,6 +618,7 @@ class WavetableSynthShan(WavetableSynth):
         global_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
         attention_matrix = temp_params["add_lfo_adapted"]
+        # attention_matrix = temp_params["add_lfo"]
         attention_matrix = tr.swapaxes(attention_matrix, 1, 2)
         attention_matrix = util.linear_interpolate_dim(
             attention_matrix, self.ac.n_samples, align_corners=True

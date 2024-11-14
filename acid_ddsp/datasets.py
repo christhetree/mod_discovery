@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import random
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import librosa
 import torch as tr
@@ -123,18 +123,25 @@ class NSynthDataset(Dataset):
         ac: AudioConfig,
         data_dir: str,
         ext: str = "wav",
+        max_n_files: Optional[int] = None,
+        fname_keyword: Optional[str] = None,
         split: str = "train",
         shuffle_seed: int = 42,
     ):
         super().__init__()
         assert os.path.exists(data_dir)
         fnames = sorted(glob.glob(f"{data_dir}/*.{ext}"))
-        # fnames = [f for f in fnames if "BA Angggeerrrrr 1999 [GI]" in f]
-        # fnames = [f for f in fnames if "BA Digimods [ASL]" in f]
-        # fnames = [f for f in fnames if "BA DarkWobble [CFA]" in f]
+        log.info(f"Found {len(fnames)} files")
+        if fname_keyword is not None:
+            log.info(f"Filtering filenames with keyword: '{fname_keyword}'")
+            fnames = [f for f in fnames if fname_keyword in f]
+            log.info(f"Filtered down to {len(fnames)} files")
+
         rand = random.Random(shuffle_seed)
         rand.shuffle(fnames)
-        # fnames = fnames[:5000]  # TODO(cm): tmp
+        if max_n_files is not None:
+            log.info(f"Limiting number of files to {max_n_files}")
+            fnames = fnames[:max_n_files]
         self.fnames = fnames
 
         if split == "train":
@@ -196,9 +203,11 @@ class SerumDataset(NSynthDataset):
         data_dir: str,
         preset_params_path: str,
         ext: str = "wav",
+        max_n_files: Optional[int] = None,
+        fname_keyword: Optional[str] = None,
         split: str = "train",
     ):
-        super().__init__(ac, data_dir, ext, split)
+        super().__init__(ac, data_dir, ext, max_n_files, fname_keyword, split)
         with open(preset_params_path, "r") as f:
             self.preset_params = json.load(f)
         # TODO(cm): cleanup

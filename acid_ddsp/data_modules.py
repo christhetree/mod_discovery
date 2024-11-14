@@ -235,6 +235,8 @@ class NSynthDataModule(pl.LightningDataModule):
         ac: AudioConfig,
         data_dir: str,
         ext: str = "wav",
+        max_n_files: Optional[int] = None,
+        fname_keyword: Optional[str] = None,
         num_workers: int = 0,
     ):
         super().__init__()
@@ -242,6 +244,8 @@ class NSynthDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.ac = ac
         self.data_dir = data_dir
+        self.max_n_files = max_n_files
+        self.fname_keyword = fname_keyword
         self.ext = ext
         self.num_workers = num_workers
 
@@ -249,19 +253,25 @@ class NSynthDataModule(pl.LightningDataModule):
             ac,
             data_dir,
             ext,
-            "train",
+            max_n_files,
+            fname_keyword,
+            split="train",
         )
         self.val_ds = NSynthDataset(
             ac,
             data_dir,
             ext,
-            "val",
+            max_n_files,
+            fname_keyword,
+            split="val",
         )
         self.test_ds = NSynthDataset(
             ac,
             data_dir,
             ext,
-            "test",
+            max_n_files,
+            fname_keyword,
+            split="test",
         )
 
     def train_dataloader(self) -> DataLoader:
@@ -300,6 +310,8 @@ class SerumDataModule(pl.LightningDataModule):
         data_dir: str,
         preset_params_path: str,
         ext: str = "wav",
+        max_n_files: Optional[int] = None,
+        fname_keyword: Optional[str] = None,
         num_workers: int = 0,
     ):
         super().__init__()
@@ -309,6 +321,8 @@ class SerumDataModule(pl.LightningDataModule):
         self.data_dir = data_dir
         self.preset_params_path = preset_params_path
         self.ext = ext
+        self.max_n_files = max_n_files
+        self.fname_keyword = fname_keyword
         self.num_workers = num_workers
 
         self.train_ds = SerumDataset(
@@ -316,21 +330,25 @@ class SerumDataModule(pl.LightningDataModule):
             data_dir,
             preset_params_path,
             ext,
-            "train",
+            max_n_files,
+            fname_keyword,
+            split="train",
         )
         self.val_ds = SerumDataset(
             ac,
             data_dir,
             preset_params_path,
             ext,
-            "val",
+            max_n_files,
+            fname_keyword,
+            split="val",
         )
         self.test_ds = SerumDataset(
             ac,
             data_dir,
             preset_params_path,
             ext,
-            "test",
+            split="test",
         )
 
     def train_dataloader(self) -> DataLoader:

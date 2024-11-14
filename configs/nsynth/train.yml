@@ -14,7 +14,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [7]
+  devices: [6]
   max_epochs: 100
   num_sanity_val_steps: 1
   gradient_clip_val: 0.5
