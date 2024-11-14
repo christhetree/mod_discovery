@@ -19,6 +19,7 @@ init_args:
       adapt_act: none
   global_param_names: []
   dropout: 0.25
+  use_splines: true
   n_frames: 2001
   n_segments: 12
   degree: 3

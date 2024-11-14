@@ -558,7 +558,7 @@ class WavetableSynth(SynthBase):
                 envelope, n_samples, align_corners=True
             )
         # TODO(cm): tmp
-        logits = temp_params.get("sub_lfo_adapted")
+        logits = temp_params.get("sub_lfo")
         if logits is not None:
             logits = logits.unsqueeze(2)
             logits = logits.unsqueeze(3)
@@ -617,8 +617,7 @@ class WavetableSynthShan(WavetableSynth):
         temp_params: Dict[str, T],
         global_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
-        attention_matrix = temp_params["add_lfo_adapted"]
-        # attention_matrix = temp_params["add_lfo"]
+        attention_matrix = temp_params["add_lfo"]
         attention_matrix = tr.swapaxes(attention_matrix, 1, 2)
         attention_matrix = util.linear_interpolate_dim(
             attention_matrix, self.ac.n_samples, align_corners=True

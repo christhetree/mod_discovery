@@ -4,7 +4,8 @@ custom:
   project_name: acid_ddsp_2
 #  model_name: testing
 #  model_name: wt_4__bezier_p12d3__lstm
-  model_name: wt_4_shan__bezier_p12d3__lstm
+#  model_name: wt_4_shan__bezier_p12d3__lstm
+  model_name: wt_4_shan__bezier_no_splines__lstm
   dataset_name: serum_v1__BA_3s
 #  dataset_name: serum_v1__BA_Angggeerrrrr
 #  dataset_name: serum_v1__BA_Digimods
@@ -16,7 +17,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [5]
+  devices: [7]
   max_epochs: 100
   num_sanity_val_steps: 1
   gradient_clip_val: 0.5
@@ -46,7 +47,8 @@ model:
     use_model: true
 #    model: spectral_2dcnn.yml
 #    synth_hat: synth.yml
-    model: spectral_2dcnn_shan.yml
+#    model: spectral_2dcnn_shan.yml
+    model: spectral_2dcnn_shan__no_splines.yml
     synth_hat: synth_shan.yml
     temp_param_names_hat: [add_lfo, sub_lfo]
     global_param_names_hat: [attack, decay, sustain, release]
