@@ -2,8 +2,8 @@ seed_everything: 42
 
 custom:
   project_name: acid_ddsp_2
-#  model_name: testing
-  model_name: wt_4__bezier_p12d3__lstm
+  model_name: testing
+#  model_name: wt_4__bezier_p12d3__lstm
 #  model_name: wt_4_shan__bezier_p12d3__lstm
 #  dataset_name: nsynth_vocal_synthetic_val
   dataset_name: nsynth_test

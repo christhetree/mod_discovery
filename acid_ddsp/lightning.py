@@ -208,9 +208,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
             for p_name in self.temp_param_names_hat:
                 temp_param_hat = model_out[p_name]
                 temp_params_hat[p_name] = temp_param_hat
+                if f"{p_name}_before_adapter" in model_out:
+                    p = model_out[f"{p_name}_before_adapter"]
+                    temp_params_hat[f"{p_name}_before_adapter"] = p
                 if f"{p_name}_adapted" in model_out:
-                    temp_param_adapted_hat = model_out[f"{p_name}_adapted"]
-                    temp_params_hat[f"{p_name}_adapted"] = temp_param_adapted_hat
+                    p = model_out[f"{p_name}_adapted"]
+                    temp_params_hat[f"{p_name}_adapted"] = p
 
             # Postprocess global_params_hat
             for p_name in self.global_param_names_hat:
@@ -370,8 +373,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "envelope": envelope,
             "log_spec_wet": log_spec_wet,
             "log_spec_wet_hat": log_spec_wet_hat,
-            # "add_lfo_hat_seg_indices": model_out["add_lfo_seg_indices"],
-            # "sub_lfo_hat_seg_indices": model_out["sub_lfo_seg_indices"],
+            # TODO(cm): tmp
+            # "add_lfo_seg_indices_hat": model_out["add_lfo_seg_indices"],
+            # "sub_lfo_seg_indices_hat": model_out["sub_lfo_seg_indices"],
         }
         out_dict.update(temp_params)
         out_dict.update(temp_params_hat)

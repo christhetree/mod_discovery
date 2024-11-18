@@ -4,8 +4,6 @@ import os
 from typing import Optional
 
 import torch as tr
-from sympy import Piecewise
-from sympy.integrals.manualintegrate import PiecewiseRule
 from torch import Tensor as T
 from torch import nn
 from torch.nn import functional as F
@@ -264,6 +262,161 @@ class PiecewiseBezier(nn.Module):
         return bezier
 
 
+class PiecewiseBezierDiffSeg(PiecewiseBezier):
+    def __init__(
+        self,
+        n_frames: int,
+        n_segments: int,
+        degree: int,
+        tsp_window_size: Optional[float] = None,
+        n: int = 2,
+        eps: float = 1e-6,
+    ):
+        super().__init__(n_frames, n_segments, degree, eps)
+        self.tsp_window_size = tsp_window_size
+        self.n = n
+
+        support = tr.linspace(0.0, 1.0, n_frames).view(1, 1, -1)
+        support = support.repeat(1, n_segments, 1)
+        self.register_buffer("support", support)
+
+        seg_fn_support = tr.linspace(0.0, 1.0, n_frames).view(1, 1, -1)
+        seg_fn_support = seg_fn_support.repeat(1, n_segments - 1, 1)
+        self.register_buffer("seg_fn_support", seg_fn_support)
+
+        seg_indices = tr.arange(0, n_segments).float()
+        self.register_buffer("seg_indices", seg_indices)
+
+    def logits_to_seg_intervals(
+        self, logits: T, min_seg_interval: Optional[float] = None
+    ) -> T:
+        assert logits.ndim == 2
+        n_intervals = logits.size(1)
+        if min_seg_interval is None:
+            min_seg_interval = 1.0 / (2.0 * n_intervals)
+        else:
+            assert 0.0 < min_seg_interval < 1.0 / n_intervals
+        scaling_factor = 1.0 - (n_intervals * min_seg_interval)
+        si = util.stable_softmax(logits)
+        si = si * scaling_factor + min_seg_interval
+        return si
+
+    def forward(self, coeff_logits: T, mode_logits: T) -> T:
+        bs = coeff_logits.size(0)
+        n_dim = coeff_logits.ndim
+        n_ch = 1
+        if n_dim == 4:
+            n_ch = coeff_logits.size(1)
+            coeff_logits = tr.flatten(coeff_logits, start_dim=0, end_dim=1)
+            mode_logits = tr.flatten(mode_logits, start_dim=0, end_dim=1)
+        assert coeff_logits.ndim == 3
+        assert coeff_logits.size(1) == self.n_segments
+        assert coeff_logits.size(2) == self.degree + 1
+        assert mode_logits.ndim == 2
+        assert mode_logits.size(1) == self.n_segments
+        control_points = self.logits_to_control_points(coeff_logits)
+        support = self.support.repeat(bs * n_ch, 1, 1)
+        seg_intervals = self.logits_to_seg_intervals(mode_logits)
+        seg_fn_support = self.seg_fn_support.repeat(bs * n_ch, 1, 1)
+        seg_fn = self.create_seg_fn(
+            seg_fn_support, seg_intervals, self.tsp_window_size, self.n
+        )
+        cont_mask = self.create_cont_mask_from_seg_fn(seg_fn, self.seg_indices)
+        x = self.make_bezier_from_control_points(control_points, support, cont_mask)
+        assert x.min() >= 0.0, f"x.min(): {x.min()}"
+        assert x.max() <= 1.0, f"x.max(): {x.max()}"
+        if n_dim == 4:
+            x = x.view(bs, n_ch, x.size(1))
+        return x
+
+    @staticmethod
+    def create_seg_fn(
+        support: T,
+        seg_intervals: T,
+        tsp_window_size: Optional[float] = None,
+        n: int = 2,
+    ) -> T:
+        """
+        Creates a differentiable segmentation function based on the two-sided power distribution.
+
+        Parameters:
+        - support (Tensor): Shape (bs, n_segments - 1, n_samples). Values evenly spaced from 0 to 1 for each batch.
+        - seg_intervals (Tensor): Shape (bs, n_segments). Widths of segments, summing to 1.0.
+        - tsp_window_size (Optional[float]): Support size of the two-sided power distribution.
+                                             Default is 1 / n_segments.
+        - n (int): Exponent for the two-sided power distribution. Defaults to 2.
+
+        Returns:
+        - Tensor: Shape (bs, n_samples), the segmentation function, monotonically increasing
+                  from 0 to 1.
+        """
+        assert support.ndim == 3
+        bs = support.size(0)
+        n_segments = support.size(1) + 1
+        n_samples = support.size(2)
+        assert seg_intervals.ndim == 2
+        assert seg_intervals.shape == (bs, n_segments)
+
+        # Default window size if not provided
+        if tsp_window_size is None:
+            tsp_window_size = 1.0 / n_segments
+        assert 0.0 < tsp_window_size < 1.0
+
+        m = (
+            tr.cumsum(seg_intervals, dim=1)[:, :-1]
+            .unsqueeze(2)
+            .expand(-1, -1, n_samples)
+        )
+        a = m - tsp_window_size / 2.0
+        b = m + tsp_window_size / 2.0
+        u = support
+
+        const_l = (m - a) / (b - a)
+        const_r = (b - m) / (b - a)
+        mask_ll = u < a
+        mask_l = (a <= u) & (u <= m)
+        mask_r = (m < u) & (u <= b)
+        mask_rr = b < u
+        # all_masks = mask_ll.int() + mask_l.int() + mask_r.int() + mask_rr.int()
+        # assert all_masks.sum() == all_masks.numel()
+
+        u[mask_ll] = 0.0
+        curr_a = a[mask_l]
+        curr_m = m[mask_l]
+        curr_u = u[mask_l]
+        const_l = const_l[mask_l]
+        u[mask_l] = const_l * (((curr_u - curr_a) / (curr_m - curr_a)) ** n)
+        curr_b = b[mask_r]
+        curr_m = m[mask_r]
+        curr_u = u[mask_r]
+        const_r = const_r[mask_r]
+        u[mask_r] = 1.0 - const_r * (((curr_b - curr_u) / (curr_b - curr_m)) ** n)
+        u[mask_rr] = 1.0
+
+        seg_fn = u.sum(dim=1)
+        # seg_fn = seg_fn / (n_segments - 1)
+
+        return seg_fn
+
+    @staticmethod
+    def create_cont_mask_from_seg_fn(seg_fn: T, seg_indices: T) -> T:
+        """
+        Makes a continuous mask from a segmentation function and segment indices.
+
+        :param seg_fn: segmentation function, shape (bs, n_samples)
+        :param seg_indices: segment indices, shape (bs, n_segments)
+        :return: continuous mask, shape (bs, n_segments, n_samples)
+        """
+        assert seg_fn.ndim == 2
+        assert seg_indices.ndim == 1
+        n_segments = seg_indices.size(0)
+        seg_fn = seg_fn.unsqueeze(1).repeat(1, n_segments, 1)
+        seg_indices = seg_indices.view(1, -1, 1)
+        cont_mask = 1.0 - tr.abs(seg_fn - seg_indices)
+        cont_mask = cont_mask.clamp(min=0.0)
+        return cont_mask
+
+
 class FourierSignal(nn.Module):
     def __init__(
         self,
@@ -288,6 +441,34 @@ class FourierSignal(nn.Module):
 
 
 if __name__ == "__main__":
+    n_samples = 100
+    support = tr.linspace(0.0, 1.0, n_samples).view(1, -1).repeat(2, 1)
+    seg_intervals = tr.tensor([[0.1, 0.1, 0.8], [0.2, 0.6, 0.2]])
+    # seg_intervals = tr.tensor([[0.1, 0.9], [0.5, 0.5]])
+    n_segments = seg_intervals.size(1)
+    tsp_window_size = 1 / n_segments
+    seg_fn = create_seg_fn(support, seg_intervals, tsp_window_size)
+
+    import matplotlib.pyplot as plt
+
+    plt.plot(seg_fn[0])
+    plt.plot(seg_fn[1])
+    plt.show()
+
+    seg_vals = tr.arange(0, n_segments).float()
+    seg_vals = seg_vals.view(1, -1, 1)
+    # seg_bound_l = tr.arange(0, n_segments).float() / n_segments
+    # seg_bound_l = seg_bound_l.view(1, -1, 1)
+    # seg_bound_r = tr.arange(1, n_segments + 1).float() / n_segments
+    # seg_bound_r = seg_bound_r.view(1, -1, 1)
+
+    seg_fn = seg_fn.unsqueeze(1).repeat(1, n_segments, 1)
+    cont_mask = 1.0 - tr.abs(seg_fn - seg_vals)
+    cont_mask = cont_mask.clamp(min=0.0)
+
+    derp = 1
+    exit()
+
     # n_frames = 200
     # n_bins = 50
     # mag = tr.rand(1, n_bins)

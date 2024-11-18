@@ -198,8 +198,8 @@ class LogModSigAndSpecCallback(Callback):
 
             # TODO(cm): tmp
             temp_params_hat_all = [
-                (out_dict["add_lfo_hat"], out_dict.get("add_lfo_hat_seg_indices")),
-                (out_dict["sub_lfo_hat"], out_dict.get("sub_lfo_hat_seg_indices")),
+                (out_dict["add_lfo_hat"], out_dict.get("add_lfo_seg_indices_hat")),
+                (out_dict["sub_lfo_before_adapter_hat"], out_dict.get("sub_lfo_seg_indices_hat")),
                 (out_dict["sub_lfo_adapted_hat"], None),
             ]
             colors = ["red", "blue", "cyan"]

@@ -9,7 +9,7 @@ from torch import nn
 from torch.nn import functional as F
 from torchaudio.transforms import AmplitudeToDB
 
-from curves import PiecewiseBezier
+from curves import PiecewiseBezier, PiecewiseBezierDiffSeg
 from feature_extraction import LogMelSpecFeatureExtractor
 
 logging.basicConfig()
@@ -203,8 +203,8 @@ class Spectral2DCNN(nn.Module):
         self.adapters = nn.ModuleDict()
         if self.use_splines:
             self.splines = nn.ModuleDict()
-            # self.spline_mlps = nn.ModuleDict()
-            self.spline_biases = nn.ModuleDict()
+            self.spline_biases = nn.ModuleDict()  # For PiecewiseBezier
+            # self.spline_mlps = nn.ModuleDict()  # For PiecewiseBezierDiffSeg
         for name, temp_param in self.temp_params.items():
             dim = temp_param["dim"]
             act = temp_param["act"]
@@ -213,7 +213,8 @@ class Spectral2DCNN(nn.Module):
             # Make frame by frame spline params or features
             out_dim = dim
             if self.use_splines:
-                out_dim = dim * self.degree  # Needed for non-linear splines
+                out_dim = dim * self.degree  # For PiecewiseBezier
+                # out_dim = dim * (self.degree + 1) * self.n_segments  # For PiecewiseBezierDiffSeg
             n_hidden = (out_channels[-1] + out_dim) // 2
             self.out_temp[name] = nn.Sequential(
                 BidirectionalLSTM(out_channels[-1], out_channels[-1] // 2),
@@ -241,17 +242,8 @@ class Spectral2DCNN(nn.Module):
                 )
             if self.use_splines:
                 # Make splines
+                # For PiecewiseBezier
                 self.splines[name] = PiecewiseBezier(n_frames, n_segments, degree)
-                # n_hidden = (out_channels[-1] + n_segments) // 2
-                # self.spline_mlps[name] = nn.Sequential(
-                #     nn.Linear(out_channels[-1], n_hidden),
-                #     nn.Dropout(p=dropout),
-                #     nn.PReLU(),
-                #     nn.Linear(n_hidden, n_hidden),
-                #     nn.Dropout(p=dropout),
-                #     nn.PReLU(),
-                #     nn.Linear(n_hidden, n_segments),
-                # )
                 n_hidden = (out_channels[-1] + dim) // 2
                 self.spline_biases[name] = nn.Sequential(
                     nn.Linear(out_channels[-1], n_hidden),
@@ -262,18 +254,18 @@ class Spectral2DCNN(nn.Module):
                     nn.PReLU(),
                     nn.Linear(n_hidden, dim),
                 )
-
-        # n_hidden = (out_channels[-1] + self.degree) // 2
-        # self.loudness_mlp = nn.Sequential(
-        #     nn.Linear(out_channels[-1], n_hidden),
-        #     nn.Dropout(p=dropout),
-        #     nn.PReLU(),
-        #     nn.Linear(n_hidden, n_hidden),
-        #     nn.Dropout(p=dropout),
-        #     nn.PReLU(),
-        #     nn.Linear(n_hidden, self.degree),
-        # )
-        # self.loudness_spline = PiecewiseSplines(n_frames - 1, 4, degree)
+                # For PiecewiseBezierDiffSeg
+                # self.splines[name] = PiecewiseBezierDiffSeg(n_frames, n_segments, degree)
+                # n_hidden = (out_channels[-1] + n_segments) // 2
+                # self.spline_mlps[name] = nn.Sequential(
+                #     nn.Linear(out_channels[-1], n_hidden),
+                #     nn.Dropout(p=dropout),
+                #     nn.PReLU(),
+                #     nn.Linear(n_hidden, n_hidden),
+                #     nn.Dropout(p=dropout),
+                #     nn.PReLU(),
+                #     nn.Linear(n_hidden, n_segments),
+                # )
 
         # Define global params
         self.out_global = nn.ModuleDict()
@@ -328,7 +320,12 @@ class Spectral2DCNN(nn.Module):
 
         # Calc temporal params
         for name, temp_param in self.temp_params.items():
+            # # For PiecewiseBezierDiffSeg
             # si_logits = self.spline_mlps[name](global_latent)
+            # si = self.splines[name].logits_to_seg_intervals(si_logits)
+            # seg_end_indices = (tr.cumsum(si, dim=-1)[:, :-1] * self.n_frames).long()
+            # seg_end_indices = tr.clamp(seg_end_indices, min=0, max=self.n_frames - 1)
+            # out_dict[f"{name}_seg_indices"] = seg_end_indices
             si_logits = None
 
             # segment_intervals = self.spline_mlps[name](global_latent)
@@ -355,6 +352,7 @@ class Spectral2DCNN(nn.Module):
             # out_dict[f"{name}_seg_indices"] = seg_end_indices_all
 
             if self.use_splines:
+                # For PiecewiseBezier
                 chunks = tr.tensor_split(x, self.n_segments, dim=1)
                 chunks = [tr.mean(c, dim=1) for c in chunks]
                 x = tr.stack(chunks, dim=1)
@@ -369,6 +367,12 @@ class Spectral2DCNN(nn.Module):
                 # x = self.splines[name](segment_intervals, coeff_logits, last_p_logits)
                 x = self.splines[name](coeff_logits, last_p_logits, si_logits)
                 x = tr.swapaxes(x, 1, 2)
+
+                # # For PiecewiseBezierDiffSeg
+                # coeff_logits = self.out_temp[name](global_latent)
+                # coeff_logits = coeff_logits.view(-1, self.n_segments, self.degree + 1)
+                # x = self.splines[name](coeff_logits, si_logits)
+                # x = x.unsqueeze(-1)
             else:
                 x = self.out_temp[name](x)
 
