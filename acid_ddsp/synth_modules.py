@@ -572,6 +572,70 @@ class FourierWavetableOsc(WavetableOsc):
         return wt
 
 
+class DDSPHarmonicOsc(nn.Module):
+    """
+    A harmonic oscillator from DDSP, largely following:
+    https://github.com/acids-ircam/ddsp_pytorch/blob/master/ddsp/core.py#L135
+    """
+    def __init__(
+        self,
+        sr: int,
+        n_harmonics: int,
+        is_trainable: bool = True,
+    ):
+        super().__init__()
+        self.sr = sr
+        self.n_harmonics = n_harmonics
+        self.is_trainable = is_trainable
+
+    def forward(
+        self,
+        f0_hz: T,
+        harmonic_amplitudes: Optional[T] = None,
+        n_samples: Optional[int] = None,
+        phase: Optional[T] = None,
+    ) -> T:
+        assert 1 <= f0_hz.ndim <= 2
+        if f0_hz.ndim == 1:
+            assert n_samples is not None
+            f0_hz = f0_hz.unsqueeze(1)
+            f0_hz = f0_hz.expand(-1, n_samples)
+        
+        if harmonic_amplitudes is not None:
+            # if harmonic amplitudes are provided, it must be of shape (bs, n_harmonics, n_samples)
+            assert harmonic_amplitudes.ndim == 3, \
+                f"Harmonic amplitudes must be of shape (bs, n_harmonics, n_samples), given shape: {harmonic_amplitudes.shape}"
+            assert harmonic_amplitudes.shape == (f0_hz.size(0), self.n_harmonics, f0_hz.size(1)), \
+                f"Harmonic amplitudes shape {harmonic_amplitudes.shape} must be the same as f0_hz shape {f0_hz.shape}"
+        else:
+            # or else, we assign the same amplitude for all harmonics
+            harmonic_amplitudes = tr.ones(f0_hz.size(0), self.n_harmonics, f0_hz.size(1))
+        
+        f0_hz = f0_hz.unsqueeze(-1)     # expand the last dimension for harmonics
+        harmonic_amplitudes = harmonic_amplitudes.transpose(1, 2)  # (bs, n_samples, n_harmonics)
+
+        # anti-aliasing by zero-ing out the amplitudes for harmonics that are above nyquist
+        harmonic_amplitudes_aa = self.remove_above_nyquist(harmonic_amplitudes, f0_hz)
+
+        omega = tr.cumsum(2 * tr.pi * f0_hz / self.sr, dim=1)
+        if phase is not None:
+            assert phase.shape == omega.shape, f"Phase shape {phase.shape} must be the same as omega shape {omega.shape}"
+            phase = phase.unsqueeze(-1)
+            omega += phase
+
+        omegas = omega * tr.arange(1, self.n_harmonics + 1, device=omega.device)
+        
+        signal = tr.sin(omegas) * harmonic_amplitudes_aa
+        signal = signal.sum(dim=-1)
+
+        return signal
+    
+    def remove_above_nyquist(self, harmonic_amplitudes, f0_hz):
+        f0_hz_harmonics = f0_hz * tr.arange(1, self.n_harmonics + 1, device=f0_hz.device)
+        aa = (f0_hz_harmonics < self.sr / 2).float() + 1e-4
+        return harmonic_amplitudes * aa
+
+
 if __name__ == "__main__":
     # ============ Test WavetableOsc ============
     # bs = 2
@@ -614,7 +678,7 @@ if __name__ == "__main__":
     # wt_square = tr.sign(tr.sin(tr.linspace(0, 2 * tr.pi, n_wt_samples)))
     # wt = tr.stack([wt_sin, wt_square], dim=0)
     # osc = WavetableOscShan(sr, n_pos=2, n_wt_samples=n_wt_samples, wt=wt)
-    # audio = osc(f0_hz=f0_hz, wt_pos=None, n_samples=n_samples)
+    # audio = osc(f0_hz=f0_hz, attention_matrix=None, n_samples=n_samples)
     # audio = audio.reshape(-1, audio.size(-1))
     # import soundfile as sf
     # for idx, audio in enumerate(audio):
@@ -676,3 +740,15 @@ if __name__ == "__main__":
     for idx, audio in enumerate(out_wave):
         audio = audio.unsqueeze(0)
         torchaudio.save(f"../out/out_wave_{idx}.wav", audio, sr)
+
+    # ============ Test DDSPHarmonicOsc ============
+    # import soundfile as sf
+    # bs = 3
+    # sr = 48000
+    # n_sec = 4.0
+    # n_samples = int(sr * n_sec)
+    # f0_hz = tr.tensor([220.0, 440.0, 880.0])
+    
+    # osc = DDSPHarmonicOsc(sr, n_harmonics=16)
+    # audio = osc(f0_hz=f0_hz, harmonic_amplitudes=None, n_samples=n_samples)
+    # audio = audio.reshape(-1, audio.size(-1))

@@ -12,6 +12,7 @@ from acid_ddsp.synth_modules import (
     ExpDecayEnv,
     WavetableOsc,
     WavetableOscShan,
+    DDSPHarmonicOsc,
     ADSR,
 )
 from audio_config import AudioConfig
@@ -625,6 +626,96 @@ class WavetableSynthShan(WavetableSynth):
         temp_params["attention_matrix"] = attention_matrix
         dry_audio = self.osc(f0_hz, attention_matrix, n_samples=n_samples, phase=phase)
         return dry_audio, {}
+
+
+class DDSPSynth(SynthBase):
+    def __init__(
+        self,
+        ac: AudioConfig,
+        n_harmonics: int,
+        n_bands: int,
+        is_trainable: bool = True,
+    ):
+        super().__init__(ac)
+        self.osc = DDSPHarmonicOsc(
+            ac.sr,
+            n_harmonics=n_harmonics,
+            is_trainable=is_trainable,
+        )
+        self.adsr = ADSR(n_frames=ac.n_samples)
+
+    def additive_synthesis(
+        self,
+        n_samples: int,
+        f0_hz: T,
+        phase: T,
+        temp_params: Dict[str, T],
+        global_params: Dict[str, T],
+    ) -> (T, Dict[str, T]):
+        # TODO: I am not sure if this works right
+        harmonic_amplitudes = temp_params["add_lfo"]
+        harmonic_amplitudes = tr.swapaxes(harmonic_amplitudes, 1, 2)
+        harmonic_amplitudes = util.linear_interpolate_dim(
+            harmonic_amplitudes, self.ac.n_samples, align_corners=True
+        )
+        temp_params["harmonic_amplitudes"] = harmonic_amplitudes
+
+        noise_amplitudes = temp_params["add_lfo"]
+        noise_amplitudes = tr.swapaxes(noise_amplitudes, 1, 2)
+        # TODO: noise_amplitudes should be in blocks, not samples
+        # noise_amplitudes = util.linear_interpolate_dim(
+        #     noise_amplitudes, self.ac.n_samples, align_corners=True
+        # )
+        temp_params["noise_amplitudes"] = noise_amplitudes
+
+        # harmonic part
+        harmonic = self.osc(
+            f0_hz,
+            harmonic_amplitudes,
+            n_samples=n_samples,
+            phase=phase,
+        )
+
+        # noise part
+        block_size = n_samples // noise_amplitudes.size(1)  # TODO: again, I am not sure if this is correct
+        impulse = DDSPSynth.amp_to_impulse_response(noise_amplitudes, block_size)
+        noise = tr.rand(
+            impulse.shape[0],
+            impulse.shape[1],
+            self.block_size,
+        ).to(impulse) * 2 - 1
+
+        noise = DDSPSynth.fft_convolve(noise, impulse).contiguous()
+        noise = noise.reshape(noise.shape[0], -1)
+
+        dry_audio = harmonic + noise
+        return dry_audio, {}
+    
+    def amp_to_impulse_response(amp, target_size):
+        amp = tr.stack([amp, tr.zeros_like(amp)], -1)
+        amp = tr.view_as_complex(amp)
+        amp = fft.irfft(amp)
+
+        filter_size = amp.shape[-1]
+
+        amp = tr.roll(amp, filter_size // 2, -1)
+        win = tr.hann_window(filter_size, dtype=amp.dtype, device=amp.device)
+
+        amp = amp * win
+
+        amp = nn.functional.pad(amp, (0, int(target_size) - int(filter_size)))
+        amp = tr.roll(amp, -filter_size // 2, -1)
+
+        return amp
+
+    def fft_convolve(signal, kernel):
+        signal = nn.functional.pad(signal, (0, signal.shape[-1]))
+        kernel = nn.functional.pad(kernel, (kernel.shape[-1], 0))
+
+        output = fft.irfft(fft.rfft(signal) * fft.rfft(kernel))
+        output = output[..., output.shape[-1] // 2:]
+
+        return output
 
 
 # if __name__ == "__main__":
