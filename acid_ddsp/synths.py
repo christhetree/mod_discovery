@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Optional, Tuple
 
 import torch as tr
-from torch import Tensor as T, nn
+from torch import Tensor as T, nn, fft
 
 import util
 from acid_ddsp.synth_modules import (
@@ -619,10 +619,12 @@ class WavetableSynthShan(WavetableSynth):
         global_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
         attention_matrix = temp_params["add_lfo"]
+        print("attention_matrix", attention_matrix.shape)
         attention_matrix = tr.swapaxes(attention_matrix, 1, 2)
         attention_matrix = util.linear_interpolate_dim(
             attention_matrix, self.ac.n_samples, align_corners=True
         )
+        print("attention_matrix upsample", attention_matrix.shape)
         temp_params["attention_matrix"] = attention_matrix
         dry_audio = self.osc(f0_hz, attention_matrix, n_samples=n_samples, phase=phase)
         return dry_audio, {}
@@ -642,6 +644,7 @@ class DDSPSynth(SynthBase):
             n_harmonics=n_harmonics,
             is_trainable=is_trainable,
         )
+        self.n_bands = n_bands
         self.adsr = ADSR(n_frames=ac.n_samples)
 
     def additive_synthesis(
@@ -652,20 +655,17 @@ class DDSPSynth(SynthBase):
         temp_params: Dict[str, T],
         global_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
-        # TODO: I am not sure if this works right
-        harmonic_amplitudes = temp_params["add_lfo"]
+        harmonic_amplitudes = temp_params["add_lfo"][..., :self.osc.n_harmonics]
         harmonic_amplitudes = tr.swapaxes(harmonic_amplitudes, 1, 2)
         harmonic_amplitudes = util.linear_interpolate_dim(
             harmonic_amplitudes, self.ac.n_samples, align_corners=True
         )
+        harmonic_amplitudes = tr.swapaxes(harmonic_amplitudes, 1, 2)
         temp_params["harmonic_amplitudes"] = harmonic_amplitudes
 
-        noise_amplitudes = temp_params["add_lfo"]
-        noise_amplitudes = tr.swapaxes(noise_amplitudes, 1, 2)
-        # TODO: noise_amplitudes should be in blocks, not samples
-        # noise_amplitudes = util.linear_interpolate_dim(
-        #     noise_amplitudes, self.ac.n_samples, align_corners=True
-        # )
+        noise_amplitudes = temp_params["add_lfo"][..., self.osc.n_harmonics:]
+        assert noise_amplitudes.size(2) == self.n_bands, \
+            "Noise amplitudes size mismatch, expected {} but got {}".format(self.n_bands, noise_amplitudes.size(2))
         temp_params["noise_amplitudes"] = noise_amplitudes
 
         # harmonic part
@@ -676,22 +676,28 @@ class DDSPSynth(SynthBase):
             phase=phase,
         )
 
-        # noise part
-        block_size = n_samples // noise_amplitudes.size(1)  # TODO: again, I am not sure if this is correct
+        # noise part, get noise filter IRs from noise band amplitudes
+        block_size = round(n_samples / noise_amplitudes.size(1))
         impulse = DDSPSynth.amp_to_impulse_response(noise_amplitudes, block_size)
         noise = tr.rand(
             impulse.shape[0],
             impulse.shape[1],
-            self.block_size,
+            block_size,
         ).to(impulse) * 2 - 1
 
         noise = DDSPSynth.fft_convolve(noise, impulse).contiguous()
         noise = noise.reshape(noise.shape[0], -1)
 
+        # NOTE: because we use 2001 frames, there will be `block_size` residuals, so we trim them
+        noise = noise[:, :n_samples]
+
         dry_audio = harmonic + noise
         return dry_audio, {}
     
-    def amp_to_impulse_response(amp, target_size):
+    def amp_to_impulse_response(
+        amp: T, 
+        target_size: int
+    ) -> T:
         amp = tr.stack([amp, tr.zeros_like(amp)], -1)
         amp = tr.view_as_complex(amp)
         amp = fft.irfft(amp)
@@ -708,7 +714,10 @@ class DDSPSynth(SynthBase):
 
         return amp
 
-    def fft_convolve(signal, kernel):
+    def fft_convolve(
+        signal: T, 
+        kerne: T
+    ) -> T:
         signal = nn.functional.pad(signal, (0, signal.shape[-1]))
         kernel = nn.functional.pad(kernel, (kernel.shape[-1], 0))
 
@@ -716,6 +725,28 @@ class DDSPSynth(SynthBase):
         output = output[..., output.shape[-1] // 2:]
 
         return output
+    
+    def forward(
+        self,
+        n_samples: int,
+        f0_hz: T,
+        phase: T,
+        temp_params: Dict[str, T],
+        global_params: Dict[str, T],
+        envelope: Optional[T] = None,
+        note_on_duration: Optional[T] = None,
+    ) -> Dict[str, T]:
+        synth_out = super().forward(
+            n_samples, 
+            f0_hz, 
+            phase, 
+            temp_params, 
+            global_params, 
+            envelope, 
+            note_on_duration
+        )
+        synth_out["wet"] = synth_out["filtered_audio"]
+        return synth_out
 
 
 # if __name__ == "__main__":

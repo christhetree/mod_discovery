@@ -602,25 +602,25 @@ class DDSPHarmonicOsc(nn.Module):
             f0_hz = f0_hz.expand(-1, n_samples)
         
         if harmonic_amplitudes is not None:
-            # if harmonic amplitudes are provided, it must be of shape (bs, n_harmonics, n_samples)
+            # if harmonic amplitudes are provided, it must be of shape (bs, n_samples, n_harmonics)
             assert harmonic_amplitudes.ndim == 3, \
-                f"Harmonic amplitudes must be of shape (bs, n_harmonics, n_samples), given shape: {harmonic_amplitudes.shape}"
-            assert harmonic_amplitudes.shape == (f0_hz.size(0), self.n_harmonics, f0_hz.size(1)), \
+                f"Harmonic amplitudes must be of shape (bs, n_samples, n_harmonics), given shape: {harmonic_amplitudes.shape}"
+            assert harmonic_amplitudes.shape == (f0_hz.size(0), f0_hz.size(1), self.n_harmonics), \
                 f"Harmonic amplitudes shape {harmonic_amplitudes.shape} must be the same as f0_hz shape {f0_hz.shape}"
         else:
             # or else, we assign the same amplitude for all harmonics
-            harmonic_amplitudes = tr.ones(f0_hz.size(0), self.n_harmonics, f0_hz.size(1))
+            harmonic_amplitudes = tr.ones(f0_hz.size(0), f0_hz.size(1), self.n_harmonics)
         
-        f0_hz = f0_hz.unsqueeze(-1)     # expand the last dimension for harmonics
-        harmonic_amplitudes = harmonic_amplitudes.transpose(1, 2)  # (bs, n_samples, n_harmonics)
+        f0_hz = f0_hz.unsqueeze(-1)
 
         # anti-aliasing by zero-ing out the amplitudes for harmonics that are above nyquist
         harmonic_amplitudes_aa = self.remove_above_nyquist(harmonic_amplitudes, f0_hz)
 
         omega = tr.cumsum(2 * tr.pi * f0_hz / self.sr, dim=1)
         if phase is not None:
-            assert phase.shape == omega.shape, f"Phase shape {phase.shape} must be the same as omega shape {omega.shape}"
             phase = phase.unsqueeze(-1)
+            assert len(phase.shape) == len(omega.shape), \
+                f"Size mismatch, phase: {phase.shape}, omega: {omega.shape}"
             omega += phase
 
         omegas = omega * tr.arange(1, self.n_harmonics + 1, device=omega.device)
@@ -630,7 +630,11 @@ class DDSPHarmonicOsc(nn.Module):
 
         return signal
     
-    def remove_above_nyquist(self, harmonic_amplitudes, f0_hz):
+    def remove_above_nyquist(
+        self, 
+        harmonic_amplitudes: T, 
+        f0_hz: T
+    ) -> T:
         f0_hz_harmonics = f0_hz * tr.arange(1, self.n_harmonics + 1, device=f0_hz.device)
         aa = (f0_hz_harmonics < self.sr / 2).float() + 1e-4
         return harmonic_amplitudes * aa
