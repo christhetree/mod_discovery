@@ -619,12 +619,10 @@ class WavetableSynthShan(WavetableSynth):
         global_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
         attention_matrix = temp_params["add_lfo"]
-        print("attention_matrix", attention_matrix.shape)
         attention_matrix = tr.swapaxes(attention_matrix, 1, 2)
         attention_matrix = util.linear_interpolate_dim(
             attention_matrix, self.ac.n_samples, align_corners=True
         )
-        print("attention_matrix upsample", attention_matrix.shape)
         temp_params["attention_matrix"] = attention_matrix
         dry_audio = self.osc(f0_hz, attention_matrix, n_samples=n_samples, phase=phase)
         return dry_audio, {}
