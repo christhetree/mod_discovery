@@ -712,7 +712,7 @@ class DDSPSynth(SynthBase):
 
     def fft_convolve(
         signal: T, 
-        kerne: T
+        kernel: T
     ) -> T:
         signal = nn.functional.pad(signal, (0, signal.shape[-1]))
         kernel = nn.functional.pad(kernel, (kernel.shape[-1], 0))
