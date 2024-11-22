@@ -634,13 +634,11 @@ class DDSPSynth(SynthBase):
         ac: AudioConfig,
         n_harmonics: int,
         n_bands: int,
-        is_trainable: bool = True,
     ):
         super().__init__(ac)
         self.osc = DDSPHarmonicOsc(
             ac.sr,
             n_harmonics=n_harmonics,
-            is_trainable=is_trainable,
         )
         self.n_bands = n_bands
         self.adsr = ADSR(n_frames=ac.n_samples)

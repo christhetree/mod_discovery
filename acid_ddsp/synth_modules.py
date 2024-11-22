@@ -581,12 +581,10 @@ class DDSPHarmonicOsc(nn.Module):
         self,
         sr: int,
         n_harmonics: int,
-        is_trainable: bool = True,
     ):
         super().__init__()
         self.sr = sr
         self.n_harmonics = n_harmonics
-        self.is_trainable = is_trainable
 
     def forward(
         self,

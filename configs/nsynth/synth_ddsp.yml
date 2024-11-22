@@ -3,4 +3,3 @@ init_args:
   ac: audio_config.yml
   n_harmonics: 16
   n_bands: 4
-  is_trainable: true
