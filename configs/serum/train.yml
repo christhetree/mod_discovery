@@ -2,8 +2,11 @@ seed_everything: 42
 
 custom:
   project_name: acid_ddsp_2
-#  model_name: testing
-  model_name: wt_4__bezier_p12d3__lstm
+  model_name: testing
+#  model_name: sin_saw__bezier_p12d3__lstm
+#  model_name: sin_saw__bezier_p12d3_diffseg__lstm
+#  model_name: sin_saw__bezier_p1d36__lstm
+#  model_name: wt_4__bezier_p12d3__lstm
 #  model_name: wt_4__no_splines__lstm
 #  model_name: wt_4_shan__bezier_p12d3__lstm
 #  model_name: wt_4_shan__no_splines__lstm
@@ -18,7 +21,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [4]
+  devices: [6]
   max_epochs: 100
   num_sanity_val_steps: 1
   gradient_clip_val: 0.5

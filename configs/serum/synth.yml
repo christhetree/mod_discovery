@@ -5,3 +5,7 @@ init_args:
   n_wt_samples: 1024
   aa_filter_n: 129
   is_trainable: true
+
+#  n_pos: 2
+#  wt_name: sine_saw_1024.pt
+#  is_trainable: false

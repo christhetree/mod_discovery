@@ -166,7 +166,7 @@ class PiecewiseBezier(nn.Module):
         return si
 
     def make_bezier_from_control_points(
-        self, control_points: T, support: T, mask: T
+        self, control_points: T, support: T, mask: Optional[T] = None
     ) -> T:
         assert control_points.ndim == 3
         assert control_points.size(1) == self.n_segments
@@ -174,7 +174,8 @@ class PiecewiseBezier(nn.Module):
         control_points = control_points.unsqueeze(-1)
         bezier = self.create_bezier(support, control_points, self.bin_coeff, self.exp)
         bezier = bezier.squeeze(-1)
-        bezier = bezier * mask
+        if mask is not None:
+            bezier = bezier * mask
         bezier = bezier.sum(dim=1)
         return bezier
 
@@ -270,7 +271,7 @@ class PiecewiseBezierDiffSeg(PiecewiseBezier):
         degree: int,
         tsp_window_size: Optional[float] = None,
         n: int = 2,
-        eps: float = 1e-6,
+        eps: float = 1e-3,
     ):
         super().__init__(n_frames, n_segments, degree, eps)
         self.tsp_window_size = tsp_window_size
@@ -301,27 +302,34 @@ class PiecewiseBezierDiffSeg(PiecewiseBezier):
         si = si * scaling_factor + min_seg_interval
         return si
 
-    def forward(self, coeff_logits: T, mode_logits: T) -> T:
+    def forward(self, coeff_logits: T, mode_logits: Optional[T] = None) -> T:
         bs = coeff_logits.size(0)
         n_dim = coeff_logits.ndim
         n_ch = 1
         if n_dim == 4:
             n_ch = coeff_logits.size(1)
             coeff_logits = tr.flatten(coeff_logits, start_dim=0, end_dim=1)
-            mode_logits = tr.flatten(mode_logits, start_dim=0, end_dim=1)
         assert coeff_logits.ndim == 3
         assert coeff_logits.size(1) == self.n_segments
         assert coeff_logits.size(2) == self.degree + 1
-        assert mode_logits.ndim == 2
-        assert mode_logits.size(1) == self.n_segments
+
+        if mode_logits is None:
+            cont_mask = None
+            assert self.n_segments == 1
+        else:
+            if n_dim == 4:
+                mode_logits = tr.flatten(mode_logits, start_dim=0, end_dim=1)
+            assert mode_logits.ndim == 2
+            assert mode_logits.size(1) == self.n_segments
+            seg_intervals = self.logits_to_seg_intervals(mode_logits)
+            seg_fn_support = self.seg_fn_support.repeat(bs * n_ch, 1, 1)
+            seg_fn = self.create_seg_fn(
+                seg_fn_support, seg_intervals, self.tsp_window_size, self.n
+            )
+            cont_mask = self.create_cont_mask_from_seg_fn(seg_fn, self.seg_indices)
+
         control_points = self.logits_to_control_points(coeff_logits)
         support = self.support.repeat(bs * n_ch, 1, 1)
-        seg_intervals = self.logits_to_seg_intervals(mode_logits)
-        seg_fn_support = self.seg_fn_support.repeat(bs * n_ch, 1, 1)
-        seg_fn = self.create_seg_fn(
-            seg_fn_support, seg_intervals, self.tsp_window_size, self.n
-        )
-        cont_mask = self.create_cont_mask_from_seg_fn(seg_fn, self.seg_indices)
         x = self.make_bezier_from_control_points(control_points, support, cont_mask)
         assert x.min() >= 0.0, f"x.min(): {x.min()}"
         assert x.max() <= 1.0, f"x.max(): {x.max()}"
@@ -441,6 +449,27 @@ class FourierSignal(nn.Module):
 
 
 if __name__ == "__main__":
+    n_samples = 10
+    support = tr.linspace(0.0, 1.0, n_samples).view(1, -1).repeat(2, 1)
+    support = support.unsqueeze(0)
+    control_points = tr.tensor(
+        [[0.0, 1.0, 1.0, 1.0, 0.0, 1.0], [0.3, 0.1, 0.3, 0.7, 0.9, 0.7]]
+    )
+    control_points = control_points.unsqueeze(0).unsqueeze(-1)
+    n_segments = control_points.size(1)
+    degree = control_points.size(2) - 1
+    splines = PiecewiseBezierDiffSeg(n_samples, n_segments, degree)
+    x = splines.create_bezier(support, control_points, splines.bin_coeff, splines.exp)
+
+    import matplotlib.pyplot as plt
+
+    x = x.squeeze()
+    plt.plot(x[0].numpy())
+    plt.plot(x[1].numpy())
+    plt.show()
+
+    exit()
+
     n_samples = 100
     support = tr.linspace(0.0, 1.0, n_samples).view(1, -1).repeat(2, 1)
     seg_intervals = tr.tensor([[0.1, 0.1, 0.8], [0.2, 0.6, 0.2]])

@@ -36,10 +36,12 @@ class BidirectionalLSTM(nn.Module):
         self,
         input_size: int,
         hidden_size: int,
+        unroll: bool,
         num_layers: int = 1,
         batch_first: bool = True,
     ):
         super().__init__()
+        self.unroll = unroll
         self.lstm = nn.LSTM(
             input_size,
             hidden_size,
@@ -49,9 +51,12 @@ class BidirectionalLSTM(nn.Module):
         )
 
     def forward(self, x: T) -> T:
-        # LSTM returns output and (hidden, cell) states, we only need the output
-        output, _ = self.lstm(x)
-        return output
+        output, (h_n, _) = self.lstm(x)
+        if self.unroll:
+            return output
+        else:
+            emb = tr.cat((h_n[0], h_n[1]), dim=-1)
+            return emb
 
 
 class Spectral2DCNNBlock(nn.Module):
@@ -204,7 +209,7 @@ class Spectral2DCNN(nn.Module):
         if self.use_splines:
             self.splines = nn.ModuleDict()
             self.spline_biases = nn.ModuleDict()  # For PiecewiseBezier
-            # self.spline_mlps = nn.ModuleDict()  # For PiecewiseBezierDiffSeg
+            # self.seg_intervals_mlp = nn.ModuleDict()  # For PiecewiseBezierDiffSeg
         for name, temp_param in self.temp_params.items():
             dim = temp_param["dim"]
             act = temp_param["act"]
@@ -214,10 +219,11 @@ class Spectral2DCNN(nn.Module):
             out_dim = dim
             if self.use_splines:
                 out_dim = dim * self.degree  # For PiecewiseBezier
+                # out_dim = dim * (self.degree + 1)  # For PiecewiseBezierDiffSeg
                 # out_dim = dim * (self.degree + 1) * self.n_segments  # For PiecewiseBezierDiffSeg
             n_hidden = (out_channels[-1] + out_dim) // 2
             self.out_temp[name] = nn.Sequential(
-                BidirectionalLSTM(out_channels[-1], out_channels[-1] // 2),
+                BidirectionalLSTM(out_channels[-1], out_channels[-1] // 2, unroll=True),
                 nn.Linear(out_channels[-1], n_hidden),
                 nn.Dropout(p=dropout),
                 nn.PReLU(),
@@ -254,10 +260,11 @@ class Spectral2DCNN(nn.Module):
                     nn.PReLU(),
                     nn.Linear(n_hidden, dim),
                 )
-                # For PiecewiseBezierDiffSeg
+                # # For PiecewiseBezierDiffSeg
                 # self.splines[name] = PiecewiseBezierDiffSeg(n_frames, n_segments, degree)
                 # n_hidden = (out_channels[-1] + n_segments) // 2
-                # self.spline_mlps[name] = nn.Sequential(
+                # self.seg_intervals_mlp[name] = nn.Sequential(
+                #     BidirectionalLSTM(out_channels[-1], out_channels[-1] // 2, unroll=False),
                 #     nn.Linear(out_channels[-1], n_hidden),
                 #     nn.Dropout(p=dropout),
                 #     nn.PReLU(),
@@ -321,18 +328,12 @@ class Spectral2DCNN(nn.Module):
         # Calc temporal params
         for name, temp_param in self.temp_params.items():
             # # For PiecewiseBezierDiffSeg
-            # si_logits = self.spline_mlps[name](global_latent)
+            # si_logits = self.seg_intervals_mlp[name](latent)
             # si = self.splines[name].logits_to_seg_intervals(si_logits)
             # seg_end_indices = (tr.cumsum(si, dim=-1)[:, :-1] * self.n_frames).long()
             # seg_end_indices = tr.clamp(seg_end_indices, min=0, max=self.n_frames - 1)
             # out_dict[f"{name}_seg_indices"] = seg_end_indices
             si_logits = None
-
-            # segment_intervals = self.spline_mlps[name](global_latent)
-            # min_segment_interval = 0.04
-            # scaling_factor = 1.0 - (self.n_segments * min_segment_interval)
-            # assert scaling_factor > 0
-            # segment_intervals = segment_intervals * scaling_factor + min_segment_interval
 
             dim = temp_param["dim"]
             x = latent
@@ -369,7 +370,25 @@ class Spectral2DCNN(nn.Module):
                 x = tr.swapaxes(x, 1, 2)
 
                 # # For PiecewiseBezierDiffSeg
+                # hop_len = self.n_frames // self.n_segments
+                # win_len = hop_len * 2
+                # x = F.pad(x, (0, 0, hop_len // 2, hop_len // 2))
+                # x = x.unfold(1, win_len, hop_len)
+                # x = tr.mean(x, dim=-1)
+
+                # x_s = []
+                # for idx in range(self.n_segments):
+                #     chunk = x[:, idx, :, :]
+                #     chunk = tr.swapaxes(chunk, 1, 2)
+                #     curr_x = self.out_temp[name](chunk)
+                #     x_s.append(curr_x)
+                # x = tr.stack(x_s, dim=1)
                 # coeff_logits = self.out_temp[name](global_latent)
+                # coeff_logits = coeff_logits.view(-1, self.n_segments, self.degree + 1)
+                # x = self.splines[name](coeff_logits, si_logits)
+                # x = x.unsqueeze(-1)
+
+                # coeff_logits = self.out_temp[name](x)
                 # coeff_logits = coeff_logits.view(-1, self.n_segments, self.degree + 1)
                 # x = self.splines[name](coeff_logits, si_logits)
                 # x = x.unsqueeze(-1)

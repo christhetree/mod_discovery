@@ -6,6 +6,7 @@ from contextlib import suppress
 from typing import Any, Dict, List
 
 import torch as tr
+import torchaudio.functional
 import wandb
 from auraloss.time import ESRLoss
 from matplotlib import pyplot as plt
@@ -165,13 +166,73 @@ class LogModSigAndSpecCallback(Callback):
                 ax[1].set_ylabel("Freq (Hz)")
                 ax[1].set_title("log_spec_wet_hat")
 
+            # # Plot delta spectrograms ===============================================
+            # delta1_log_spec_wet = torchaudio.functional.compute_deltas(
+            #     log_spec_wet, win_length=150
+            # )
+            # # delta1_log_spec_wet = (log_spec_wet[:, :, 2:] - log_spec_wet[:, :, :-2]) / 2.0
+            # delta1_log_spec_wet_hat = torchaudio.functional.compute_deltas(
+            #     log_spec_wet_hat, win_length=150
+            # )
+            # # delta1_log_spec_wet_hat = (
+            # #     log_spec_wet_hat[:, :, 2:] - log_spec_wet_hat[:, :, :-2]
+            # # ) / 2.0
+            # if delta1_log_spec_wet is not None and delta1_log_spec_wet_hat is not None:
+            #     vmin = min(
+            #         delta1_log_spec_wet[0].min(), delta1_log_spec_wet_hat[0].min()
+            #     )
+            #     vmax = max(
+            #         delta1_log_spec_wet[0].max(), delta1_log_spec_wet_hat[0].max()
+            #     )
+            # if delta1_log_spec_wet is not None:
+            #     ax[2].imshow(
+            #         delta1_log_spec_wet[0].numpy(),
+            #         extent=[
+            #             0,
+            #             delta1_log_spec_wet.size(2),
+            #             0,
+            #             delta1_log_spec_wet.size(1),
+            #         ],
+            #         aspect=delta1_log_spec_wet.size(2) / delta1_log_spec_wet.size(1),
+            #         origin="lower",
+            #         cmap="bwr",
+            #         interpolation="none",
+            #         vmin=vmin,
+            #         vmax=vmax,
+            #     )
+            #     ax[2].set_xlabel("n_frames")
+            #     ax[2].set_yticks(y_indices, y_tick_labels)
+            #     ax[2].set_ylabel("Freq (Hz)")
+            #     ax[2].set_title("delta1_log_spec_wet")
+            # if delta1_log_spec_wet_hat is not None:
+            #     ax[3].imshow(
+            #         delta1_log_spec_wet_hat[0].numpy(),
+            #         extent=[
+            #             0,
+            #             delta1_log_spec_wet_hat.size(2),
+            #             0,
+            #             delta1_log_spec_wet_hat.size(1),
+            #         ],
+            #         aspect=delta1_log_spec_wet_hat.size(2)
+            #         / delta1_log_spec_wet_hat.size(1),
+            #         origin="lower",
+            #         cmap="bwr",
+            #         interpolation="none",
+            #         vmin=vmin,
+            #         vmax=vmax,
+            #     )
+            #     ax[3].set_xlabel("n_frames")
+            #     ax[3].set_yticks(y_indices, y_tick_labels)
+            #     ax[3].set_ylabel("Freq (Hz)")
+            #     ax[3].set_title("delta1_log_spec_wet_hat")
+
             if pl_module.log_envelope and envelope is not None:
                 assert envelope.ndim == 2
                 envelope = util.linear_interpolate_dim(
                     envelope, pl_module.ac.n_samples, dim=1, align_corners=True
                 )
-                ax[2].plot(envelope[0].numpy(), label="env", color="black")
-                ax[2].set(aspect=envelope.size(1))
+                ax[-1].plot(envelope[0].numpy(), label="env", color="black")
+                ax[-1].set(aspect=envelope.size(1))
 
             # TODO(cm): tmp
             # if temp_params is not None:
@@ -199,13 +260,18 @@ class LogModSigAndSpecCallback(Callback):
             # TODO(cm): tmp
             temp_params_hat_all = [
                 (out_dict["add_lfo_hat"], out_dict.get("add_lfo_seg_indices_hat")),
-                (out_dict["sub_lfo_before_adapter_hat"], out_dict.get("sub_lfo_seg_indices_hat")),
+                (
+                    out_dict["sub_lfo_before_adapter_hat"],
+                    out_dict.get("sub_lfo_seg_indices_hat"),
+                ),
                 (out_dict["sub_lfo_adapted_hat"], None),
             ]
             colors = ["red", "blue", "cyan"]
 
             # if temp_params_hat is not None:
-            for (temp_params_hat, seg_indices), color in zip(temp_params_hat_all, colors):
+            for (temp_params_hat, seg_indices), color in zip(
+                temp_params_hat_all, colors
+            ):
                 assert temp_params_hat.ndim == 3
                 n_frames = temp_params_hat.size(1)
                 temp_params_hat = util.linear_interpolate_dim(
@@ -213,7 +279,7 @@ class LogModSigAndSpecCallback(Callback):
                 )
                 temp_params_hat_np = temp_params_hat[0].numpy()
                 for idx in range(temp_params_hat_np.shape[1]):
-                    ax[2].plot(
+                    ax[-1].plot(
                         temp_params_hat_np[:, idx],
                         # label=f"{pl_module.temp_params_name_hat}_{idx}",
                         color=color,
@@ -223,13 +289,13 @@ class LogModSigAndSpecCallback(Callback):
                     for seg_idx in seg_indices[0, :]:
                         x = int(seg_idx / n_frames * pl_module.ac.n_samples)
                         y = temp_params_hat_np[x, 0]
-                        ax[2].plot(x, y, "x", color=color)
-                ax[2].set(aspect=temp_params_hat.size(1))
+                        ax[-1].plot(x, y, "x", color=color)
+                ax[-1].set(aspect=temp_params_hat.size(1))
 
-            ax[2].set_xlabel("n_samples")
-            ax[2].set_ylabel("Amplitude")
-            ax[2].set_ylim(-0.1, 1.1)
-            ax[2].set_title(
+            ax[-1].set_xlabel("n_samples")
+            ax[-1].set_ylabel("Amplitude")
+            ax[-1].set_ylim(-0.1, 1.1)
+            ax[-1].set_title(
                 # f"env (blu), ms (blk), ms_hat (orange), p{degree}s{n_segments} (red)\n"
                 # f"env (blue), mod_sig (black), mod_sig_hat (orange)\n"
                 f"env (black), add_lfo (red), sub_lfo (blue, cyan)\n"
