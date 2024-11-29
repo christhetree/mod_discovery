@@ -632,8 +632,8 @@ class DDSPSynth(SynthBase):
     def __init__(
         self,
         ac: AudioConfig,
-        n_harmonics: int,
-        n_bands: int,
+        n_harmonics: int = 100,
+        n_bands: int = 65,
     ):
         super().__init__(ac)
         self.osc = DDSPHarmonicOsc(
@@ -651,17 +651,15 @@ class DDSPSynth(SynthBase):
         temp_params: Dict[str, T],
         global_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
-        harmonic_amplitudes = temp_params["add_lfo"][..., :self.osc.n_harmonics]
-        harmonic_amplitudes = tr.swapaxes(harmonic_amplitudes, 1, 2)
+        harmonic_amplitudes = temp_params["add_lfo"][..., :self.osc.n_harmonics + 1]
         harmonic_amplitudes = util.linear_interpolate_dim(
-            harmonic_amplitudes, self.ac.n_samples, align_corners=True
+            harmonic_amplitudes, self.ac.n_samples, align_corners=True, dim=1
         )
-        harmonic_amplitudes = tr.swapaxes(harmonic_amplitudes, 1, 2)
         temp_params["harmonic_amplitudes"] = harmonic_amplitudes
 
-        noise_amplitudes = temp_params["add_lfo"][..., self.osc.n_harmonics:]
+        noise_amplitudes = temp_params["add_lfo"][..., self.osc.n_harmonics + 1:]
         assert noise_amplitudes.size(2) == self.n_bands, \
-            "Noise amplitudes size mismatch, expected {} but got {}".format(self.n_bands, noise_amplitudes.size(2))
+            f"Noise amplitudes size mismatch, expected {self.n_bands,} but got {noise_amplitudes.size(2)}"
         temp_params["noise_amplitudes"] = noise_amplitudes
 
         # harmonic part
@@ -681,7 +679,7 @@ class DDSPSynth(SynthBase):
             block_size,
         ).to(impulse) * 2 - 1
 
-        noise = DDSPSynth.fft_convolve(noise, impulse).contiguous()
+        noise = DDSPSynth.fft_convolve(noise, impulse)
         noise = noise.reshape(noise.shape[0], -1)
 
         # NOTE: because we use 2001 frames, there will be `block_size` residuals, so we trim them

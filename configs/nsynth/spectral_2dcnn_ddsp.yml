@@ -10,7 +10,7 @@ init_args:
     add_lfo:
       dim: 1
       act: none
-      adapt_dim: 20
+      adapt_dim: 166
       adapt_act: sigmoid
     sub_lfo:
       dim: 1

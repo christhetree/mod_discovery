@@ -592,6 +592,7 @@ class DDSPHarmonicOsc(nn.Module):
         harmonic_amplitudes: Optional[T] = None,
         n_samples: Optional[int] = None,
         phase: Optional[T] = None,
+        eps: float = 1e-5,
     ) -> T:
         assert 1 <= f0_hz.ndim <= 2
         if f0_hz.ndim == 1:
@@ -603,16 +604,24 @@ class DDSPHarmonicOsc(nn.Module):
             # if harmonic amplitudes are provided, it must be of shape (bs, n_samples, n_harmonics)
             assert harmonic_amplitudes.ndim == 3, \
                 f"Harmonic amplitudes must be of shape (bs, n_samples, n_harmonics), given shape: {harmonic_amplitudes.shape}"
-            assert harmonic_amplitudes.shape == (f0_hz.size(0), f0_hz.size(1), self.n_harmonics), \
+            assert harmonic_amplitudes.shape == (f0_hz.size(0), f0_hz.size(1), self.n_harmonics + 1), \
                 f"Harmonic amplitudes shape {harmonic_amplitudes.shape} must be the same as f0_hz shape {f0_hz.shape}"
         else:
             # or else, we assign the same amplitude for all harmonics
-            harmonic_amplitudes = tr.ones(f0_hz.size(0), f0_hz.size(1), self.n_harmonics)
+            harmonic_amplitudes = tr.ones(f0_hz.size(0), f0_hz.size(1), self.n_harmonics + 1).to(f0_hz.device)
         
         f0_hz = f0_hz.unsqueeze(-1)
 
+        total_amplitude = harmonic_amplitudes[..., :1]
+        harmonic_amplitudes = harmonic_amplitudes[..., 1:]
+
         # anti-aliasing by zero-ing out the amplitudes for harmonics that are above nyquist
         harmonic_amplitudes_aa = self.remove_above_nyquist(harmonic_amplitudes, f0_hz)
+
+        # normalize the amplitudes of each harmonic to sum to `total_amplitude`
+        harmonic_amplitudes_aa /= \
+            (harmonic_amplitudes_aa.sum(dim=-1, keepdim=True) + eps)
+        harmonic_amplitudes_aa *= total_amplitude
 
         omega = tr.cumsum(2 * tr.pi * f0_hz / self.sr, dim=1)
         if phase is not None:
@@ -634,7 +643,7 @@ class DDSPHarmonicOsc(nn.Module):
         f0_hz: T
     ) -> T:
         f0_hz_harmonics = f0_hz * tr.arange(1, self.n_harmonics + 1, device=f0_hz.device)
-        aa = (f0_hz_harmonics < self.sr / 2).float() + 1e-4
+        aa = (f0_hz_harmonics < self.sr / 2).float()
         return harmonic_amplitudes * aa
 
 
