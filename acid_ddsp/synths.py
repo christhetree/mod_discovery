@@ -651,6 +651,9 @@ class DDSPSynth(SynthBase):
         temp_params: Dict[str, T],
         global_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
+        # apply scaling function to the sigmoid output as per Section B.5, Eq.5 in the DDSP paper
+        temp_params["add_lfo"] = DDSPSynth.scale_function(temp_params["add_lfo"])
+
         harmonic_amplitudes = temp_params["add_lfo"][..., :self.osc.n_harmonics + 1]
         harmonic_amplitudes = util.linear_interpolate_dim(
             harmonic_amplitudes, self.ac.n_samples, align_corners=True, dim=1
@@ -719,6 +722,15 @@ class DDSPSynth(SynthBase):
         output = output[..., output.shape[-1] // 2:]
 
         return output
+    
+    def scale_function(
+        x_sigmoid: T,
+        eps: float = 1e-7,
+    ):
+        # NOTE: we assume that x_sigmoid already has sigmoid applied by the model
+        assert x_sigmoid.min() >= 0 and x_sigmoid.max() <= 1, \
+            f"Expected x_sigmoid to be in range [0, 1], but got {x_sigmoid.min(), x_sigmoid.max()}"
+        return 2 * (x_sigmoid ** tr.log(tr.tensor(10).to(x_sigmoid.device))) + eps
     
     def forward(
         self,
