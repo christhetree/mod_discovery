@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Optional, Tuple
 
 import torch as tr
-from torch import Tensor as T, nn
+from torch import Tensor as T, nn, fft
 
 import util
 from acid_ddsp.synth_modules import (
@@ -12,6 +12,7 @@ from acid_ddsp.synth_modules import (
     ExpDecayEnv,
     WavetableOsc,
     WavetableOscShan,
+    DDSPHarmonicOsc,
     ADSR,
 )
 from audio_config import AudioConfig
@@ -625,6 +626,133 @@ class WavetableSynthShan(WavetableSynth):
         temp_params["attention_matrix"] = attention_matrix
         dry_audio = self.osc(f0_hz, attention_matrix, n_samples=n_samples, phase=phase)
         return dry_audio, {}
+
+
+class DDSPSynth(SynthBase):
+    def __init__(
+        self,
+        ac: AudioConfig,
+        n_harmonics: int = 100,
+        n_bands: int = 65,
+    ):
+        super().__init__(ac)
+        self.osc = DDSPHarmonicOsc(
+            ac.sr,
+            n_harmonics=n_harmonics,
+        )
+        self.n_bands = n_bands
+        self.adsr = ADSR(n_frames=ac.n_samples)
+
+    def additive_synthesis(
+        self,
+        n_samples: int,
+        f0_hz: T,
+        phase: T,
+        temp_params: Dict[str, T],
+        global_params: Dict[str, T],
+    ) -> (T, Dict[str, T]):
+        # apply scaling function to the sigmoid output as per Section B.5, Eq.5 in the DDSP paper
+        temp_params["add_lfo"] = DDSPSynth.scale_function(temp_params["add_lfo"])
+
+        harmonic_amplitudes = temp_params["add_lfo"][..., :self.osc.n_harmonics + 1]
+        harmonic_amplitudes = util.linear_interpolate_dim(
+            harmonic_amplitudes, self.ac.n_samples, align_corners=True, dim=1
+        )
+        temp_params["harmonic_amplitudes"] = harmonic_amplitudes
+
+        noise_amplitudes = temp_params["add_lfo"][..., self.osc.n_harmonics + 1:]
+        assert noise_amplitudes.size(2) == self.n_bands, \
+            f"Noise amplitudes size mismatch, expected {self.n_bands,} but got {noise_amplitudes.size(2)}"
+        temp_params["noise_amplitudes"] = noise_amplitudes
+
+        # harmonic part
+        harmonic = self.osc(
+            f0_hz,
+            harmonic_amplitudes,
+            n_samples=n_samples,
+            phase=phase,
+        )
+
+        # noise part, get noise filter IRs from noise band amplitudes
+        block_size = round(n_samples / noise_amplitudes.size(1))
+        impulse = DDSPSynth.amp_to_impulse_response(noise_amplitudes, block_size)
+        noise = tr.rand(
+            impulse.shape[0],
+            impulse.shape[1],
+            block_size,
+        ).to(impulse) * 2 - 1
+
+        noise = DDSPSynth.fft_convolve(noise, impulse)
+        noise = noise.reshape(noise.shape[0], -1)
+
+        # NOTE: because we use 2001 frames, there will be `block_size` residuals, so we trim them
+        noise = noise[:, :n_samples]
+
+        dry_audio = harmonic + noise
+        return dry_audio, {}
+    
+    def amp_to_impulse_response(
+        amp: T, 
+        target_size: int
+    ) -> T:
+        amp = tr.stack([amp, tr.zeros_like(amp)], -1)
+        amp = tr.view_as_complex(amp)
+        amp = fft.irfft(amp)
+
+        filter_size = amp.shape[-1]
+
+        amp = tr.roll(amp, filter_size // 2, -1)
+        win = tr.hann_window(filter_size, dtype=amp.dtype, device=amp.device)
+
+        amp = amp * win
+
+        amp = nn.functional.pad(amp, (0, int(target_size) - int(filter_size)))
+        amp = tr.roll(amp, -filter_size // 2, -1)
+
+        return amp
+
+    def fft_convolve(
+        signal: T, 
+        kernel: T
+    ) -> T:
+        signal = nn.functional.pad(signal, (0, signal.shape[-1]))
+        kernel = nn.functional.pad(kernel, (kernel.shape[-1], 0))
+
+        output = fft.irfft(fft.rfft(signal) * fft.rfft(kernel))
+        output = output[..., output.shape[-1] // 2:]
+
+        return output
+    
+    def scale_function(
+        x_sigmoid: T,
+        eps: float = 1e-7,
+    ):
+        # NOTE: we assume that x_sigmoid already has sigmoid applied by the model
+        assert x_sigmoid.min() >= 0 and x_sigmoid.max() <= 1, \
+            f"Expected x_sigmoid to be in range [0, 1], but got {x_sigmoid.min(), x_sigmoid.max()}"
+        return 2 * (x_sigmoid ** tr.log(tr.tensor(10).to(x_sigmoid.device))) + eps
+    
+    def forward(
+        self,
+        n_samples: int,
+        f0_hz: T,
+        phase: T,
+        temp_params: Dict[str, T],
+        global_params: Dict[str, T],
+        envelope: Optional[T] = None,
+        note_on_duration: Optional[T] = None,
+    ) -> Dict[str, T]:
+        synth_out = super().forward(
+            n_samples, 
+            f0_hz, 
+            phase, 
+            temp_params, 
+            global_params, 
+            envelope, 
+            note_on_duration
+        )
+        synth_out["wet"] = synth_out["filtered_audio"]
+        return synth_out
 
 
 # if __name__ == "__main__":

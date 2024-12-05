@@ -11,6 +11,7 @@ from torchaudio.transforms import AmplitudeToDB
 
 from curves import PiecewiseBezier, PiecewiseBezierDiffSeg
 from feature_extraction import LogMelSpecFeatureExtractor
+import util
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -289,7 +290,8 @@ class Spectral2DCNN(nn.Module):
                 nn.Sigmoid(),
             )
 
-    def forward(self, x: T) -> Dict[str, T]:
+    def forward(self, x: Dict[str, T]) -> Dict[str, T]:
+        x = x["audio"]
         assert x.ndim == 3
         out_dict = {}
 
@@ -420,6 +422,94 @@ class Spectral2DCNN(nn.Module):
         for dil in dilations[1:]:
             rf = rf + ((kernel_size - 1) * dil)
         return rf
+
+
+def mlp(
+    in_size: int, 
+    hidden_size: int, 
+    n_layers: int
+) -> nn.Sequential: 
+    channels = [in_size] + (n_layers) * [hidden_size]
+    net = []
+    for i in range(n_layers):
+        net.append(nn.Linear(channels[i], channels[i + 1]))
+        net.append(nn.LayerNorm(channels[i + 1]))
+        net.append(nn.LeakyReLU())
+    return nn.Sequential(*net)
+
+
+def gru(
+    n_input: int, 
+    hidden_size: int
+) -> nn.GRU:
+    return nn.GRU(n_input * hidden_size, hidden_size, batch_first=True)
+
+
+class DDSPSimpleModel(nn.Module):
+    def __init__(
+        self,
+        fe: LogMelSpecFeatureExtractor,
+        hidden_size: int, 
+        n_harmonic: int, 
+        n_bands: int, 
+        sampling_rate: int,
+        block_size: int
+    ):
+        super().__init__()
+        self.register_buffer("sampling_rate", tr.tensor(sampling_rate))
+        self.register_buffer("block_size", tr.tensor(block_size))
+
+        self.in_mlps = nn.ModuleList([mlp(1, hidden_size, 3)] * 2)
+        self.gru = gru(2, hidden_size)
+        self.out_mlp = mlp(hidden_size + 2, hidden_size, 3)
+
+        self.proj_matrices = nn.ModuleList([
+            nn.Linear(hidden_size, n_harmonic + 1),
+            nn.Linear(hidden_size, n_bands),
+        ])
+
+        self.register_buffer("cache_gru", tr.zeros(1, 1, hidden_size))
+        self.register_buffer("phase", tr.zeros(1))
+
+        self.loudness_extractor = LoudnessExtractor(
+            sr=fe.sr, n_fft=fe.n_fft, hop_len=fe.hop_len
+        )
+
+    def forward(
+        self, 
+        x: Dict[str, T]
+    ) -> Dict[str, T]:
+        audio, pitch = x["audio"], x["f0_hz"]
+        pitch = pitch.unsqueeze(-1).unsqueeze(-1)
+
+        num_blocks = audio.shape[-1] // self.block_size
+        pitch = pitch.expand(pitch.size(0), num_blocks, 1)
+        loudness = self.loudness_extractor(audio.squeeze(1))
+        loudness = loudness.unsqueeze(-1)
+
+        loudness = util.linear_interpolate_dim(
+            loudness, num_blocks, dim=1
+        )
+
+        hidden = tr.cat([
+            self.in_mlps[0](pitch),
+            self.in_mlps[1](loudness),
+        ], -1)
+        hidden = tr.cat([self.gru(hidden)[0], pitch, loudness], -1)
+        hidden = self.out_mlp(hidden)
+
+        # harmonic part
+        harmonic_param = self.proj_matrices[0](hidden)
+        harmonic_param = tr.sigmoid(harmonic_param)
+
+        # noise part
+        noise_param = self.proj_matrices[1](hidden)
+        noise_param = tr.sigmoid(noise_param)
+
+        out_dict = {}
+        out_dict["add_lfo"] = tr.cat([harmonic_param, noise_param], dim=-1)
+
+        return out_dict
 
 
 class LoudnessExtractor(nn.Module):

@@ -1,0 +1,8 @@
+class_path: models.DDSPSimpleModel
+init_args:
+  fe: log_mel_spec.yml
+  hidden_size: 512
+  n_harmonic: 100
+  n_bands: 65
+  sampling_rate: 16000
+  block_size: 160

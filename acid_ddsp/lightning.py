@@ -195,6 +195,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
         temp_params = batch.get("temp_params", {})
 
         model_in = wet.unsqueeze(1)
+        model_in_dict = {
+            "audio": model_in,
+            "f0_hz": f0_hz,
+        }
         temp_params_hat = {}
         global_params_0to1_hat = {}
         global_params_hat = {}
@@ -202,7 +206,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # Perform model forward pass
         if self.use_model:
-            model_out = self.model(model_in)
+            model_out = self.model(model_in_dict)
 
             # Postprocess temp_params_hat
             for p_name in self.temp_param_names_hat:
@@ -400,7 +404,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
     def configure_optimizers(self) -> Tuple[tr.optim.Optimizer, ...]:
         if self.model_opt is None or self.synth_opt is None:
             log.info(f"Using one optimizer")
-            return super().configure_optimizers()
+            if self.model_opt is not None:
+                self.model_opt = self.model_opt(self.model.parameters())
+                return self.model_opt
+            else:
+                self.synth_opt = self.synth_opt(self.synth_hat.parameters())
+                return self.synth_opt
         else:
             assert (
                 self.trainer.accumulate_grad_batches == 1
