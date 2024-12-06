@@ -7,6 +7,7 @@ import torch as tr
 from torch import Tensor as T
 from torch import nn
 from torch.nn import functional as F
+from tqdm import tqdm
 
 import util
 
@@ -116,7 +117,7 @@ class PiecewiseBezier(nn.Module):
         n_frames: int,
         n_segments: int,
         degree: int,
-        eps: float = 1e-6,
+        eps: float = 1e-3,
     ):
         super().__init__()
         assert n_frames >= 2
@@ -128,16 +129,16 @@ class PiecewiseBezier(nn.Module):
         self.degree = degree
         self.eps = eps
 
-        seg_intervals = tr.full((1, n_frames - 1), 1.0 / (n_frames - 1))
-        knots = tr.linspace(0.0, 1.0, n_segments + 1)[1:-1].view(1, -1)
-        support, mask = self.create_support(seg_intervals, knots)
-        assert support.min() == 0.0
-        assert support.max() == 1.0
-        assert mask.sum() == n_frames
-        self.register_buffer("knots", knots)
+        # Create the support and mask from evenly spaced modes
+        modes = tr.linspace(0.0, 1.0, n_segments + 1)[1:-1].view(1, -1)
+        support, mask = self._create_support_and_mask(modes)
+        self.register_buffer("modes", modes)
         self.register_buffer("support", support)
         self.register_buffer("mask", mask)
+        if self.n_segments == 1:
+            self.mask = None
 
+        # Prepare binomial coefficients and exponents for the Bernstein basis
         bin_coeff = []
         for i in range(degree + 1):
             bin_coeff.append(math.comb(degree, i))
@@ -146,72 +147,85 @@ class PiecewiseBezier(nn.Module):
         self.register_buffer("bin_coeff", bin_coeff)
         self.register_buffer("exp", exp)
 
-    def logits_to_control_points(self, logits: T) -> T:
+    def _create_support_and_mask(self, modes: T) -> (T, T):
+        assert self.n_segments < self.n_frames
+        assert modes.ndim == 2
+        assert modes.size(1) == self.n_segments - 1
+        support = tr.linspace(0.0, 1.0, self.n_frames).view(1, 1, -1)
+        support = support.repeat(1, self.n_segments, 1)
+        seg_starts = F.pad(modes, (1, 0), value=0.0).unsqueeze(2)
+        seg_ends = tr.roll(seg_starts, shifts=-1, dims=1)
+        seg_ends[:, -1, :] = 1.0
+        seg_ranges = seg_ends - seg_starts
+        mask = (support >= seg_starts) & (support < seg_ends)
+        mask[:, -1, -1] = True
+        support = support - seg_starts
+        support = support / seg_ranges
+        support = support * mask
+        assert support.min() == 0.0
+        assert support.max() == 1.0
+        assert mask.sum() == self.n_frames
+        return support, mask
+
+    def _logits_to_control_points(self, logits: T) -> T:
         p = tr.tanh(logits) * (1.0 - self.eps)
         p = p * 0.5 + 0.5
         return p
 
-    def logits_to_seg_intervals(self, logits: T) -> T:
-        assert logits.ndim == 2
-        # assert logits.size(1) == self.n_frames - 1
-        n_intervals = logits.size(1)
-        min_seg_interval = 1.0 / (2.0 * n_intervals)
-        scaling_factor = 1.0 - (n_intervals * min_seg_interval)
-        si = util.stable_softmax(logits)
-        si = si * scaling_factor + min_seg_interval
-        si = si.unsqueeze(1)
-        si = F.interpolate(si, size=self.n_frames - 1, mode="nearest")
-        si = si.squeeze(1)
-        si = si / si.sum(dim=1, keepdim=True)
-        return si
+    def _make_mask(self, seg_intervals: Optional[T]) -> Optional[T]:
+        return self.mask
 
-    def make_bezier_from_control_points(
-        self, control_points: T, support: T, mask: Optional[T] = None
+    def make_bezier(
+        self,
+        cp: T,
+        cp_are_logits: bool = False,
+        si: Optional[T] = None,
+        si_are_logits: bool = False,
     ) -> T:
-        assert control_points.ndim == 3
-        assert control_points.size(1) == self.n_segments
-        assert control_points.size(2) == self.degree + 1
-        control_points = control_points.unsqueeze(-1)
-        bezier = self.create_bezier(support, control_points, self.bin_coeff, self.exp)
+        # Process control points and make a Bezier curve for each segment
+        assert cp.ndim == 3
+        assert cp.size(1) == self.n_segments
+        assert cp.size(2) == self.degree + 1
+        if cp_are_logits:
+            cp = self._logits_to_control_points(cp)
+        bs = cp.size(0)
+        support = self.support.repeat(bs, 1, 1)
+        cp = cp.unsqueeze(-1)
+        bezier = self.create_bezier(support, cp, self.bin_coeff, self.exp)
         bezier = bezier.squeeze(-1)
+        # Process optional segment intervals and maybe apply a mask
+        if si is not None:
+            assert si.ndim == 2
+            assert si.size(0) == bs
+            assert si.size(1) == self.n_segments
+            if si_are_logits:
+                si = self._logits_to_seg_intervals(si)
+            si_sums = si.sum(dim=1)
+            assert tr.allclose(si_sums, tr.ones_like(si_sums))
+        mask = self._make_mask(si)
         if mask is not None:
             bezier = bezier * mask
+        # Sum the Bezier curves into a single curve
         bezier = bezier.sum(dim=1)
         return bezier
 
     def forward(
         self,
-        coeff_logits: T,
-        last_seg_last_p_logits: T,
-        support_logits: Optional[T] = None,
+        cp_logits: T,
+        si_logits: Optional[T] = None,
     ) -> T:
-        bs = coeff_logits.size(0)
-        n_dim = coeff_logits.ndim
+        bs = cp_logits.size(0)
+        n_dim = cp_logits.ndim
         n_ch = 1
         if n_dim == 4:
-            n_ch = coeff_logits.size(1)
-            coeff_logits = tr.flatten(coeff_logits, start_dim=0, end_dim=1)
-            last_seg_last_p_logits = last_seg_last_p_logits.view(bs * n_ch, 1)
-        assert coeff_logits.ndim == 3
-        assert coeff_logits.size(1) == self.n_segments
-        assert coeff_logits.size(2) == self.degree
-        assert last_seg_last_p_logits.size() == (bs * n_ch, 1)
-        coeff = self.logits_to_control_points(coeff_logits)
-        last_seg_last_p = self.logits_to_control_points(last_seg_last_p_logits)
-        p0 = coeff[:, :, 0:1]
-        last_p = tr.roll(p0, shifts=-1, dims=1)
-        last_p[:, -1, :] = last_seg_last_p
-        control_points = tr.cat((coeff, last_p), dim=2)
-
-        if support_logits is None:
-            # assert False
-            support = self.support.repeat(bs * n_ch, 1, 1)
-            mask = self.mask
-        else:
-            seg_intervals = self.logits_to_seg_intervals(support_logits)
-            support, mask = self.create_support(seg_intervals, self.knots)
-
-        x = self.make_bezier_from_control_points(control_points, support, mask)
+            n_ch = cp_logits.size(1)
+            cp_logits = tr.flatten(cp_logits, start_dim=0, end_dim=1)
+            if si_logits is not None:
+                assert si_logits.shape == (bs, n_ch, self.n_segments)
+                si_logits = tr.flatten(si_logits, start_dim=0, end_dim=1)
+        x = self.make_bezier(
+            cp_logits, cp_are_logits=True, si=si_logits, si_are_logits=True
+        )
         assert x.min() >= 0.0, f"x.min(): {x.min()}"
         assert x.max() <= 1.0, f"x.max(): {x.max()}"
         if n_dim == 4:
@@ -219,46 +233,23 @@ class PiecewiseBezier(nn.Module):
         return x
 
     @staticmethod
-    def create_support(seg_intervals: T, knots: T) -> (T, T):
-        assert seg_intervals.ndim == 2
-        bs = seg_intervals.size(0)
-        n_frames = seg_intervals.size(1) + 1
-        assert knots.ndim == 2
-        n_segments = knots.size(1) + 1
-        assert n_segments < n_frames
-        support = tr.cumsum(seg_intervals, dim=1)
-        support = F.pad(support, (1, 0), value=0.0).unsqueeze(1)
-        max_t = tr.max(support, dim=2, keepdim=False).values
-        support = support.repeat(1, n_segments, 1)
-        seg_starts = F.pad(knots, (1, 0), value=0.0).repeat(bs, 1).unsqueeze(2)
-        seg_ends = tr.roll(seg_starts, shifts=-1, dims=1)
-        seg_ends[:, -1, :] = max_t
-        seg_ranges = seg_ends - seg_starts
-        mask = (support >= seg_starts) & (support < seg_ends)
-        mask[:, -1, -1] = True
-        support = support - seg_starts
-        support = support / seg_ranges
-        support = support * mask
-        return support, mask
-
-    @staticmethod
-    def create_bezier(support: T, control_points: T, bin_coeff: T, exp: T) -> T:
+    def create_bezier(support: T, cp: T, bin_coeff: T, exp: T) -> T:
         assert support.ndim == 3
         bs, n_segments, n_frames = support.size()
-        assert control_points.ndim == 4
-        assert control_points.size(0) == bs
-        assert control_points.size(1) == n_segments
-        degree = control_points.size(2) - 1
-        dim = control_points.size(3)
+        assert cp.ndim == 4
+        assert cp.size(0) == bs
+        assert cp.size(1) == n_segments
+        degree = cp.size(2) - 1
+        dim = cp.size(3)
         assert bin_coeff.size() == (degree + 1,)
         assert exp.size() == (degree + 1,)
         t = support.unsqueeze(3)
         bin_coeff = bin_coeff.view(1, 1, 1, -1)
         exp = exp.view(1, 1, 1, -1)
         bernstein_basis = bin_coeff * (t**exp) * ((1.0 - t) ** (degree - exp))
-        control_points = control_points.unsqueeze(2)
+        cp = cp.unsqueeze(2)
         bernstein_basis = bernstein_basis.unsqueeze(-1)
-        bezier = control_points * bernstein_basis
+        bezier = cp * bernstein_basis
         bezier = bezier.sum(dim=-2)
         return bezier
 
@@ -277,18 +268,21 @@ class PiecewiseBezierDiffSeg(PiecewiseBezier):
         self.tsp_window_size = tsp_window_size
         self.n = n
 
+        # Overwrite the superclass support
         support = tr.linspace(0.0, 1.0, n_frames).view(1, 1, -1)
         support = support.repeat(1, n_segments, 1)
         self.register_buffer("support", support)
 
+        # Create support for the segmentation function
         seg_fn_support = tr.linspace(0.0, 1.0, n_frames).view(1, 1, -1)
         seg_fn_support = seg_fn_support.repeat(1, n_segments - 1, 1)
         self.register_buffer("seg_fn_support", seg_fn_support)
 
+        # Create segment indices for the continuous mask
         seg_indices = tr.arange(0, n_segments).float()
         self.register_buffer("seg_indices", seg_indices)
 
-    def logits_to_seg_intervals(
+    def _logits_to_seg_intervals(
         self, logits: T, min_seg_interval: Optional[float] = None
     ) -> T:
         assert logits.ndim == 2
@@ -302,40 +296,19 @@ class PiecewiseBezierDiffSeg(PiecewiseBezier):
         si = si * scaling_factor + min_seg_interval
         return si
 
-    def forward(self, coeff_logits: T, mode_logits: Optional[T] = None) -> T:
-        bs = coeff_logits.size(0)
-        n_dim = coeff_logits.ndim
-        n_ch = 1
-        if n_dim == 4:
-            n_ch = coeff_logits.size(1)
-            coeff_logits = tr.flatten(coeff_logits, start_dim=0, end_dim=1)
-        assert coeff_logits.ndim == 3
-        assert coeff_logits.size(1) == self.n_segments
-        assert coeff_logits.size(2) == self.degree + 1
-
-        if mode_logits is None:
-            cont_mask = None
-            assert self.n_segments == 1
-        else:
-            if n_dim == 4:
-                mode_logits = tr.flatten(mode_logits, start_dim=0, end_dim=1)
-            assert mode_logits.ndim == 2
-            assert mode_logits.size(1) == self.n_segments
-            seg_intervals = self.logits_to_seg_intervals(mode_logits)
-            seg_fn_support = self.seg_fn_support.repeat(bs * n_ch, 1, 1)
-            seg_fn = self.create_seg_fn(
-                seg_fn_support, seg_intervals, self.tsp_window_size, self.n
-            )
-            cont_mask = self.create_cont_mask_from_seg_fn(seg_fn, self.seg_indices)
-
-        control_points = self.logits_to_control_points(coeff_logits)
-        support = self.support.repeat(bs * n_ch, 1, 1)
-        x = self.make_bezier_from_control_points(control_points, support, cont_mask)
-        assert x.min() >= 0.0, f"x.min(): {x.min()}"
-        assert x.max() <= 1.0, f"x.max(): {x.max()}"
-        if n_dim == 4:
-            x = x.view(bs, n_ch, x.size(1))
-        return x
+    def _make_mask(self, seg_intervals: Optional[T]) -> Optional[T]:
+        if self.n_segments == 1:
+            return None
+        assert seg_intervals is not None
+        assert seg_intervals.ndim == 2
+        assert seg_intervals.size(1) == self.n_segments
+        bs = seg_intervals.size(0)
+        seg_fn_support = self.seg_fn_support.repeat(bs, 1, 1)
+        seg_fn = self.create_seg_fn(
+            seg_fn_support, seg_intervals, self.tsp_window_size, self.n
+        )
+        cont_mask = self.create_cont_mask_from_seg_fn(seg_fn, self.seg_indices)
+        return cont_mask
 
     @staticmethod
     def create_seg_fn(
@@ -449,6 +422,89 @@ class FourierSignal(nn.Module):
 
 
 if __name__ == "__main__":
+    from matplotlib import pyplot as plt
+
+    # tr.manual_seed(43)
+
+    n_iter = 1000
+    lr_acc = 1.01
+    lr_brake = 0.9
+
+    bs = 1
+    n_frames = 1501
+    n_segments = 4
+    degree = 3
+
+    bezier_module = PiecewiseBezier(n_frames, n_segments, degree)
+    si = None
+    # bezier_module = PiecewiseBezierDiffSeg(n_frames, n_segments, degree)
+    # si = tr.rand(bs, n_segments)
+    # si = si / si.sum(dim=1, keepdim=True)
+    # log.info(f"si = {si}")
+
+    cp = (
+        tr.rand(bs, (n_segments * degree) + 1)
+        .unfold(dimension=1, size=degree + 1, step=degree)
+        .contiguous()
+    )
+    curves = bezier_module.make_bezier(
+        cp, cp_are_logits=False, si=si, si_are_logits=False
+    )
+
+    n_segments_hat = 4
+    degree_hat = 30
+
+    # bezier_module_hat = PiecewiseBezier(n_frames, n_segments_hat, degree_hat)
+    # si_hat = None
+    bezier_module_hat = PiecewiseBezierDiffSeg(n_frames, n_segments_hat, degree_hat)
+    si_logits = tr.rand(bs, n_segments_hat)
+    si_logits.requires_grad_()
+
+    cp_logits = tr.rand(bs, (n_segments_hat * degree_hat) + 1)
+    cp_logits.requires_grad_()
+
+    loss_hist = []
+    curr_lr = 1.0
+    eps = 1e-5
+    min_lr = eps
+    curves_hat = None
+
+    for idx in tqdm(range(n_iter)):
+        cp_logits_view = cp_logits.unfold(
+            dimension=1, size=degree_hat + 1, step=degree_hat
+        )
+        curves_hat = bezier_module_hat.make_bezier(
+            cp_logits_view, cp_are_logits=True, si=si_logits, si_are_logits=True
+        )
+        loss = F.mse_loss(curves_hat, curves)
+        loss_hist.append(loss)
+        loss.backward()
+
+        if idx > 0 and loss_hist[idx] - loss_hist[idx - 1] > -eps:
+            curr_lr *= lr_brake
+        else:
+            with tr.no_grad():
+                cp_logits -= curr_lr * cp_logits.grad
+                cp_logits.grad.zero_()
+            curr_lr *= lr_acc
+        log.info(f"loss: {loss.item():.6f}, lr: {curr_lr:.6f}")
+
+        if curr_lr < min_lr:
+            log.info(f"Reached min_lr: {min_lr}")
+            break
+
+        if idx % 5 == 0:
+            plt.plot(curves[0].detach().numpy(), label="target")
+            plt.plot(curves_hat[0].detach().numpy(), label="hat")
+            plt.legend()
+            plt.show()
+
+    plt.plot(curves[0].detach().numpy(), label="target")
+    plt.plot(curves_hat[0].detach().numpy(), label="hat")
+    plt.legend()
+    plt.show()
+    exit()
+
     n_samples = 10
     support = tr.linspace(0.0, 1.0, n_samples).view(1, -1).repeat(2, 1)
     support = support.unsqueeze(0)
