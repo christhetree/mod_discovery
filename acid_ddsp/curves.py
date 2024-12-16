@@ -10,6 +10,7 @@ from torch.nn import functional as F
 from tqdm import tqdm
 
 import util
+from losses import FirstDerivativeL1Loss, SecondDerivativeL1Loss
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -117,6 +118,8 @@ class PiecewiseBezier(nn.Module):
         n_frames: int,
         n_segments: int,
         degree: int,
+        modes: Optional[T] = None,
+        is_c1_cont: bool = False,
         eps: float = 1e-3,
     ):
         super().__init__()
@@ -124,13 +127,17 @@ class PiecewiseBezier(nn.Module):
         assert n_segments >= 1
         assert n_segments < n_frames
         assert degree >= 1
+        if is_c1_cont:
+            assert degree >= 3, f"C1 continuity requires a degree of 3 or higher"
         self.n_frames = n_frames
         self.n_segments = n_segments
         self.degree = degree
+        self.is_c1_cont = is_c1_cont
         self.eps = eps
 
-        # Create the support and mask from evenly spaced modes
-        modes = tr.linspace(0.0, 1.0, n_segments + 1)[1:-1].view(1, -1)
+        # Create the support and mask from evenly spaced modes if none are provided
+        if modes is None:
+            modes = tr.linspace(0.0, 1.0, n_segments + 1)[1:-1].view(1, -1)
         support, mask = self._create_support_and_mask(modes)
         self.register_buffer("modes", modes)
         self.register_buffer("support", support)
@@ -151,8 +158,9 @@ class PiecewiseBezier(nn.Module):
         assert self.n_segments < self.n_frames
         assert modes.ndim == 2
         assert modes.size(1) == self.n_segments - 1
+        bs = modes.size(0)
         support = tr.linspace(0.0, 1.0, self.n_frames).view(1, 1, -1)
-        support = support.repeat(1, self.n_segments, 1)
+        support = support.repeat(bs, self.n_segments, 1)
         seg_starts = F.pad(modes, (1, 0), value=0.0).unsqueeze(2)
         seg_ends = tr.roll(seg_starts, shifts=-1, dims=1)
         seg_ends[:, -1, :] = 1.0
@@ -164,7 +172,7 @@ class PiecewiseBezier(nn.Module):
         support = support * mask
         assert support.min() == 0.0
         assert support.max() == 1.0
-        assert mask.sum() == self.n_frames
+        assert (mask.sum(dim=1).sum(dim=1) == self.n_frames).all()
         return support, mask
 
     def _logits_to_control_points(self, logits: T) -> T:
@@ -189,7 +197,18 @@ class PiecewiseBezier(nn.Module):
         if cp_are_logits:
             cp = self._logits_to_control_points(cp)
         bs = cp.size(0)
-        support = self.support.repeat(bs, 1, 1)
+        if self.support.size(0) != bs:
+            assert self.support.size(0) == 1
+            support = self.support.repeat(bs, 1, 1)
+        else:
+            support = self.support
+
+        if self.is_c1_cont:
+            p_nm1 = cp[:, :-1, -1]
+            p_nm2 = cp[:, :-1, -2]
+            q1 = 2 * p_nm1 - p_nm2
+            cp[:, 1:, 1] = q1
+
         cp = cp.unsqueeze(-1)
         bezier = self.create_bezier(support, cp, self.bin_coeff, self.exp)
         bezier = bezier.squeeze(-1)
@@ -264,7 +283,7 @@ class PiecewiseBezierDiffSeg(PiecewiseBezier):
         n: int = 2,
         eps: float = 1e-3,
     ):
-        super().__init__(n_frames, n_segments, degree, eps)
+        super().__init__(n_frames, n_segments, degree, eps=eps)
         self.tsp_window_size = tsp_window_size
         self.n = n
 
@@ -424,18 +443,39 @@ class FourierSignal(nn.Module):
 if __name__ == "__main__":
     from matplotlib import pyplot as plt
 
-    # tr.manual_seed(43)
+    tr.manual_seed(42)
 
     n_iter = 1000
     lr_acc = 1.01
     lr_brake = 0.9
 
-    bs = 1
-    n_frames = 1501
-    n_segments = 4
-    degree = 3
+    l1_loss = nn.L1Loss()
+    d1_loss = FirstDerivativeL1Loss()
+    d2_loss = SecondDerivativeL1Loss()
+    def modex_loss(y_hat: T, y) -> T:
+        return l1_loss(y_hat, y) + 5.0 * d1_loss(y_hat, y) + 10.0 * d2_loss(y_hat, y)
 
-    bezier_module = PiecewiseBezier(n_frames, n_segments, degree)
+    # loss_fn = ESRLoss()
+    loss_fn = l1_loss
+    # loss_fn = nn.MSELoss()
+    # loss_fn = modex_loss
+    # loss_fn = d1_loss
+
+    # Larger batch size is worse because there are no batch-granular LR updates
+    bs = 1
+    # bs = 256
+    n_frames = 1501
+    n_segments = 3
+    degree = 1
+
+    si_logits = tr.rand(bs, n_segments) * 3.0
+    si = PiecewiseBezierDiffSeg(n_frames, n_segments, degree)._logits_to_seg_intervals(
+        si_logits,
+        # min_seg_interval=1.0 / (2 * n_segments),
+    )
+    modes = tr.cumsum(si, dim=1)[:, :-1]
+    log.info(f"modes = {modes}")
+    bezier_module = PiecewiseBezier(n_frames, n_segments, degree, modes=modes, is_c1_cont=False)
     si = None
     # bezier_module = PiecewiseBezierDiffSeg(n_frames, n_segments, degree)
     # si = tr.rand(bs, n_segments)
@@ -451,14 +491,24 @@ if __name__ == "__main__":
         cp, cp_are_logits=False, si=si, si_are_logits=False
     )
 
-    n_segments_hat = 4
-    degree_hat = 30
+    # hz = 2.0
+    # amp = 1.0
+    # x = tr.linspace(0.0, 1.0, n_frames).view(1, -1)
+    # sinusoid = (tr.sin(2 * tr.pi * hz * x) + 1.0) / 2.0 * amp
+    # curves = sinusoid
 
-    # bezier_module_hat = PiecewiseBezier(n_frames, n_segments_hat, degree_hat)
-    # si_hat = None
-    bezier_module_hat = PiecewiseBezierDiffSeg(n_frames, n_segments_hat, degree_hat)
-    si_logits = tr.rand(bs, n_segments_hat)
-    si_logits.requires_grad_()
+    # ========================= Define hat hyperparams ==============================
+    # n_segments_hat = 12
+    # degree_hat = 3
+    n_segments_hat = 1
+    degree_hat = 36
+
+    bezier_module_hat = PiecewiseBezier(n_frames, n_segments_hat, degree_hat, is_c1_cont=True)
+    si_logits = None
+    # bezier_module_hat = PiecewiseBezierDiffSeg(n_frames, n_segments_hat, degree_hat)
+    # si_logits = tr.rand(bs, n_segments_hat)
+    # si_logits.requires_grad_()
+    # ========================= Define hat hyperparams ==============================
 
     cp_logits = tr.rand(bs, (n_segments_hat * degree_hat) + 1)
     cp_logits.requires_grad_()
@@ -476,7 +526,7 @@ if __name__ == "__main__":
         curves_hat = bezier_module_hat.make_bezier(
             cp_logits_view, cp_are_logits=True, si=si_logits, si_are_logits=True
         )
-        loss = F.mse_loss(curves_hat, curves)
+        loss = loss_fn(curves_hat, curves)
         loss_hist.append(loss)
         loss.backward()
 
@@ -487,22 +537,27 @@ if __name__ == "__main__":
                 cp_logits -= curr_lr * cp_logits.grad
                 cp_logits.grad.zero_()
             curr_lr *= lr_acc
-        log.info(f"loss: {loss.item():.6f}, lr: {curr_lr:.6f}")
+        # log.info(f"loss: {loss.item():.6f}, lr: {curr_lr:.6f}")
 
         if curr_lr < min_lr:
-            log.info(f"Reached min_lr: {min_lr}")
+            log.info(f"Reached min_lr: {min_lr}, final loss = {loss.item():.4f}")
             break
 
-        if idx % 5 == 0:
-            plt.plot(curves[0].detach().numpy(), label="target")
-            plt.plot(curves_hat[0].detach().numpy(), label="hat")
-            plt.legend()
-            plt.show()
+        # if idx % 5 == 0:
+        #     plt.plot(curves[0].detach().numpy(), label="target")
+        #     plt.plot(curves_hat[0].detach().numpy(), label="hat")
+        #     plt.legend()
+        #     plt.show()
 
-    plt.plot(curves[0].detach().numpy(), label="target")
-    plt.plot(curves_hat[0].detach().numpy(), label="hat")
+    plt.plot(curves[0].detach().numpy(), label="target 0")
+    plt.plot(curves_hat[0].detach().numpy(), label="hat 0")
+    plt.title(f"loss = {loss_hist[1].item():.6f}")
     plt.legend()
     plt.show()
+    # plt.plot(curves[1].detach().numpy(), label="target 1")
+    # plt.plot(curves_hat[1].detach().numpy(), label="hat 1")
+    # plt.legend()
+    # plt.show()
     exit()
 
     n_samples = 10
