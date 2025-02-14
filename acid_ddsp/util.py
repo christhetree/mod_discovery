@@ -48,21 +48,25 @@ def linear_interpolate_dim(
     return x
 
 
-def sample_uniform(low: float, high: float, n: int = 1) -> Union[float, T]:
-    x = (tr.rand(n) * (high - low)) + low
+def sample_uniform(
+    low: float, high: float, n: int = 1, rand_gen: Optional[tr.Generator] = None
+) -> Union[float, T]:
+    x = (tr.rand(n, generator=rand_gen) * (high - low)) + low
     if n == 1:
         return x.item()
     return x
 
 
-def sample_log_uniform(low: float, high: float, n: int = 1) -> Union[float, T]:
+def sample_log_uniform(
+    low: float, high: float, n: int = 1, seed: Optional[int] = None
+) -> Union[float, T]:
     # TODO(cm): replace with torch
     if low == high:
         if n == 1:
             return low
         else:
             return tr.full(size=(n,), fill_value=low)
-    x = loguniform.rvs(low, high, size=n)
+    x = loguniform.rvs(low, high, size=n, random_state=seed)
     if n == 1:
         return float(x)
     return tr.from_numpy(x).float()

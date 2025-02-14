@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 import librosa
 import torch as tr
 import torchaudio
+from pandas import DataFrame
 from torch import Tensor as T
 from torch.utils.data import Dataset
 
@@ -18,6 +19,57 @@ from acid_ddsp.modulations import ModSignalGenerator
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
+
+
+class WavetableDataset(Dataset):
+    def __init__(
+        self,
+        ac: AudioConfig,
+        df: DataFrame,
+        wts: List[T],
+        mod_sig_gen: ModSignalGenerator,
+        global_param_names: List[str],
+        temp_param_names: List[str],
+    ):
+        super().__init__()
+        self.ac = ac
+        assert df.columns == ["wt_idx", "seed"]
+        self.df = df
+        self.wts = wts
+        self.mod_sig_gen = mod_sig_gen
+        self.global_param_names = global_param_names
+        self.temp_param_names = temp_param_names
+
+        self.rand_gen = tr.Generator(device="cpu")
+
+    def __len__(self) -> int:
+        return len(self.df)
+
+    def __getitem__(self, idx: int) -> Dict[str, T]:
+        wt_idx = self.df.iloc[idx]["wt_idx"]
+        seed = self.df.iloc[idx]["seed"]
+        wt = self.wts[wt_idx]
+
+        f0_hz = util.sample_log_uniform(self.ac.min_f0_hz, self.ac.max_f0_hz, seed=seed)
+        f0_hz = tr.tensor(f0_hz)
+        self.rand_gen.manual_seed(seed)
+        phase = tr.rand((1,), generator=self.rand_gen) * 2 * tr.pi
+        phase_hat = tr.rand((1,), generator=self.rand_gen) * 2 * tr.pi
+
+        result = {
+            "note_on_duration": self.ac.note_on_duration,
+            "f0_hz": f0_hz,
+            "phase": phase,
+            "phase_hat": phase_hat,
+            "wt": wt,
+        }
+        for name in self.global_param_names:
+            assert "_0to1" not in name
+            result[f"{name}_0to1"] = tr.rand((1,), generator=self.rand_gen)
+        for name in self.temp_param_names:
+            mod_sig = self.mod_sig_gen(self.ac.n_samples, rand_gen=self.rand_gen)
+            result[name] = mod_sig
+        return result
 
 
 class SynthDataset(Dataset):

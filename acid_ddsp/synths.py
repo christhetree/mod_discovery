@@ -116,13 +116,21 @@ class ComposableSynth(SynthBase):
         ac: AudioConfig,
         add_synth_module: SynthModule,
         sub_synth_module: Optional[SynthModule] = None,
+        add_lfo_name: str = "add_lfo",
+        sub_lfo_name: str = "sub_lfo",
     ):
         super().__init__(ac)
         self.add_synth_module = add_synth_module
         self.sub_synth_module = sub_synth_module
+        self.add_lfo_name = add_lfo_name
+        self.sub_lfo_name = sub_lfo_name
 
     def _forward_synth_module(
-        self, synth_module: nn.Module, synth_module_kwargs: Dict[str, T], global_params: Dict[str, T], temp_params: Dict[str, T]
+        self,
+        synth_module: nn.Module,
+        synth_module_kwargs: Dict[str, T],
+        global_params: Dict[str, T],
+        temp_params: Dict[str, T],
     ) -> T:
         for param_name in self.add_synth_module.forward_param_names:
             if hasattr(self.ac, param_name):
@@ -150,6 +158,10 @@ class ComposableSynth(SynthBase):
             "f0_hz": f0_hz,
             "phase": phase,
         }
+        module_lfo_name = self.add_synth_module.lfo_name
+        if module_lfo_name is not None:
+            assert self.add_lfo_name in temp_params
+            synth_module_kwargs[module_lfo_name] = temp_params[self.add_lfo_name]
         add_audio = self._forward_synth_module(
             self.add_synth_module, synth_module_kwargs, global_params, temp_params
         )
@@ -166,6 +178,10 @@ class ComposableSynth(SynthBase):
         synth_module_kwargs = {
             "x": x,
         }
+        module_lfo_name = self.sub_synth_module.lfo_name
+        if module_lfo_name is not None:
+            assert self.sub_lfo_name in temp_params
+            synth_module_kwargs[module_lfo_name] = temp_params[self.sub_lfo_name]
         sub_audio = self._forward_synth_module(
             self.sub_synth_module, synth_module_kwargs, global_params, temp_params
         )

@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Optional
+from typing import Optional, List
 
 import torch as tr
 import torch.nn.functional as F
@@ -14,7 +14,8 @@ log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
 class SynthModule(nn.Module):
-    forward_param_names = []
+    forward_param_names: List[str] = []
+    lfo_name: Optional[str] = None
 
     def forward(self, *args, **kwargs) -> T:
         pass
@@ -348,11 +349,12 @@ class SquareSawVCOLite(SynthModule):
 class WavetableOsc(SynthModule):
     forward_param_names = [
         "f0_hz",
-        "wt_pos",
+        "wt_pos_0to1",
         "n_samples",
         "phase",
         "wt",
     ]
+    lfo_name = "wt_pos_0to1"
 
     def __init__(
         self,
@@ -461,23 +463,24 @@ class WavetableOsc(SynthModule):
     def forward(
         self,
         f0_hz: T,
-        wt_pos: T,
+        wt_pos_0to1: T,
         n_samples: Optional[int] = None,
         phase: Optional[T] = None,
         wt: Optional[T] = None,
     ) -> T:
         assert 1 <= f0_hz.ndim <= 2
-        assert 1 <= wt_pos.ndim <= 2
+        assert 1 <= wt_pos_0to1.ndim <= 2
         if f0_hz.ndim == 1:
             assert n_samples is not None
             f0_hz = f0_hz.unsqueeze(1)
             f0_hz = f0_hz.expand(-1, n_samples)
-        if wt_pos.ndim == 1:
+        if wt_pos_0to1.ndim == 1:
             assert n_samples is not None
-            wt_pos = wt_pos.unsqueeze(1)
-            wt_pos = wt_pos.expand(-1, n_samples)
-        assert wt_pos.min() >= -1.0, f"wt_pos.min() = {wt_pos.min()}"
-        assert wt_pos.max() <= 1.0, f"wt_pos.max() = {wt_pos.max()}"
+            wt_pos_0to1 = wt_pos_0to1.unsqueeze(1)
+            wt_pos_0to1 = wt_pos_0to1.expand(-1, n_samples)
+        assert wt_pos_0to1.min() >= 0.0, f"wt_pos_0to1.min() = {wt_pos_0to1.min()}"
+        assert wt_pos_0to1.max() <= 1.0, f"wt_pos_0to1.max() = {wt_pos_0to1.max()}"
+        wt_pos = wt_pos_0to1 * 2.0 - 1.0
         if wt is not None:
             self.set_wt(wt)
 
