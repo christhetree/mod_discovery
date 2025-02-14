@@ -465,8 +465,8 @@ if __name__ == "__main__":
     bs = 1
     # bs = 256
     n_frames = 1501
-    n_segments = 3
-    degree = 1
+    n_segments = 4
+    degree = 3
 
     si_logits = tr.rand(bs, n_segments) * 3.0
     si = PiecewiseBezierDiffSeg(n_frames, n_segments, degree)._logits_to_seg_intervals(
@@ -491,17 +491,17 @@ if __name__ == "__main__":
         cp, cp_are_logits=False, si=si, si_are_logits=False
     )
 
-    # hz = 2.0
-    # amp = 1.0
+    # hz = 30.0
+    # amp = 0.5
     # x = tr.linspace(0.0, 1.0, n_frames).view(1, -1)
     # sinusoid = (tr.sin(2 * tr.pi * hz * x) + 1.0) / 2.0 * amp
     # curves = sinusoid
 
     # ========================= Define hat hyperparams ==============================
-    # n_segments_hat = 12
-    # degree_hat = 3
-    n_segments_hat = 1
-    degree_hat = 36
+    n_segments_hat = 12
+    degree_hat = 3
+    # n_segments_hat = 1
+    # degree_hat = 36
 
     bezier_module_hat = PiecewiseBezier(n_frames, n_segments_hat, degree_hat, is_c1_cont=True)
     si_logits = None
@@ -543,11 +543,11 @@ if __name__ == "__main__":
             log.info(f"Reached min_lr: {min_lr}, final loss = {loss.item():.4f}")
             break
 
-        # if idx % 5 == 0:
-        #     plt.plot(curves[0].detach().numpy(), label="target")
-        #     plt.plot(curves_hat[0].detach().numpy(), label="hat")
-        #     plt.legend()
-        #     plt.show()
+        if idx % 5 == 0:
+            plt.plot(curves[0].detach().numpy(), label="target")
+            plt.plot(curves_hat[0].detach().numpy(), label="hat")
+            plt.legend()
+            plt.show()
 
     plt.plot(curves[0].detach().numpy(), label="target 0")
     plt.plot(curves_hat[0].detach().numpy(), label="hat 0")
