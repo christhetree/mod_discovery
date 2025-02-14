@@ -487,7 +487,7 @@ class LogWavetablesCallback(Callback):
         img = fig2img(fig)
         images.append(img)
         wt_pitch_hz = tr.tensor([osc.wt_pitch_hz]).unsqueeze(1).to(osc.window.device)
-        wt_bounded = osc.get_anti_aliased_bounded_wt(wt_pitch_hz).detach().cpu()
+        wt_bounded = osc.get_anti_aliased_maybe_bounded_wt(wt_pitch_hz).detach().cpu()
         wt_bounded = wt_bounded[0]
         fig = plot_wavetable(wt_bounded, f"{title}__aa_bounded")
         img = fig2img(fig)

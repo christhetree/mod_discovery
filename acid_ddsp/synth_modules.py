@@ -6,13 +6,21 @@ import torch as tr
 import torch.nn.functional as F
 from torch import Tensor as T, nn
 
-from adsr_naotake import ADSREnvelope
+import util
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
+class SynthModule(nn.Module):
+    forward_param_names = []
+
+    def forward(self, *args, **kwargs) -> T:
+        pass
+
+
+# TODO(cm): move to modulations.py
 class ADSRLite(nn.Module):
     # Based off TorchSynth's ADSR
     def __init__(self, sr: int, eps: float = 1e-7):
@@ -121,9 +129,12 @@ class ADSRLite(nn.Module):
         release_signal = self.make_release(release, alpha, note_on_duration, n_samples)
 
         envelope = attack_signal * decay_signal * release_signal
+        bs = attack.size(0)
+        assert envelope.shape == (bs, n_samples)
         return envelope
 
 
+# TODO(cm): move to modulations.py
 class ExpDecayEnv(ADSRLite):
     def forward(
         self,
@@ -135,6 +146,8 @@ class ExpDecayEnv(ADSRLite):
         assert alpha.shape == note_on_duration.shape
         assert alpha.min() >= 0.0
         envelope = self.ramp(note_on_duration, alpha, n_samples, inverse=True)
+        bs = alpha.size(0)
+        assert envelope.shape == (bs, n_samples)
         return envelope
 
 
@@ -260,7 +273,14 @@ class ADSR(nn.Module):
         return env
 
 
-class SquareSawVCOLite(nn.Module):
+class SquareSawVCOLite(SynthModule):
+    forward_param_names = [
+        "f0_hz",
+        "osc_shape",
+        "n_samples",
+        "phase",
+    ]
+
     # Based off TorchSynth's SquareSawVCO
     def __init__(self, sr: int):
         super().__init__()
@@ -320,10 +340,20 @@ class SquareSawVCOLite(nn.Module):
         n_partials = self.calc_n_partials(f0_hz)
         square_wave = tr.tanh(tr.pi * n_partials * tr.sin(arg) / 2)
         out_wave = (1 - (osc_shape / 2)) * square_wave * (1 + (osc_shape * tr.cos(arg)))
+        bs = f0_hz.size(0)
+        assert out_wave.shape == (bs, n_samples)
         return out_wave
 
 
-class WavetableOsc(nn.Module):
+class WavetableOsc(SynthModule):
+    forward_param_names = [
+        "f0_hz",
+        "wt_pos",
+        "n_samples",
+        "phase",
+        "wt",
+    ]
+
     def __init__(
         self,
         sr: int,
@@ -340,9 +370,11 @@ class WavetableOsc(nn.Module):
             assert n_pos is not None
             wt = tr.empty(n_pos, n_wt_samples).normal_(mean=0.0, std=0.01)
             # wt = tr.empty(n_pos, n_wt_samples).uniform_() * 2.0 - 1.0
+            is_wt_provided = False
         else:
             assert wt.ndim == 2
             n_pos, n_wt_samples = wt.size()
+            is_wt_provided = True
         self.n_pos = n_pos
         self.n_wt_samples = n_wt_samples
         if aa_filter_n is None:
@@ -361,16 +393,33 @@ class WavetableOsc(nn.Module):
             self.wt = nn.Parameter(wt)
         else:
             self.register_buffer("wt", wt)
+        if is_wt_provided:
+            # We do this to run the corresponding checks
+            self.set_wt(wt)
+
         aa_filter_support = 2 * (tr.arange(aa_filter_n) - (aa_filter_n - 1) / 2) / sr
-        self.register_buffer("aa_filter_support", aa_filter_support.unsqueeze(0))
+        self.register_buffer("aa_filter_support", aa_filter_support.unsqueeze(0), persistent=False)
         self.register_buffer(
-            "window", tr.blackman_window(aa_filter_n, periodic=False).unsqueeze(0)
+            "window", tr.blackman_window(aa_filter_n, periodic=False).unsqueeze(0), persistent=False
         )
         # TODO(cm): check whether this is correct or not
         self.wt_pitch_hz = sr / n_wt_samples
 
     def get_wt(self) -> T:
         return self.wt
+
+    def set_wt(self, new_wt: T) -> None:
+        assert not self.is_trainable, "Cannot set wt if is_trainable is True"
+        assert new_wt.ndim == 2
+        assert new_wt.size(1) == self.n_wt_samples
+        if new_wt.size(0) != self.n_pos:
+            log.info(f"Linearly interpolating new_wt.n_pos from {new_wt.size(0)} "
+                     f"to {self.n_pos}")
+            new_wt = util.linear_interpolate_dim(
+                new_wt, n=self.n_pos, dim=0, align_corners=True)
+        assert new_wt.min() >= -1.0, f"new_wt.min() = {new_wt.min()}"
+        assert new_wt.max() <= 1.0, f"new_wt.max() = {new_wt.max()}"
+        self.wt[:, :] = new_wt[:, :]
 
     def calc_lp_sinc_blackman_coeff(self, cf_hz: T) -> T:
         assert cf_hz.ndim == 2
@@ -386,9 +435,12 @@ class WavetableOsc(nn.Module):
         h /= summed
         return h
 
-    def get_anti_aliased_bounded_wt(self, max_f0_hz: T) -> T:
+    def get_anti_aliased_maybe_bounded_wt(self, max_f0_hz: T) -> T:
         wt = self.get_wt()
-        bounded_wt = tr.tanh(wt)
+        if self.is_trainable:
+            maybe_bounded_wt = tr.tanh(wt)
+        else:
+            maybe_bounded_wt = wt
         pitch_ratio = max_f0_hz / self.wt_pitch_hz
         # Make the center frequency a bit lower than the new nyquist
         # TODO(cm): add roll-off factor to config
@@ -397,10 +449,10 @@ class WavetableOsc(nn.Module):
         bs = aa_filters.size(0)
         aa_filters = aa_filters.unsqueeze(1).unsqueeze(1)
         # Put batch in channel dim to apply different kernel to each item in batch
-        bounded_wt = bounded_wt.unsqueeze(0).unsqueeze(0)
-        bounded_wt = bounded_wt.expand(1, bs, -1, -1)
+        maybe_bounded_wt = maybe_bounded_wt.unsqueeze(0).unsqueeze(0)
+        maybe_bounded_wt = maybe_bounded_wt.expand(1, bs, -1, -1)
         n_pad = self.aa_filter_n // 2
-        padded_wt = F.pad(bounded_wt, (n_pad, n_pad, 0, 0), mode="circular")
+        padded_wt = F.pad(maybe_bounded_wt, (n_pad, n_pad, 0, 0), mode="circular")
         filtered_wt = F.conv2d(padded_wt, aa_filters, padding="valid", groups=bs)
         filtered_wt = tr.swapaxes(filtered_wt, 0, 1)
         filtered_wt = filtered_wt.squeeze(1)
@@ -412,6 +464,7 @@ class WavetableOsc(nn.Module):
         wt_pos: T,
         n_samples: Optional[int] = None,
         phase: Optional[T] = None,
+        wt: Optional[T] = None,
     ) -> T:
         assert 1 <= f0_hz.ndim <= 2
         assert 1 <= wt_pos.ndim <= 2
@@ -425,6 +478,8 @@ class WavetableOsc(nn.Module):
             wt_pos = wt_pos.expand(-1, n_samples)
         assert wt_pos.min() >= -1.0, f"wt_pos.min() = {wt_pos.min()}"
         assert wt_pos.max() <= 1.0, f"wt_pos.max() = {wt_pos.max()}"
+        if wt is not None:
+            self.set_wt(wt)
 
         arg = SquareSawVCOLite.calc_osc_arg(self.sr, f0_hz, n_samples, phase)
         arg = arg % (2 * tr.pi)
@@ -434,7 +489,7 @@ class WavetableOsc(nn.Module):
         flow_field = tr.stack([temp_coords, wt_pos], dim=2).unsqueeze(1)
 
         max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
-        wt = self.get_anti_aliased_bounded_wt(max_f0_hz)
+        wt = self.get_anti_aliased_maybe_bounded_wt(max_f0_hz)
         wt = wt.unsqueeze(1)
 
         audio = F.grid_sample(
@@ -445,6 +500,8 @@ class WavetableOsc(nn.Module):
             align_corners=True,
         )
         audio = audio.squeeze(1).squeeze(1)
+        bs = f0_hz.size(0)
+        assert audio.shape == (bs, n_samples)
         return audio
 
 
@@ -518,7 +575,7 @@ class WavetableOscShan(WavetableOsc):
             f0_hz = f0_hz.expand(-1, n_samples)
         
         max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
-        wt = self.get_anti_aliased_bounded_wt(max_f0_hz)
+        wt = self.get_anti_aliased_maybe_bounded_wt(max_f0_hz)
 
         audio = WavetableOscShan._wavetable_osc_shan(wt, f0_hz, self.sr, n_samples, phase)
         if attention_matrix is not None:

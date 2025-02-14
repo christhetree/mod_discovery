@@ -14,6 +14,7 @@ from acid_ddsp.synth_modules import (
     WavetableOscShan,
     DDSPHarmonicOsc,
     ADSR,
+    SynthModule,
 )
 from audio_config import AudioConfig
 from filters import (
@@ -86,22 +87,89 @@ class SynthBase(ABC, nn.Module):
         envelope: Optional[T] = None,
         note_on_duration: Optional[T] = None,
     ) -> Dict[str, T]:
-        dry_audio, additive_out = self.additive_synthesis(
+        add_audio, add_out = self.additive_synthesis(
             n_samples, f0_hz, phase, temp_params, global_params
         )
-        if envelope is not None:
-            dry_audio *= envelope
-        filtered_audio, subtractive_out = self.subtractive_synthesis(
-            dry_audio, temp_params, global_params
+        sub_audio, sub_out = self.subtractive_synthesis(
+            add_audio, temp_params, global_params
         )
+        if envelope is None:
+            env_audio = sub_audio
+        else:
+            env_audio = sub_audio * envelope
         synth_out = {
-            "dry": dry_audio,
-            "envelope": envelope,
-            "filtered_audio": filtered_audio,
+            "env": envelope,
+            "add_audio": add_audio,
+            "sub_audio": sub_audio,
+            "env_audio": env_audio,
         }
-        synth_out.update(additive_out)
-        synth_out.update(subtractive_out)
+        assert all(k not in synth_out for k in add_out)
+        synth_out.update(add_out)
+        assert all(k not in synth_out for k in sub_out)
+        synth_out.update(sub_out)
         return synth_out
+
+
+class ComposableSynth(SynthBase):
+    def __init__(
+        self,
+        ac: AudioConfig,
+        add_synth_module: SynthModule,
+        sub_synth_module: Optional[SynthModule] = None,
+    ):
+        super().__init__(ac)
+        self.add_synth_module = add_synth_module
+        self.sub_synth_module = sub_synth_module
+
+    def _forward_synth_module(
+        self, synth_module: nn.Module, synth_module_kwargs: Dict[str, T], global_params: Dict[str, T], temp_params: Dict[str, T]
+    ) -> T:
+        for param_name in self.add_synth_module.forward_param_names:
+            if hasattr(self.ac, param_name):
+                assert param_name not in synth_module_kwargs
+                synth_module_kwargs[param_name] = getattr(self.ac, param_name)
+            if param_name in global_params:
+                assert param_name not in synth_module_kwargs
+                synth_module_kwargs[param_name] = global_params[param_name]
+            if param_name in temp_params:
+                assert param_name not in synth_module_kwargs
+                synth_module_kwargs[param_name] = temp_params[param_name]
+        out = synth_module(**synth_module_kwargs)
+        return out
+
+    def additive_synthesis(
+        self,
+        n_samples: int,
+        f0_hz: T,
+        phase: T,
+        temp_params: Dict[str, T],
+        global_params: Dict[str, T],
+    ) -> (T, Dict[str, T]):
+        synth_module_kwargs = {
+            "n_samples": n_samples,
+            "f0_hz": f0_hz,
+            "phase": phase,
+        }
+        add_audio = self._forward_synth_module(
+            self.add_synth_module, synth_module_kwargs, global_params, temp_params
+        )
+        return add_audio, {}
+
+    def subtractive_synthesis(
+        self,
+        x: T,
+        temp_params: Dict[str, T],
+        global_params: Dict[str, T],
+    ) -> (T, Dict[str, T]):
+        if self.sub_synth_module is None:
+            return x, {}
+        synth_module_kwargs = {
+            "x": x,
+        }
+        sub_audio = self._forward_synth_module(
+            self.sub_synth_module, synth_module_kwargs, global_params, temp_params
+        )
+        return sub_audio
 
 
 class AcidSynthBase(SynthBase):
@@ -583,6 +651,7 @@ class WavetableSynthShan(WavetableSynth):
     Main difference with our WavetableSynth is that Shan et al. uses weighted sum
     (attention) instead of grid_sample to aggregate across wavetable positions.
     """
+
     def __init__(
         self,
         ac: AudioConfig,
@@ -600,7 +669,7 @@ class WavetableSynthShan(WavetableSynth):
             log.info(f"Loading wavetable from {wt_path}")
             wt = tr.load(wt_path)
             assert wt.shape == (n_pos, n_wt_samples)
-            
+
         self.osc = WavetableOscShan(
             ac.sr,
             n_pos=n_pos,
@@ -609,7 +678,7 @@ class WavetableSynthShan(WavetableSynth):
             wt=wt,
             is_trainable=is_trainable,
         )
-    
+
     def additive_synthesis(
         self,
         n_samples: int,
@@ -654,15 +723,16 @@ class DDSPSynth(SynthBase):
         # apply scaling function to the sigmoid output as per Section B.5, Eq.5 in the DDSP paper
         temp_params["add_lfo"] = DDSPSynth.scale_function(temp_params["add_lfo"])
 
-        harmonic_amplitudes = temp_params["add_lfo"][..., :self.osc.n_harmonics + 1]
+        harmonic_amplitudes = temp_params["add_lfo"][..., : self.osc.n_harmonics + 1]
         harmonic_amplitudes = util.linear_interpolate_dim(
             harmonic_amplitudes, self.ac.n_samples, align_corners=True, dim=1
         )
         temp_params["harmonic_amplitudes"] = harmonic_amplitudes
 
-        noise_amplitudes = temp_params["add_lfo"][..., self.osc.n_harmonics + 1:]
-        assert noise_amplitudes.size(2) == self.n_bands, \
-            f"Noise amplitudes size mismatch, expected {self.n_bands,} but got {noise_amplitudes.size(2)}"
+        noise_amplitudes = temp_params["add_lfo"][..., self.osc.n_harmonics + 1 :]
+        assert (
+            noise_amplitudes.size(2) == self.n_bands
+        ), f"Noise amplitudes size mismatch, expected {self.n_bands,} but got {noise_amplitudes.size(2)}"
         temp_params["noise_amplitudes"] = noise_amplitudes
 
         # harmonic part
@@ -676,11 +746,15 @@ class DDSPSynth(SynthBase):
         # noise part, get noise filter IRs from noise band amplitudes
         block_size = round(n_samples / noise_amplitudes.size(1))
         impulse = DDSPSynth.amp_to_impulse_response(noise_amplitudes, block_size)
-        noise = tr.rand(
-            impulse.shape[0],
-            impulse.shape[1],
-            block_size,
-        ).to(impulse) * 2 - 1
+        noise = (
+            tr.rand(
+                impulse.shape[0],
+                impulse.shape[1],
+                block_size,
+            ).to(impulse)
+            * 2
+            - 1
+        )
 
         noise = DDSPSynth.fft_convolve(noise, impulse)
         noise = noise.reshape(noise.shape[0], -1)
@@ -690,11 +764,8 @@ class DDSPSynth(SynthBase):
 
         dry_audio = harmonic + noise
         return dry_audio, {}
-    
-    def amp_to_impulse_response(
-        amp: T, 
-        target_size: int
-    ) -> T:
+
+    def amp_to_impulse_response(amp: T, target_size: int) -> T:
         amp = tr.stack([amp, tr.zeros_like(amp)], -1)
         amp = tr.view_as_complex(amp)
         amp = fft.irfft(amp)
@@ -711,27 +782,25 @@ class DDSPSynth(SynthBase):
 
         return amp
 
-    def fft_convolve(
-        signal: T, 
-        kernel: T
-    ) -> T:
+    def fft_convolve(signal: T, kernel: T) -> T:
         signal = nn.functional.pad(signal, (0, signal.shape[-1]))
         kernel = nn.functional.pad(kernel, (kernel.shape[-1], 0))
 
         output = fft.irfft(fft.rfft(signal) * fft.rfft(kernel))
-        output = output[..., output.shape[-1] // 2:]
+        output = output[..., output.shape[-1] // 2 :]
 
         return output
-    
+
     def scale_function(
         x_sigmoid: T,
         eps: float = 1e-7,
     ):
         # NOTE: we assume that x_sigmoid already has sigmoid applied by the model
-        assert x_sigmoid.min() >= 0 and x_sigmoid.max() <= 1, \
-            f"Expected x_sigmoid to be in range [0, 1], but got {x_sigmoid.min(), x_sigmoid.max()}"
+        assert (
+            x_sigmoid.min() >= 0 and x_sigmoid.max() <= 1
+        ), f"Expected x_sigmoid to be in range [0, 1], but got {x_sigmoid.min(), x_sigmoid.max()}"
         return 2 * (x_sigmoid ** tr.log(tr.tensor(10).to(x_sigmoid.device))) + eps
-    
+
     def forward(
         self,
         n_samples: int,
@@ -743,13 +812,13 @@ class DDSPSynth(SynthBase):
         note_on_duration: Optional[T] = None,
     ) -> Dict[str, T]:
         synth_out = super().forward(
-            n_samples, 
-            f0_hz, 
-            phase, 
-            temp_params, 
-            global_params, 
-            envelope, 
-            note_on_duration
+            n_samples,
+            f0_hz,
+            phase,
+            temp_params,
+            global_params,
+            envelope,
+            note_on_duration,
         )
         synth_out["wet"] = synth_out["filtered_audio"]
         return synth_out
