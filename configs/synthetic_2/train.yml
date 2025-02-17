@@ -6,14 +6,15 @@ custom:
   dataset_name: testing
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
+#  use_wandb_cpu: true
   use_wandb_gpu: true
 
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [3]
-  max_epochs: 100
-  num_sanity_val_steps: 2
+  devices: [6]
+  max_epochs: 50
+  num_sanity_val_steps: 1
   accumulate_grad_batches: 1
   gradient_clip_val: 0.5
 
@@ -23,11 +24,12 @@ data:
     batch_size: 64
     ac: audio_config.yml
     wt_dir: ../data/wavetables/ableton
-    n_seeds_per_wt: 5
+    n_seeds_per_wt: 50
 #    mod_sig_gen: mod_sig_gen.yml
     mod_sig_gen: mod_sig_gen__pointy.yml
     temp_param_names:
       - add_lfo
+      - env
     num_workers: 4
 
 model:
@@ -39,12 +41,14 @@ model:
     synth: synth.yml
     temp_param_names:
       - add_lfo
+      - env
 
 #    use_model: false
     use_model: true
     model: spectral_2dcnn.yml
     temp_param_names_hat:
       - add_lfo
+      - env
     synth_hat: synth.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss

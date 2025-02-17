@@ -207,32 +207,50 @@ class AcidDDSPLightingModule(pl.LightningModule):
         global_params_hat = {}
         log_spec_x = None
 
+        temp_param_metrics = {}
+        global_param_metrics = {}
+
         # Perform model forward pass
         if self.use_model:
             model_out = self.model(model_in_dict)
 
             # Postprocess temp_params_hat
             for p_name in self.temp_param_names_hat:
-                p = model_out[p_name]
+                p_hat = model_out[p_name]
                 if p_name in temp_params:
-                    p = util.linear_interpolate_dim(
-                        p, temp_params[p_name].size(1), dim=1, align_corners=True
+                    p_hat = util.linear_interpolate_dim(
+                        p_hat, temp_params[p_name].size(1), dim=1, align_corners=True
                     )
-                temp_params_hat[p_name] = p
+                    p = temp_params[p_name]
+                    if p.shape == p_hat.shape:
+                        with tr.no_grad():
+                            l1 = self.l1(p_hat, p)
+                            esr = self.esr(p_hat, p)
+                        self.log(f"{stage}/{p_name}_l1", l1, prog_bar=False)
+                        temp_param_metrics[f"{p_name}_l1"] = l1
+                        self.log(f"{stage}/{p_name}_esr", esr, prog_bar=False)
+                        temp_param_metrics[f"{p_name}_esr"] = esr
+                temp_params_hat[p_name] = p_hat
                 if f"{p_name}_before_adapter" in model_out:
-                    p = model_out[f"{p_name}_before_adapter"]
+                    p_hat = model_out[f"{p_name}_before_adapter"]
                     if p_name in temp_params:
-                        p = util.linear_interpolate_dim(
-                            p, temp_params[p_name].size(1), dim=1, align_corners=True
+                        p_hat = util.linear_interpolate_dim(
+                            p_hat,
+                            temp_params[p_name].size(1),
+                            dim=1,
+                            align_corners=True,
                         )
-                    temp_params_hat[f"{p_name}_before_adapter"] = p
+                    temp_params_hat[f"{p_name}_before_adapter"] = p_hat
                 if f"{p_name}_adapted" in model_out:
-                    p = model_out[f"{p_name}_adapted"]
+                    p_hat = model_out[f"{p_name}_adapted"]
                     if p_name in temp_params:
-                        p = util.linear_interpolate_dim(
-                            p, temp_params[p_name].size(1), dim=1, align_corners=True
+                        p_hat = util.linear_interpolate_dim(
+                            p_hat,
+                            temp_params[p_name].size(1),
+                            dim=1,
+                            align_corners=True,
                         )
-                    temp_params_hat[f"{p_name}_adapted"] = p
+                    temp_params_hat[f"{p_name}_adapted"] = p_hat
 
             # Postprocess global_params_hat
             for p_name in self.global_param_names_hat:
@@ -243,11 +261,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 if not self.ac.is_fixed(p_name) and p_name in global_params_0to1:
                     p_val_0to1 = global_params_0to1[p_name]
                     with tr.no_grad():
-                        p_val_l1 = self.l1(p_val_0to1_hat, p_val_0to1)
-                    self.log(f"{stage}/{p_name}_l1", p_val_l1, prog_bar=False)
+                        l1 = self.l1(p_val_0to1_hat, p_val_0to1)
+                    self.log(f"{stage}/{p_name}_l1", l1, prog_bar=False)
+                    global_param_metrics[f"{p_name}_l1"] = l1
 
             # Postprocess log_spec_x
-            log_spec_x = model_out.get("log_spec_x")
+            log_spec_x = model_out.get("log_spec_x").squeeze(1)
 
             # Postprocess q_hat TODO(cm): generalize
             # if "q" in self.global_param_names_hat:
@@ -256,9 +275,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             #     temp_params_hat["q_mod_sig"] = q_mod_sig_hat
 
         if log_spec_x is None:
-            log_spec_x = self.spectral_visualizer(x)
-        assert log_spec_x.ndim == 4
-        log_spec_x = log_spec_x.squeeze(1)
+            with tr.no_grad():
+                log_spec_x = self.spectral_visualizer(x).squeeze(1)
 
         # Generate audio x_hat
         synth_out_hat = self.synth_hat(
@@ -270,8 +288,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
             other_params,
         )
         x_hat = synth_out_hat["env_audio"].unsqueeze(1)
-        with tr.no_grad():
-            log_spec_x_hat = self.spectral_visualizer(x_hat).squeeze(1)
 
         # Compute loss
         if self.use_p_loss:
@@ -323,29 +339,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
             audio_metrics_hat[metric_name] = audio_metric
             self.log(f"{stage}/audio_{metric_name}", audio_metric, prog_bar=False)
 
-        # Log temp_params metrics
-        temp_param_metrics = {}
-        # TODO(cm)
-        # if (
-        #     self.temp_params_name is not None
-        #     and self.temp_params_name == self.temp_params_name_hat
-        # ):
-        #     with tr.no_grad():
-        #         temp_params_hat = util.linear_interpolate_dim(
-        #             temp_params_hat, temp_params.size(1), dim=1, align_corners=True
-        #         )
-        #         assert temp_params.shape == temp_params_hat.shape
-        #         temp_params_l1 = self.l1(temp_params_hat, temp_params)
-        #         temp_params_esr = self.esr(temp_params_hat, temp_params)
-        #     temp_param_metrics[f"{self.temp_params_name}_l1"] = temp_params_l1
-        #     temp_param_metrics[f"{self.temp_params_name}_esr"] = temp_params_esr
-        #     self.log(
-        #         f"{stage}/{self.temp_params_name}_l1", temp_params_l1, prog_bar=False
-        #     )
-        #     self.log(
-        #         f"{stage}/{self.temp_params_name}_esr", temp_params_esr, prog_bar=False
-        #     )
-
         # Log eval synth metrics if applicable
         x_eval = None
         audio_metrics_eval = {}
@@ -384,16 +377,24 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "x_hat": x_hat,
             "x_eval": x_eval,
             "log_spec_x": log_spec_x,
-            "log_spec_x_hat": log_spec_x_hat,
             # TODO(cm): tmp
             # "add_lfo_seg_indices_hat": model_out["add_lfo_seg_indices"],
             # "sub_lfo_seg_indices_hat": model_out["sub_lfo_seg_indices"],
         }
+        assert all(k not in out_dict for k in temp_params)
+        assert all(k not in out_dict for k in temp_params_hat)
+        assert all(k not in out_dict for k in temp_param_metrics)
+        assert all(k not in out_dict for k in global_params)
+        assert all(k not in out_dict for k in global_params_hat)
+        assert all(k not in out_dict for k in global_param_metrics)
+        assert all(k not in out_dict for k in audio_metrics_hat)
+        assert all(k not in out_dict for k in audio_metrics_eval)
         out_dict.update(temp_params)
         out_dict.update(temp_params_hat)
         out_dict.update(temp_param_metrics)
         out_dict.update(global_params)
         out_dict.update(global_params_hat)
+        out_dict.update(global_param_metrics)
         out_dict.update(audio_metrics_hat)
         out_dict.update(audio_metrics_eval)
         return out_dict

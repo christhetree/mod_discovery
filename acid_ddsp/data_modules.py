@@ -77,15 +77,29 @@ class WavetableDataModule(pl.LightningDataModule):
         df = df.sample(frac=1, random_state=tr.random.initial_seed()).reset_index(
             drop=True
         )
-        n_val = int(val_split * n)
-        n_test = int(test_split * n)
-        n_train = n - n_val - n_test
-        log.info(f"n_train: {n_train}, n_val: {n_val}, n_test: {n_test}")
 
-        # TODO(cm): make wavetables unique by split
-        df_train = df.iloc[:n_train]
-        df_val = df.iloc[n_train : n_train + n_val]
-        df_test = df.iloc[n_train + n_val :]
+        # n_val = int(val_split * n)
+        # n_test = int(test_split * n)
+        # n_train = n - n_val - n_test
+        # log.info(f"n_train: {n_train}, n_val: {n_val}, n_test: {n_test}")
+        #
+        # df_train = df.iloc[:n_train]
+        # df_val = df.iloc[n_train : n_train + n_val]
+        # df_test = df.iloc[n_train + n_val :]
+
+        n_val_wts = int(val_split * n_wts)
+        n_test_wts = int(test_split * n_wts)
+        n_train_wts = n_wts - n_val_wts - n_test_wts
+        wt_indices = tr.randperm(n_wts).tolist()
+        wt_indices_train = wt_indices[:n_train_wts]
+        wt_indices_val = wt_indices[n_train_wts : n_train_wts + n_val_wts]
+        wt_indices_test = wt_indices[n_train_wts + n_val_wts :]
+        df_train = df[df["wt_idx"].isin(wt_indices_train)]
+        df_val = df[df["wt_idx"].isin(wt_indices_val)]
+        df_test = df[df["wt_idx"].isin(wt_indices_test)]
+        log.info(
+            f"n_train: {len(df_train)}, n_val: {len(df_val)}, n_test: {len(df_test)}"
+        )
 
         self.train_ds = WavetableDataset(
             ac,

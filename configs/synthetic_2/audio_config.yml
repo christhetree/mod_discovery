@@ -1,10 +1,11 @@
 class_path: data_modules.AudioConfig
 init_args:
-  sr: 16000
+  sr: 24000
   buffer_size_seconds: 4.0
   note_on_duration: 4.0
 
   min_f0_hz: 32.70   # midi_f0 24
-  max_f0_hz: 523.25  # midi_f0 72
+#  max_f0_hz: 523.25  # midi_f0 72
+  max_f0_hz: 261.63  # midi_f0 60
 
   stability_eps: 0.001
