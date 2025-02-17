@@ -169,7 +169,7 @@ class Spectral2DCNN(nn.Module):
 
         # Define CNN
         layers = []
-        loudness_layers = []
+        # loudness_layers = []
         curr_n_bins = fe.n_bins
         for out_ch, b_dil, t_dil in zip(out_channels, bin_dilations, temp_dilations):
             layers.append(
@@ -177,31 +177,31 @@ class Spectral2DCNN(nn.Module):
                     in_ch, out_ch, kernel_size, b_dil, t_dil, pool_size, use_ln
                 )
             )
-            loudness_layers.append(
-                Spectral2DCNNBlock(
-                    in_ch, out_ch, (1, kernel_size[1]), 1, t_dil, (1, 1), use_ln
-                )
-            )
+            # loudness_layers.append(
+            #     Spectral2DCNNBlock(
+            #         in_ch, out_ch, (1, kernel_size[1]), 1, t_dil, (1, 1), use_ln
+            #     )
+            # )
             in_ch = out_ch
             curr_n_bins = curr_n_bins // pool_size[0]
         self.cnn = nn.Sequential(*layers)
 
         # ADSR
-        self.loudness_extractor = LoudnessExtractor(
-            sr=fe.sr, n_fft=fe.n_fft, hop_len=fe.hop_len
-        )
-        self.loudness_cnn = nn.Sequential(*loudness_layers)
-        n_hidden = (out_channels[-1] + 4) // 2
-        self.loudness_mlp = nn.Sequential(
-            nn.Linear(out_channels[-1], n_hidden),
-            nn.Dropout(p=dropout),
-            nn.PReLU(),
-            nn.Linear(n_hidden, n_hidden),
-            nn.Dropout(p=dropout),
-            nn.PReLU(),
-            nn.Linear(n_hidden, 4),
-            nn.Sigmoid(),
-        )
+        # self.loudness_extractor = LoudnessExtractor(
+        #     sr=fe.sr, n_fft=fe.n_fft, hop_len=fe.hop_len
+        # )
+        # self.loudness_cnn = nn.Sequential(*loudness_layers)
+        # n_hidden = (out_channels[-1] + 4) // 2
+        # self.loudness_mlp = nn.Sequential(
+        #     nn.Linear(out_channels[-1], n_hidden),
+        #     nn.Dropout(p=dropout),
+        #     nn.PReLU(),
+        #     nn.Linear(n_hidden, n_hidden),
+        #     nn.Dropout(p=dropout),
+        #     nn.PReLU(),
+        #     nn.Linear(n_hidden, 4),
+        #     nn.Sigmoid(),
+        # )
 
         # Define temporal params
         self.out_temp = nn.ModuleDict()
@@ -209,7 +209,6 @@ class Spectral2DCNN(nn.Module):
         self.adapters = nn.ModuleDict()
         if self.use_splines:
             self.splines = nn.ModuleDict()
-            self.spline_biases = nn.ModuleDict()  # For PiecewiseBezier
             # self.seg_intervals_mlp = nn.ModuleDict()  # For PiecewiseBezierDiffSeg
         for name, temp_param in self.temp_params.items():
             dim = temp_param["dim"]
@@ -219,8 +218,8 @@ class Spectral2DCNN(nn.Module):
             # Make frame by frame spline params or features
             out_dim = dim
             if self.use_splines:
-                out_dim = dim * self.degree  # For PiecewiseBezier
-                # out_dim = dim * (self.degree + 1)  # For PiecewiseBezierDiffSeg
+                # out_dim = dim * self.degree  # For PiecewiseBezier
+                out_dim = dim * (self.degree + 1)  # For PiecewiseBezierDiffSeg
                 # out_dim = dim * (self.degree + 1) * self.n_segments  # For PiecewiseBezierDiffSeg
             n_hidden = (out_channels[-1] + out_dim) // 2
             self.out_temp[name] = nn.Sequential(
@@ -251,16 +250,6 @@ class Spectral2DCNN(nn.Module):
                 # Make splines
                 # For PiecewiseBezier
                 self.splines[name] = PiecewiseBezier(n_frames, n_segments, degree)
-                n_hidden = (out_channels[-1] + dim) // 2
-                self.spline_biases[name] = nn.Sequential(
-                    nn.Linear(out_channels[-1], n_hidden),
-                    nn.Dropout(p=dropout),
-                    nn.PReLU(),
-                    nn.Linear(n_hidden, n_hidden),
-                    nn.Dropout(p=dropout),
-                    nn.PReLU(),
-                    nn.Linear(n_hidden, dim),
-                )
                 # # For PiecewiseBezierDiffSeg
                 # self.splines[name] = PiecewiseBezierDiffSeg(n_frames, n_segments, degree)
                 # n_hidden = (out_channels[-1] + n_segments) // 2
@@ -297,7 +286,7 @@ class Spectral2DCNN(nn.Module):
 
         # Extract features
         log_spec = self.fe(x)
-        out_dict["log_spec_wet"] = log_spec
+        out_dict["log_spec_x"] = log_spec
         n_frames = log_spec.size(-1)
         if self.use_splines:
             assert (
@@ -305,20 +294,20 @@ class Spectral2DCNN(nn.Module):
             ), f"Expected n_frames: {self.n_frames} but got: {n_frames}"
 
         # Extract envelope by conditioning on loudness
-        loudness = self.loudness_extractor(x.squeeze(1))
-        loudness = loudness.unsqueeze(1).unsqueeze(1)
-        x = self.loudness_cnn(loudness)
-        x = x.squeeze(2)
-        x = tr.mean(x, dim=-1)
-        x = self.loudness_mlp(x)
-        attack = x[:, 0]
-        decay = x[:, 1]
-        sustain = x[:, 2]
-        release = x[:, 3]
-        out_dict["attack_0to1"] = attack
-        out_dict["decay_0to1"] = decay
-        out_dict["sustain_0to1"] = sustain
-        out_dict["release_0to1"] = release
+        # loudness = self.loudness_extractor(x.squeeze(1))
+        # loudness = loudness.unsqueeze(1).unsqueeze(1)
+        # x = self.loudness_cnn(loudness)
+        # x = x.squeeze(2)
+        # x = tr.mean(x, dim=-1)
+        # x = self.loudness_mlp(x)
+        # attack = x[:, 0]
+        # decay = x[:, 1]
+        # sustain = x[:, 2]
+        # release = x[:, 3]
+        # out_dict["attack_0to1"] = attack
+        # out_dict["decay_0to1"] = decay
+        # out_dict["sustain_0to1"] = sustain
+        # out_dict["release_0to1"] = release
 
         # Calc latent
         x = self.cnn(log_spec)
@@ -363,12 +352,10 @@ class Spectral2DCNN(nn.Module):
                 # TODO(cm): check whether this is required,
                 #  I'm trying to prevent flattening occurring along the temporal axis
                 x = tr.swapaxes(x, 1, 2)
-                x = x.view(x.size(0), dim, self.degree, x.size(2))
+                x = x.view(x.size(0), dim, self.degree + 1, x.size(2))
                 coeff_logits = tr.swapaxes(x, 2, 3)
-                last_chunk = chunks[-1]
-                last_p_logits = self.spline_biases[name](last_chunk)
                 # x = self.splines[name](segment_intervals, coeff_logits, last_p_logits)
-                x = self.splines[name](coeff_logits, last_p_logits, si_logits)
+                x = self.splines[name](coeff_logits, si_logits)
                 x = tr.swapaxes(x, 1, 2)
 
                 # # For PiecewiseBezierDiffSeg
@@ -399,12 +386,12 @@ class Spectral2DCNN(nn.Module):
 
             x = self.out_temp_acts[name](x)
 
-            out_dict[f"{name}_before_adapter"] = x
-            out_dict[name] = x
+            out_dict[f"{name}_before_adapter"] = x.squeeze(-1)
+            out_dict[name] = x.squeeze(-1)
             if name in self.adapters:
                 x = self.adapters[name](x)
-                out_dict[f"{name}_adapted"] = x
-                out_dict[name] = x
+                out_dict[f"{name}_adapted"] = x.squeeze(-1)
+                out_dict[name] = x.squeeze(-1)
 
         # Calc global params
         for param_name, mlp in self.out_global.items():
@@ -526,9 +513,9 @@ class LoudnessExtractor(nn.Module):
         frequencies = li.fft_frequencies(sr=sr, n_fft=n_fft)
         a_weighting = li.A_weighting(frequencies, min_db=-top_db)
         self.register_buffer(
-            "a_weighting", tr.from_numpy(a_weighting).view(1, -1, 1).float()
+            "a_weighting", tr.from_numpy(a_weighting).view(1, -1, 1).float(), persistent=False
         )
-        self.register_buffer("hann", tr.hann_window(n_fft, periodic=True))
+        self.register_buffer("hann", tr.hann_window(n_fft, periodic=True), persistent=False)
 
     def forward(self, x: T) -> T:
         assert x.ndim == 2

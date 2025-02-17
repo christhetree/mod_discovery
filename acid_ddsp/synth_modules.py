@@ -310,9 +310,9 @@ class SquareSawVCOLite(SynthModule):
         if phase is None:
             # assert False  # TODO(cm): tmp
             phase = (
-                tr.rand((bs, 1), dtype=f0_hz.dtype, device=f0_hz.device) * 2 * tr.pi
+                tr.rand((bs,), dtype=f0_hz.dtype, device=f0_hz.device) * 2 * tr.pi
             ) - tr.pi
-        assert phase.shape == (bs, 1)
+        phase = phase.view(bs, 1)
         arg = tr.cumsum(2 * tr.pi * f0_hz / sr, dim=1)
         arg += phase
         return arg
@@ -400,9 +400,13 @@ class WavetableOsc(SynthModule):
             self.set_wt(wt)
 
         aa_filter_support = 2 * (tr.arange(aa_filter_n) - (aa_filter_n - 1) / 2) / sr
-        self.register_buffer("aa_filter_support", aa_filter_support.unsqueeze(0), persistent=False)
         self.register_buffer(
-            "window", tr.blackman_window(aa_filter_n, periodic=False).unsqueeze(0), persistent=False
+            "aa_filter_support", aa_filter_support.unsqueeze(0), persistent=False
+        )
+        self.register_buffer(
+            "window",
+            tr.blackman_window(aa_filter_n, periodic=False).unsqueeze(0),
+            persistent=False,
         )
         # TODO(cm): check whether this is correct or not
         self.wt_pitch_hz = sr / n_wt_samples
@@ -414,11 +418,20 @@ class WavetableOsc(SynthModule):
         assert not self.is_trainable, "Cannot set wt if is_trainable is True"
         assert new_wt.ndim == 2
         assert new_wt.size(1) == self.n_wt_samples
-        if new_wt.size(0) != self.n_pos:
-            log.info(f"Linearly interpolating new_wt.n_pos from {new_wt.size(0)} "
-                     f"to {self.n_pos}")
+        new_n_pos = new_wt.size(0)
+        assert (
+            new_n_pos <= self.n_pos
+        ), f"new_n_pos = {new_n_pos} must be <= {self.n_pos}"
+        if new_n_pos != self.n_pos:
+            log.debug(
+                f"Linearly interpolating new_wt.n_pos from {new_n_pos} "
+                f"to {self.n_pos}"
+            )
+            new_wt = tr.swapaxes(new_wt, 0, 1)  # TODO(cm): tmp
             new_wt = util.linear_interpolate_dim(
-                new_wt, n=self.n_pos, dim=0, align_corners=True)
+                new_wt, n=self.n_pos, dim=1, align_corners=True
+            )
+            new_wt = tr.swapaxes(new_wt, 0, 1)  # TODO(cm): tmp
         assert new_wt.min() >= -1.0, f"new_wt.min() = {new_wt.min()}"
         assert new_wt.max() <= 1.0, f"new_wt.max() = {new_wt.max()}"
         self.wt[:, :] = new_wt[:, :]
@@ -513,6 +526,7 @@ class WavetableOscShan(WavetableOsc):
     Wavetable Oscillator from Differentiable Wavetable Synthesis, Shan et al.
     that uses weighted sum instead of grid_sample.
     """
+
     def __init__(
         self,
         sr: int,
@@ -523,17 +537,17 @@ class WavetableOscShan(WavetableOsc):
         is_trainable: bool = True,
     ):
         super().__init__(sr, n_pos, n_wt_samples, wt, aa_filter_n, is_trainable)
-    
+
     def _wavetable_osc_shan(
-        wavetable: T, 
-        freq: T, 
+        wavetable: T,
+        freq: T,
         sr: int,
         n_samples: Optional[int] = None,
         phase: Optional[T] = None,
     ):
         """
         Wavetable synthesis oscilator with batch linear interpolation
-        Input: 
+        Input:
             wavetable: (batch_size, n_wavetable, wavetable_len,)
             freq: (batch_size, n_samples)
             sr: int
@@ -544,26 +558,38 @@ class WavetableOscShan(WavetableOsc):
         bs, n_wavetable, wt_len = wavetable.shape
         arg = SquareSawVCOLite.calc_osc_arg(sr, freq, n_samples, phase)
         arg = arg % (2 * tr.pi)
-        index = arg / (2 * tr.pi) * wt_len 
+        index = arg / (2 * tr.pi) * wt_len
 
         # batch linear interpolation implementation
-        index_low = tr.floor(index.clone())                         # (bs, n_samples)
-        index_high = tr.ceil(index.clone())                         # (bs, n_samples)
-        alpha = index - index_low                                   # (bs, n_samples)
+        index_low = tr.floor(index.clone())  # (bs, n_samples)
+        index_high = tr.ceil(index.clone())  # (bs, n_samples)
+        alpha = index - index_low  # (bs, n_samples)
         index_low = index_low.long()
         index_high = index_high.long()
 
-        index_low = index_low.unsqueeze(1).expand(-1, n_wavetable, -1)        # (bs, n_wavetable, n_samples)
-        index_high = index_high.unsqueeze(1).expand(-1, n_wavetable, -1)      # (bs, n_wavetable, n_samples)
+        index_low = index_low.unsqueeze(1).expand(
+            -1, n_wavetable, -1
+        )  # (bs, n_wavetable, n_samples)
+        index_high = index_high.unsqueeze(1).expand(
+            -1, n_wavetable, -1
+        )  # (bs, n_wavetable, n_samples)
         index_high = index_high % wt_len
-        alpha = alpha.unsqueeze(1).expand(-1, n_wavetable, -1)                # (bs, n_wavetable, n_samples)
+        alpha = alpha.unsqueeze(1).expand(
+            -1, n_wavetable, -1
+        )  # (bs, n_wavetable, n_samples)
 
-        indexed_wavetables_low = tr.gather(wavetable, 2, index_low)           # (bs, n_wavetable, n_samples)
-        indexed_wavetables_high = tr.gather(wavetable, 2, index_high)         # (bs, n_wavetable, n_samples)
+        indexed_wavetables_low = tr.gather(
+            wavetable, 2, index_low
+        )  # (bs, n_wavetable, n_samples)
+        indexed_wavetables_high = tr.gather(
+            wavetable, 2, index_high
+        )  # (bs, n_wavetable, n_samples)
 
-        signal = indexed_wavetables_low + alpha * (indexed_wavetables_high - indexed_wavetables_low)
+        signal = indexed_wavetables_low + alpha * (
+            indexed_wavetables_high - indexed_wavetables_low
+        )
         return signal
-    
+
     def forward(
         self,
         f0_hz: T,
@@ -576,15 +602,19 @@ class WavetableOscShan(WavetableOsc):
             assert n_samples is not None
             f0_hz = f0_hz.unsqueeze(1)
             f0_hz = f0_hz.expand(-1, n_samples)
-        
+
         max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
         wt = self.get_anti_aliased_maybe_bounded_wt(max_f0_hz)
 
-        audio = WavetableOscShan._wavetable_osc_shan(wt, f0_hz, self.sr, n_samples, phase)
+        audio = WavetableOscShan._wavetable_osc_shan(
+            wt, f0_hz, self.sr, n_samples, phase
+        )
         if attention_matrix is not None:
             # if attention matrix is provided, it must be of shape (bs, n_wavetables, n_samples)
             assert attention_matrix.ndim == 3
-            assert attention_matrix.shape == audio.shape, f"Attention matrix must be the same as audio shape, given attention matrix: {attention_matrix.shape}, audio: {audio.shape}"
+            assert (
+                attention_matrix.shape == audio.shape
+            ), f"Attention matrix must be the same as audio shape, given attention matrix: {attention_matrix.shape}, audio: {audio.shape}"
             audio = tr.einsum("bns,bns->bs", audio, attention_matrix)
         else:
             # if not attention matrix is provided, we simply take the mean of the wavetables
@@ -637,6 +667,7 @@ class DDSPHarmonicOsc(nn.Module):
     A harmonic oscillator from DDSP, largely following:
     https://github.com/acids-ircam/ddsp_pytorch/blob/master/ddsp/core.py#L135
     """
+
     def __init__(
         self,
         sr: int,
@@ -659,17 +690,23 @@ class DDSPHarmonicOsc(nn.Module):
             assert n_samples is not None
             f0_hz = f0_hz.unsqueeze(1)
             f0_hz = f0_hz.expand(-1, n_samples)
-        
+
         if harmonic_amplitudes is not None:
             # if harmonic amplitudes are provided, it must be of shape (bs, n_samples, n_harmonics)
-            assert harmonic_amplitudes.ndim == 3, \
-                f"Harmonic amplitudes must be of shape (bs, n_samples, n_harmonics), given shape: {harmonic_amplitudes.shape}"
-            assert harmonic_amplitudes.shape == (f0_hz.size(0), f0_hz.size(1), self.n_harmonics + 1), \
-                f"Harmonic amplitudes shape {harmonic_amplitudes.shape} must be the same as f0_hz shape {f0_hz.shape}"
+            assert (
+                harmonic_amplitudes.ndim == 3
+            ), f"Harmonic amplitudes must be of shape (bs, n_samples, n_harmonics), given shape: {harmonic_amplitudes.shape}"
+            assert harmonic_amplitudes.shape == (
+                f0_hz.size(0),
+                f0_hz.size(1),
+                self.n_harmonics + 1,
+            ), f"Harmonic amplitudes shape {harmonic_amplitudes.shape} must be the same as f0_hz shape {f0_hz.shape}"
         else:
             # or else, we assign the same amplitude for all harmonics
-            harmonic_amplitudes = tr.ones(f0_hz.size(0), f0_hz.size(1), self.n_harmonics + 1).to(f0_hz.device)
-        
+            harmonic_amplitudes = tr.ones(
+                f0_hz.size(0), f0_hz.size(1), self.n_harmonics + 1
+            ).to(f0_hz.device)
+
         f0_hz = f0_hz.unsqueeze(-1)
 
         total_amplitude = harmonic_amplitudes[..., :1]
@@ -679,30 +716,28 @@ class DDSPHarmonicOsc(nn.Module):
         harmonic_amplitudes_aa = self.remove_above_nyquist(harmonic_amplitudes, f0_hz)
 
         # normalize the amplitudes of each harmonic to sum to `total_amplitude`
-        harmonic_amplitudes_aa /= \
-            (harmonic_amplitudes_aa.sum(dim=-1, keepdim=True) + eps)
+        harmonic_amplitudes_aa /= harmonic_amplitudes_aa.sum(dim=-1, keepdim=True) + eps
         harmonic_amplitudes_aa *= total_amplitude
 
         omega = tr.cumsum(2 * tr.pi * f0_hz / self.sr, dim=1)
         if phase is not None:
             phase = phase.unsqueeze(-1)
-            assert len(phase.shape) == len(omega.shape), \
-                f"Size mismatch, phase: {phase.shape}, omega: {omega.shape}"
+            assert len(phase.shape) == len(
+                omega.shape
+            ), f"Size mismatch, phase: {phase.shape}, omega: {omega.shape}"
             omega += phase
 
         omegas = omega * tr.arange(1, self.n_harmonics + 1, device=omega.device)
-        
+
         signal = tr.sin(omegas) * harmonic_amplitudes_aa
         signal = signal.sum(dim=-1)
 
         return signal
-    
-    def remove_above_nyquist(
-        self, 
-        harmonic_amplitudes: T, 
-        f0_hz: T
-    ) -> T:
-        f0_hz_harmonics = f0_hz * tr.arange(1, self.n_harmonics + 1, device=f0_hz.device)
+
+    def remove_above_nyquist(self, harmonic_amplitudes: T, f0_hz: T) -> T:
+        f0_hz_harmonics = f0_hz * tr.arange(
+            1, self.n_harmonics + 1, device=f0_hz.device
+        )
         aa = (f0_hz_harmonics < self.sr / 2).float()
         return harmonic_amplitudes * aa
 
@@ -743,7 +778,7 @@ if __name__ == "__main__":
     # n_samples = int(sr * n_sec)
     # n_wt_samples = 1024
     # f0_hz = tr.tensor([220.0, 440.0, 880.0])
-    
+
     # # prepare some wavetables for test
     # wt_sin = tr.sin(tr.linspace(0, 2 * tr.pi, n_wt_samples))
     # wt_square = tr.sign(tr.sin(tr.linspace(0, 2 * tr.pi, n_wt_samples)))
@@ -819,7 +854,7 @@ if __name__ == "__main__":
     # n_sec = 4.0
     # n_samples = int(sr * n_sec)
     # f0_hz = tr.tensor([220.0, 440.0, 880.0])
-    
+
     # osc = DDSPHarmonicOsc(sr, n_harmonics=16)
     # audio = osc(f0_hz=f0_hz, harmonic_amplitudes=None, n_samples=n_samples)
     # audio = audio.reshape(-1, audio.size(-1))

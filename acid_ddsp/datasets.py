@@ -26,16 +26,15 @@ class WavetableDataset(Dataset):
         self,
         ac: AudioConfig,
         df: DataFrame,
-        wts: List[T],
         mod_sig_gen: ModSignalGenerator,
         global_param_names: List[str],
         temp_param_names: List[str],
     ):
         super().__init__()
         self.ac = ac
-        assert df.columns == ["wt_idx", "seed"]
+        assert df.columns[0] == "wt_idx"
+        assert df.columns[1] == "seed"
         self.df = df
-        self.wts = wts
         self.mod_sig_gen = mod_sig_gen
         self.global_param_names = global_param_names
         self.temp_param_names = temp_param_names
@@ -46,26 +45,25 @@ class WavetableDataset(Dataset):
         return len(self.df)
 
     def __getitem__(self, idx: int) -> Dict[str, T]:
-        wt_idx = self.df.iloc[idx]["wt_idx"]
-        seed = self.df.iloc[idx]["seed"]
-        wt = self.wts[wt_idx]
+        wt_idx = self.df.iloc[idx]["wt_idx"].item()
+        seed = self.df.iloc[idx]["seed"].item()
 
         f0_hz = util.sample_log_uniform(self.ac.min_f0_hz, self.ac.max_f0_hz, seed=seed)
         f0_hz = tr.tensor(f0_hz)
         self.rand_gen.manual_seed(seed)
-        phase = tr.rand((1,), generator=self.rand_gen) * 2 * tr.pi
-        phase_hat = tr.rand((1,), generator=self.rand_gen) * 2 * tr.pi
+        phase = tr.rand((1,), generator=self.rand_gen).squeeze() * 2 * tr.pi
+        phase_hat = tr.rand((1,), generator=self.rand_gen).squeeze() * 2 * tr.pi
 
         result = {
             "note_on_duration": self.ac.note_on_duration,
             "f0_hz": f0_hz,
             "phase": phase,
             "phase_hat": phase_hat,
-            "wt": wt,
+            "wt_idx": wt_idx,
         }
         for name in self.global_param_names:
             assert "_0to1" not in name
-            result[f"{name}_0to1"] = tr.rand((1,), generator=self.rand_gen)
+            result[f"{name}_0to1"] = tr.rand((1,), generator=self.rand_gen).squeeze()
         for name in self.temp_param_names:
             mod_sig = self.mod_sig_gen(self.ac.n_samples, rand_gen=self.rand_gen)
             result[name] = mod_sig

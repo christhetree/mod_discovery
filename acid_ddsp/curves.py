@@ -139,9 +139,9 @@ class PiecewiseBezier(nn.Module):
         if modes is None:
             modes = tr.linspace(0.0, 1.0, n_segments + 1)[1:-1].view(1, -1)
         support, mask = self._create_support_and_mask(modes)
-        self.register_buffer("modes", modes)
-        self.register_buffer("support", support)
-        self.register_buffer("mask", mask)
+        self.register_buffer("modes", modes, persistent=False)
+        self.register_buffer("support", support, persistent=False)
+        self.register_buffer("mask", mask, persistent=False)
         if self.n_segments == 1:
             self.mask = None
 
@@ -151,8 +151,8 @@ class PiecewiseBezier(nn.Module):
             bin_coeff.append(math.comb(degree, i))
         bin_coeff = tr.tensor(bin_coeff).float()
         exp = tr.arange(start=0, end=degree + 1).float()
-        self.register_buffer("bin_coeff", bin_coeff)
-        self.register_buffer("exp", exp)
+        self.register_buffer("bin_coeff", bin_coeff, persistent=False)
+        self.register_buffer("exp", exp, persistent=False)
 
     def _create_support_and_mask(self, modes: T) -> (T, T):
         assert self.n_segments < self.n_frames
@@ -290,16 +290,16 @@ class PiecewiseBezierDiffSeg(PiecewiseBezier):
         # Overwrite the superclass support
         support = tr.linspace(0.0, 1.0, n_frames).view(1, 1, -1)
         support = support.repeat(1, n_segments, 1)
-        self.register_buffer("support", support)
+        self.register_buffer("support", support, persistent=False)
 
         # Create support for the segmentation function
         seg_fn_support = tr.linspace(0.0, 1.0, n_frames).view(1, 1, -1)
         seg_fn_support = seg_fn_support.repeat(1, n_segments - 1, 1)
-        self.register_buffer("seg_fn_support", seg_fn_support)
+        self.register_buffer("seg_fn_support", seg_fn_support, persistent=False)
 
         # Create segment indices for the continuous mask
         seg_indices = tr.arange(0, n_segments).float()
-        self.register_buffer("seg_indices", seg_indices)
+        self.register_buffer("seg_indices", seg_indices, persistent=False)
 
     def _logits_to_seg_intervals(
         self, logits: T, min_seg_interval: Optional[float] = None
@@ -452,6 +452,7 @@ if __name__ == "__main__":
     l1_loss = nn.L1Loss()
     d1_loss = FirstDerivativeL1Loss()
     d2_loss = SecondDerivativeL1Loss()
+
     def modex_loss(y_hat: T, y) -> T:
         return l1_loss(y_hat, y) + 5.0 * d1_loss(y_hat, y) + 10.0 * d2_loss(y_hat, y)
 
@@ -475,7 +476,9 @@ if __name__ == "__main__":
     )
     modes = tr.cumsum(si, dim=1)[:, :-1]
     log.info(f"modes = {modes}")
-    bezier_module = PiecewiseBezier(n_frames, n_segments, degree, modes=modes, is_c1_cont=False)
+    bezier_module = PiecewiseBezier(
+        n_frames, n_segments, degree, modes=modes, is_c1_cont=False
+    )
     si = None
     # bezier_module = PiecewiseBezierDiffSeg(n_frames, n_segments, degree)
     # si = tr.rand(bs, n_segments)
@@ -503,7 +506,9 @@ if __name__ == "__main__":
     # n_segments_hat = 1
     # degree_hat = 36
 
-    bezier_module_hat = PiecewiseBezier(n_frames, n_segments_hat, degree_hat, is_c1_cont=True)
+    bezier_module_hat = PiecewiseBezier(
+        n_frames, n_segments_hat, degree_hat, is_c1_cont=True
+    )
     si_logits = None
     # bezier_module_hat = PiecewiseBezierDiffSeg(n_frames, n_segments_hat, degree_hat)
     # si_logits = tr.rand(bs, n_segments_hat)

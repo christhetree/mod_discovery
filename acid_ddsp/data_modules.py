@@ -1,11 +1,12 @@
 import logging
 import os
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import torch as tr
+from torch import Tensor as T
 from torch.utils.data import DataLoader
 
 from audio_config import AudioConfig
@@ -59,13 +60,13 @@ class WavetableDataModule(pl.LightningDataModule):
         ]
         wt_paths = sorted(wt_paths)
         self.wt_paths = wt_paths
-        wts = [tr.load(f) for f in wt_paths]
+        self.wts = [tr.load(f) for f in wt_paths]
         n_wts = len(wt_paths)
         n_seeds = n_seeds_per_wt * n_wts
         log.info(f"Found {n_wts} wavetables, total of {n_seeds} seeds")
 
         wt_indices = np.arange(n_wts)
-        seeds = np.arange(n_seeds_per_wt)
+        seeds = np.arange(n_seeds)
         wt_indices = np.repeat(wt_indices, n_seeds_per_wt)
         df = pd.DataFrame({"wt_idx": wt_indices, "seed": seeds})
         n = len(df)
@@ -81,6 +82,7 @@ class WavetableDataModule(pl.LightningDataModule):
         n_train = n - n_val - n_test
         log.info(f"n_train: {n_train}, n_val: {n_val}, n_test: {n_test}")
 
+        # TODO(cm): make wavetables unique by split
         df_train = df.iloc[:n_train]
         df_val = df.iloc[n_train : n_train + n_val]
         df_test = df.iloc[n_train + n_val :]
@@ -88,7 +90,6 @@ class WavetableDataModule(pl.LightningDataModule):
         self.train_ds = WavetableDataset(
             ac,
             df_train,
-            wts,
             mod_sig_gen,
             global_param_names,
             temp_param_names,
@@ -96,7 +97,6 @@ class WavetableDataModule(pl.LightningDataModule):
         self.val_ds = WavetableDataset(
             ac,
             df_val,
-            wts,
             mod_sig_gen,
             global_param_names,
             temp_param_names,
@@ -104,11 +104,20 @@ class WavetableDataModule(pl.LightningDataModule):
         self.test_ds = WavetableDataset(
             ac,
             df_test,
-            wts,
             mod_sig_gen,
             global_param_names,
             temp_param_names,
         )
+
+    def on_before_batch_transfer(
+        self, batch: Dict[str, T], dataloader_idx: int
+    ) -> Dict[str, T]:
+        wt_indices = batch["wt_idx"]
+        wt_idx = wt_indices[0].item()
+        wt = self.wts[wt_idx]
+        batch["wt"] = wt
+        del batch["wt_idx"]
+        return batch
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
@@ -123,7 +132,8 @@ class WavetableDataModule(pl.LightningDataModule):
         return DataLoader(
             self.val_ds,
             batch_size=self.batch_size,
-            shuffle=True,  # For more diversity in visualization callbacks
+            shuffle=False,
+            # shuffle=True,  # For more diversity in visualization callbacks
             num_workers=self.num_workers,
             drop_last=True,
         )

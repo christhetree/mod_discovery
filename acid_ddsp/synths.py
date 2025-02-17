@@ -65,6 +65,7 @@ class SynthBase(ABC, nn.Module):
         phase: T,
         temp_params: Dict[str, T],
         global_params: Dict[str, T],
+        other_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
         pass
 
@@ -73,6 +74,7 @@ class SynthBase(ABC, nn.Module):
         x: T,
         temp_params: Dict[str, T],
         global_params: Dict[str, T],
+        other_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
         # By default, do not apply any subtractive synthesis
         return x, {}
@@ -84,25 +86,24 @@ class SynthBase(ABC, nn.Module):
         phase: T,
         temp_params: Dict[str, T],
         global_params: Dict[str, T],
-        envelope: Optional[T] = None,
-        note_on_duration: Optional[T] = None,
+        other_params: Dict[str, T],
     ) -> Dict[str, T]:
         add_audio, add_out = self.additive_synthesis(
-            n_samples, f0_hz, phase, temp_params, global_params
+            n_samples, f0_hz, phase, temp_params, global_params, other_params
         )
         sub_audio, sub_out = self.subtractive_synthesis(
-            add_audio, temp_params, global_params
+            add_audio, temp_params, global_params, other_params
         )
-        if envelope is None:
-            env_audio = sub_audio
+        synth_out = {}
+        if "env" in temp_params:
+            env = temp_params["env"]
+            env_audio = sub_audio * env
+            synth_out["env"] = env
         else:
-            env_audio = sub_audio * envelope
-        synth_out = {
-            "env": envelope,
-            "add_audio": add_audio,
-            "sub_audio": sub_audio,
-            "env_audio": env_audio,
-        }
+            env_audio = sub_audio
+        synth_out["add_audio"] = add_audio
+        synth_out["sub_audio"] = sub_audio
+        synth_out["env_audio"] = env_audio
         assert all(k not in synth_out for k in add_out)
         synth_out.update(add_out)
         assert all(k not in synth_out for k in sub_out)
@@ -124,24 +125,36 @@ class ComposableSynth(SynthBase):
         self.sub_synth_module = sub_synth_module
         self.add_lfo_name = add_lfo_name
         self.sub_lfo_name = sub_lfo_name
+        if hasattr(self.add_synth_module, "sr"):
+            assert self.add_synth_module.sr == ac.sr
+        if hasattr(self.sub_synth_module, "sr"):
+            assert self.sub_synth_module.sr == ac.sr
 
     def _forward_synth_module(
         self,
         synth_module: nn.Module,
         synth_module_kwargs: Dict[str, T],
-        global_params: Dict[str, T],
         temp_params: Dict[str, T],
+        global_params: Dict[str, T],
+        other_params: Dict[str, T],
     ) -> T:
         for param_name in self.add_synth_module.forward_param_names:
             if hasattr(self.ac, param_name):
-                assert param_name not in synth_module_kwargs
-                synth_module_kwargs[param_name] = getattr(self.ac, param_name)
-            if param_name in global_params:
-                assert param_name not in synth_module_kwargs
-                synth_module_kwargs[param_name] = global_params[param_name]
+                if param_name in synth_module_kwargs:
+                    assert synth_module_kwargs[param_name] == getattr(
+                        self.ac, param_name
+                    )
+                else:
+                    synth_module_kwargs[param_name] = getattr(self.ac, param_name)
             if param_name in temp_params:
                 assert param_name not in synth_module_kwargs
                 synth_module_kwargs[param_name] = temp_params[param_name]
+            if param_name in global_params:
+                assert param_name not in synth_module_kwargs
+                synth_module_kwargs[param_name] = global_params[param_name]
+            if param_name in other_params:
+                assert param_name not in synth_module_kwargs
+                synth_module_kwargs[param_name] = other_params[param_name]
         out = synth_module(**synth_module_kwargs)
         return out
 
@@ -152,6 +165,7 @@ class ComposableSynth(SynthBase):
         phase: T,
         temp_params: Dict[str, T],
         global_params: Dict[str, T],
+        other_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
         synth_module_kwargs = {
             "n_samples": n_samples,
@@ -163,7 +177,11 @@ class ComposableSynth(SynthBase):
             assert self.add_lfo_name in temp_params
             synth_module_kwargs[module_lfo_name] = temp_params[self.add_lfo_name]
         add_audio = self._forward_synth_module(
-            self.add_synth_module, synth_module_kwargs, global_params, temp_params
+            self.add_synth_module,
+            synth_module_kwargs,
+            global_params,
+            temp_params,
+            other_params,
         )
         return add_audio, {}
 
@@ -172,6 +190,7 @@ class ComposableSynth(SynthBase):
         x: T,
         temp_params: Dict[str, T],
         global_params: Dict[str, T],
+        other_params: Dict[str, T],
     ) -> (T, Dict[str, T]):
         if self.sub_synth_module is None:
             return x, {}
@@ -183,7 +202,11 @@ class ComposableSynth(SynthBase):
             assert self.sub_lfo_name in temp_params
             synth_module_kwargs[module_lfo_name] = temp_params[self.sub_lfo_name]
         sub_audio = self._forward_synth_module(
-            self.sub_synth_module, synth_module_kwargs, global_params, temp_params
+            self.sub_synth_module,
+            synth_module_kwargs,
+            global_params,
+            temp_params,
+            other_params,
         )
         return sub_audio
 
