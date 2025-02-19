@@ -1,8 +1,7 @@
 class_path: acid_ddsp.synth_modules.WavetableOsc
 init_args:
   sr: 16000
-  n_pos: 256
-#  n_pos: 2
-  n_wt_samples: 1024
-  aa_filter_n: 129
+  n_pos: 64
+  n_wt_samples: 256
+  aa_filter_n: 33
   is_trainable: false

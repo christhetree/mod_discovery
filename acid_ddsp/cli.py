@@ -37,7 +37,7 @@ class CustomLightningCLI(LightningCLI):
                 verbose=False,
             ),
             LogModSigAndSpecCallback(),
-            LogAudioCallback(),
+            # LogAudioCallback(),
             # LogWavetablesCallback(),
         ],
         "log_every_n_steps": 1,

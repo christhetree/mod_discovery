@@ -60,7 +60,7 @@ class WavetableDataModule(pl.LightningDataModule):
         ]
         wt_paths = sorted(wt_paths)
         self.wt_paths = wt_paths
-        self.wts = [tr.load(f) for f in wt_paths]
+        self.wts = [tr.load(f, weights_only=True) for f in wt_paths]
         n_wts = len(wt_paths)
         n_seeds = n_seeds_per_wt * n_wts
         log.info(f"Found {n_wts} wavetables, total of {n_seeds} seeds")
@@ -82,7 +82,6 @@ class WavetableDataModule(pl.LightningDataModule):
         # n_test = int(test_split * n)
         # n_train = n - n_val - n_test
         # log.info(f"n_train: {n_train}, n_val: {n_val}, n_test: {n_test}")
-        #
         # df_train = df.iloc[:n_train]
         # df_val = df.iloc[n_train : n_train + n_val]
         # df_test = df.iloc[n_train + n_val :]
@@ -97,6 +96,7 @@ class WavetableDataModule(pl.LightningDataModule):
         df_train = df[df["wt_idx"].isin(wt_indices_train)]
         df_val = df[df["wt_idx"].isin(wt_indices_val)]
         df_test = df[df["wt_idx"].isin(wt_indices_test)]
+
         log.info(
             f"n_train: {len(df_train)}, n_val: {len(df_val)}, n_test: {len(df_test)}"
         )
@@ -107,6 +107,7 @@ class WavetableDataModule(pl.LightningDataModule):
             mod_sig_gen,
             global_param_names,
             temp_param_names,
+            # randomize_seed=True,
         )
         self.val_ds = WavetableDataset(
             ac,

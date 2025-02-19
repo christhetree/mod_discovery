@@ -29,6 +29,7 @@ class WavetableDataset(Dataset):
         mod_sig_gen: ModSignalGenerator,
         global_param_names: List[str],
         temp_param_names: List[str],
+        randomize_seed: bool = False,
     ):
         super().__init__()
         self.ac = ac
@@ -38,6 +39,7 @@ class WavetableDataset(Dataset):
         self.mod_sig_gen = mod_sig_gen
         self.global_param_names = global_param_names
         self.temp_param_names = temp_param_names
+        self.randomize_seed = randomize_seed
 
         self.rand_gen = tr.Generator(device="cpu")
 
@@ -47,6 +49,8 @@ class WavetableDataset(Dataset):
     def __getitem__(self, idx: int) -> Dict[str, T]:
         wt_idx = self.df.iloc[idx]["wt_idx"].item()
         seed = self.df.iloc[idx]["seed"].item()
+        if self.randomize_seed:
+            seed = tr.randint(0, 99999999, (1,)).item()
 
         f0_hz = util.sample_log_uniform(self.ac.min_f0_hz, self.ac.max_f0_hz, seed=seed)
         f0_hz = tr.tensor(f0_hz)

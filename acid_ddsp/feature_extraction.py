@@ -63,4 +63,10 @@ class LogMelSpecFeatureExtractor(nn.Module):
 
         x = tr.clip(x, min=self.eps)
         x = tr.log(x)
+
+        # time_averaged = x.mean(dim=-1, keepdim=True)
+        # x = x - time_averaged
+
+        # x = torchaudio.functional.compute_deltas(x, win_length=3, mode="reflect")
+
         return x

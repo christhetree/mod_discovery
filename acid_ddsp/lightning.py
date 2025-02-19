@@ -37,7 +37,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         global_param_names: Optional[List[str]] = None,
         global_param_names_hat: Optional[List[str]] = None,
         use_p_loss: bool = False,
-        log_envelope: bool = True,
         fad_model_names: Optional[List[str]] = None,
         run_name: Optional[str] = None,
         use_model: bool = True,
@@ -62,7 +61,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
             self.run_name = run_name
         if use_model:
             assert model is not None
-            assert not use_p_loss
         log.info(f"Run name: {self.run_name}")
         assert ac.sr == spectral_visualizer.sr
 
@@ -78,7 +76,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.global_param_names = global_param_names
         self.global_param_names_hat = global_param_names_hat
         self.use_p_loss = use_p_loss
-        self.log_envelope = log_envelope
         self.fad_model_names = fad_model_names
         self.use_model = use_model
         self.model_opt = model_opt
@@ -295,9 +292,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             for p_name in self.temp_param_names:
                 p_val = temp_params[p_name]
                 p_val_hat = temp_params_hat[p_name]
-                p_val_hat = util.linear_interpolate_dim(
-                    p_val_hat, p_val.size(1), dim=1, align_corners=True
-                )
+                assert p_val.shape == p_val_hat.shape
                 p_loss = self.loss_func(p_val_hat, p_val)
                 self.log(
                     f"{stage}/ploss_{self.loss_name}_{p_name}",

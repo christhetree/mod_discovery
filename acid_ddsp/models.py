@@ -143,24 +143,12 @@ class Spectral2DCNN(nn.Module):
         self.temp_dilations = temp_dilations
         assert len(out_channels) == len(bin_dilations) == len(temp_dilations)
         if temp_params is None:
-            temp_params = {
-                "add_lfo": {
-                    "dim": 1,
-                    "act": "sigmoid",
-                    "adapt_dim": 0,
-                    "adapt_act": "none",
-                },
-                "sub_lfo": {
-                    "dim": 1,
-                    "act": "sigmoid",
-                    "adapt_dim": 0,
-                    "adapt_act": "none",
-                },
-            }
+            temp_params = {}
         self.temp_params = temp_params
         if global_param_names is None:
             global_param_names = []
         self.global_param_names = global_param_names
+        assert temp_params or global_param_names, "No params to predict"
         if pool_size[1] == 1:
             log.info(
                 f"Temporal receptive field: "
@@ -215,12 +203,15 @@ class Spectral2DCNN(nn.Module):
             act = temp_param["act"]
             adapt_dim = temp_param["adapt_dim"]
             adapt_act = temp_param["adapt_act"]
+            if use_splines:
+                if adapt_dim:
+                    assert adapt_act == "none"
+                else:
+                    assert act == "none"
             # Make frame by frame spline params or features
             out_dim = dim
             if self.use_splines:
-                # out_dim = dim * self.degree  # For PiecewiseBezier
                 out_dim = dim * (self.degree + 1)  # For PiecewiseBezierDiffSeg
-                # out_dim = dim * (self.degree + 1) * self.n_segments  # For PiecewiseBezierDiffSeg
             n_hidden = (out_channels[-1] + out_dim) // 2
             self.out_temp[name] = nn.Sequential(
                 BidirectionalLSTM(out_channels[-1], out_channels[-1] // 2, unroll=True),
@@ -249,7 +240,9 @@ class Spectral2DCNN(nn.Module):
             if self.use_splines:
                 # Make splines
                 # For PiecewiseBezier
-                self.splines[name] = PiecewiseBezier(n_frames, n_segments, degree)
+                self.splines[name] = PiecewiseBezier(n_frames, n_segments, degree, is_c1_cont=False)
+                # self.splines[name] = PiecewiseBezier(n_frames, n_segments, degree, is_c1_cont=True)
+
                 # # For PiecewiseBezierDiffSeg
                 # self.splines[name] = PiecewiseBezierDiffSeg(n_frames, n_segments, degree)
                 # n_hidden = (out_channels[-1] + n_segments) // 2
@@ -349,6 +342,12 @@ class Spectral2DCNN(nn.Module):
                 chunks = [tr.mean(c, dim=1) for c in chunks]
                 x = tr.stack(chunks, dim=1)
                 x = self.out_temp[name](x)
+                # TODO(cm): is there a better way to do this?
+                end_vals = x[:, :-1, -1]
+                start_vals = x[:, 1:, 0]
+                vals = (end_vals + start_vals) / 2
+                x[:, :-1, -1] = vals
+                x[:, 1:, 0] = vals
                 # TODO(cm): check whether this is required,
                 #  I'm trying to prevent flattening occurring along the temporal axis
                 x = tr.swapaxes(x, 1, 2)
