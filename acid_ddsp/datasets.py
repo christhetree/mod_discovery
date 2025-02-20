@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-class WavetableDataset(Dataset):
+class SeedDataset(Dataset):
     def __init__(
         self,
         ac: AudioConfig,
@@ -32,9 +32,8 @@ class WavetableDataset(Dataset):
         randomize_seed: bool = False,
     ):
         super().__init__()
+        assert "seed" in df.columns
         self.ac = ac
-        assert df.columns[0] == "wt_idx"
-        assert df.columns[1] == "seed"
         self.df = df
         self.mod_sig_gen = mod_sig_gen
         self.global_param_names = global_param_names
@@ -47,8 +46,8 @@ class WavetableDataset(Dataset):
         return len(self.df)
 
     def __getitem__(self, idx: int) -> Dict[str, T]:
-        wt_idx = self.df.iloc[idx]["wt_idx"].item()
         seed = self.df.iloc[idx]["seed"].item()
+        # TODO(cm): this is a bit hacky
         if self.randomize_seed:
             seed = tr.randint(0, 99999999, (1,)).item()
 
@@ -63,7 +62,6 @@ class WavetableDataset(Dataset):
             "f0_hz": f0_hz,
             "phase": phase,
             "phase_hat": phase_hat,
-            "wt_idx": wt_idx,
         }
         for name in self.global_param_names:
             assert "_0to1" not in name
@@ -71,6 +69,28 @@ class WavetableDataset(Dataset):
         for name in self.temp_param_names:
             mod_sig = self.mod_sig_gen(self.ac.n_samples, rand_gen=self.rand_gen)
             result[name] = mod_sig
+        return result
+
+
+class WavetableDataset(SeedDataset):
+    def __init__(
+        self,
+        ac: AudioConfig,
+        df: DataFrame,
+        mod_sig_gen: ModSignalGenerator,
+        global_param_names: List[str],
+        temp_param_names: List[str],
+        randomize_seed: bool = False,
+    ):
+        super().__init__(
+            ac, df, mod_sig_gen, global_param_names, temp_param_names, randomize_seed
+        )
+        assert "wt_idx" in df.columns
+
+    def __getitem__(self, idx: int) -> Dict[str, T]:
+        result = super().__getitem__(idx)
+        wt_idx = self.df.iloc[idx]["wt_idx"].item()
+        result["wt_idx"] = wt_idx
         return result
 
 

@@ -1,6 +1,12 @@
+import itertools
 import logging
 import os
 import warnings
+
+import torch as tr
+from torch import nn
+
+from synth_modules import WavetableOsc
 
 # Prevents a bug with PyTorch and CUDA_VISIBLE_DEVICES
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -8,7 +14,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import torch
 
 from acid_ddsp.cli import CustomLightningCLI
-from acid_ddsp.paths import CONFIGS_DIR
+from acid_ddsp.paths import CONFIGS_DIR, WAVETABLES_DIR
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -22,12 +28,38 @@ warnings.simplefilter("ignore", UserWarning)
 
 
 if __name__ == "__main__":
-    # config_name = "nsynth/train.yml"
-    # config_name = "serum/train.yml"
     config_name = "synthetic_2/train.yml"
+    seeds = list(range(3))
+    # seeds = list(range(20))
+    log.info(f"Running with seeds: {seeds}")
+
+    wt_dir = os.path.join(WAVETABLES_DIR, "testing")
+    # # wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
+    # # wt_dir = os.path.join(WAVETABLES_DIR, "waveedit")
+    wt_paths = [os.path.join(wt_dir, f) for f in os.listdir(wt_dir) if f.endswith(".pt")]
+    log.info(f"\nWavetable directory: {wt_dir}\nFound {len(wt_paths)} wavetables")
+    # wt_paths = [None]
 
     config_path = os.path.join(CONFIGS_DIR, config_name)
-    cli = CustomLightningCLI(
-        args=["fit", "-c", config_path],
-        trainer_defaults=CustomLightningCLI.trainer_defaults,
-    )
+
+    for seed, wt_path in itertools.product(seeds, wt_paths):
+        log.info(f"Current seed: {seed} and wavetable: {wt_path}")
+
+        cli = CustomLightningCLI(
+            args=["fit", "-c", config_path, "--seed_everything", str(seed)],
+            trainer_defaults=CustomLightningCLI.make_trainer_defaults(),
+            run=False,
+        )
+        if wt_path is not None:
+            wt = tr.load(wt_path, weights_only=True)
+            # TODO(cm): make this cleaner
+            synth = cli.model.synth
+            sr = synth.ac.sr
+            wt_module = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
+            synth.register_module("add_synth_module", wt_module)
+            synth_hat = cli.model.synth_hat
+            wt_module_hat = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
+            synth_hat.register_module("add_synth_module", wt_module_hat)
+
+        cli.trainer.fit(model=cli.model, datamodule=cli.datamodule)
+        cli.trainer.test(model=cli.model, datamodule=cli.datamodule, ckpt_path="best")

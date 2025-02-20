@@ -385,7 +385,7 @@ class WavetableOsc(SynthModule):
             aa_filter_n = n_wt_samples // 8 + 1
             log.info(
                 f"Setting aa_filter_n = {aa_filter_n} "
-                f"since n_wt_samples = {n_wt_samples}"
+                f"since n_wt_samples = {n_wt_samples}, n_pos = {n_pos}"
             )
         assert aa_filter_n % 2 == 1
         self.aa_filter_n = aa_filter_n
@@ -414,11 +414,13 @@ class WavetableOsc(SynthModule):
     def get_wt(self) -> T:
         return self.wt
 
-    def set_wt(self, new_wt: T) -> None:
+    def set_wt(self, new_wt: T, strict: bool = True) -> None:
         assert not self.is_trainable, "Cannot set wt if is_trainable is True"
         assert new_wt.ndim == 2
         assert new_wt.size(1) == self.n_wt_samples
         new_n_pos = new_wt.size(0)
+        if strict:
+            assert new_n_pos == self.n_pos, f"new_n_pos = {new_n_pos} != {self.n_pos}"
         assert (
             new_n_pos <= self.n_pos
         ), f"new_n_pos = {new_n_pos} must be <= {self.n_pos}"

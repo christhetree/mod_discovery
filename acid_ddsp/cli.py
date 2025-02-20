@@ -1,19 +1,16 @@
 import logging
 import os
-from contextlib import suppress
 from typing import Optional, Dict, Any
 
 import torch as tr
 import wandb
 import yaml
-from jsonargparse import lazy_instance
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.cli import LightningCLI, LightningArgumentParser
 from pytorch_lightning.loggers import WandbLogger
-from pytorch_lightning.strategies import DDPStrategy
 
-from acid_ddsp.paths import CONFIGS_DIR
-from callbacks import LogWavetablesCallback, LogModSigAndSpecCallback, LogAudioCallback
+from callbacks import LogModSigAndSpecCallback
+from paths import CONFIGS_DIR
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -21,30 +18,6 @@ log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
 class CustomLightningCLI(LightningCLI):
-    # TODO(cm): move to yaml
-    trainer_defaults = {
-        "accelerator": "gpu",
-        "callbacks": [
-            LearningRateMonitor(logging_interval="step"),
-            # ConsoleLRMonitor(logging_interval="epoch"),
-            ModelCheckpoint(
-                filename="epoch_{epoch}_step_{step}",  # Name is appended
-                auto_insert_metric_name=False,
-                monitor="val/loss",
-                mode="min",
-                save_last=True,
-                save_top_k=1,
-                verbose=False,
-            ),
-            LogModSigAndSpecCallback(),
-            # LogAudioCallback(),
-            # LogWavetablesCallback(),
-        ],
-        "log_every_n_steps": 1,
-        "precision": 32,
-        "strategy": lazy_instance(DDPStrategy, find_unused_parameters=False),
-    }
-
     def __init__(self, cli_config_path: Optional[str] = None, *args, **kwargs) -> None:
         if cli_config_path is None:
             cli_config_path = os.path.join(CONFIGS_DIR, "cli_config.yml")
@@ -192,14 +165,43 @@ class CustomLightningCLI(LightningCLI):
             f"{self.config.fit.custom.model_name} "
             f"{self.config.fit.custom.dataset_name} ================"
         )
-        with suppress(Exception):
+        try:
             log.info(
                 f"================ {self.config.fit.optimizer.class_path} "
-                f"starting LR = {self.config.fit.optimizer.init_args.lr:.5f} "
+                f"starting LR = {self.config.fit.optimizer.init_args.lr:.6f} "
                 f"================ "
             )
+        except Exception:
+            pass
 
-    # def after_validate(self) -> None:
-    #     print("=================================================================")
-    #     print("eval message")
-    #     print("=================================================================")
+    @staticmethod
+    def make_trainer_defaults() -> Dict[str, Any]:
+        trainer_defaults = {
+            "accelerator": "gpu",
+            "callbacks": [
+                LearningRateMonitor(logging_interval="step"),
+                # ConsoleLRMonitor(logging_interval="epoch"),
+                ModelCheckpoint(
+                    filename="epoch_{epoch}_step_{step}",  # Name is appended
+                    auto_insert_metric_name=False,
+                    monitor="val/loss",
+                    mode="min",
+                    save_last=False,
+                    save_top_k=1,
+                    verbose=False,
+                ),
+                LogModSigAndSpecCallback(),
+                # LogAudioCallback(),
+                # LogWavetablesCallback(),
+            ],
+            "logger": {
+                "class_path": "pytorch_lightning.loggers.TensorBoardLogger",
+                "init_args": {
+                    "save_dir": "lightning_logs",
+                    "name": None,
+                },
+            },
+            "log_every_n_steps": 1,
+            "precision": 32,
+        }
+        return trainer_defaults

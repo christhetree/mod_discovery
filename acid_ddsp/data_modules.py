@@ -17,12 +17,117 @@ from datasets import (
     NSynthDataset,
     SerumDataset,
     WavetableDataset,
+    SeedDataset,
 )
 from modulations import ModSignalGenerator
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
+
+
+class SeedDataModule(pl.LightningDataModule):
+    def __init__(
+            self,
+            batch_size: int,
+            ac: AudioConfig,
+            n_seeds: int,
+            mod_sig_gen: ModSignalGenerator,
+            global_param_names: Optional[List[str]] = None,
+            temp_param_names: Optional[List[str]] = None,
+            val_split: float = 0.2,
+            test_split: float = 0.2,
+            randomize_train_seed: bool = False,
+            num_workers: int = 0,
+    ):
+        super().__init__()
+        self.batch_size = batch_size
+        self.ac = ac
+        self.n_seeds = n_seeds
+        self.mod_sig_gen = mod_sig_gen
+        if global_param_names is None:
+            global_param_names = []
+        self.global_param_names = global_param_names
+        if temp_param_names is None:
+            temp_param_names = ["add_lfo", "sub_lfo", "env"]
+        self.temp_param_names = temp_param_names
+        self.val_split = val_split
+        self.test_split = test_split
+        self.randomize_train_seed = randomize_train_seed
+        self.num_workers = num_workers
+
+        seeds = np.arange(n_seeds)
+        df = pd.DataFrame({"seed": seeds})
+        n = len(df)
+
+        # Shuffle such that batches in validation and test contain a variety of
+        # different theta values. This makes the visualization callbacks more diverse.
+        log.info(f"Shuffling dataset with seed: {tr.random.initial_seed()}")
+        df = df.sample(frac=1, random_state=tr.random.initial_seed()).reset_index(
+            drop=True
+        )
+
+        n_val = int(val_split * n)
+        n_test = int(test_split * n)
+        n_train = n - n_val - n_test
+        df_train = df.iloc[:n_train]
+        df_val = df.iloc[n_train : n_train + n_val]
+        df_test = df.iloc[n_train + n_val :]
+
+        log.info(
+            f"n_train: {len(df_train)}, n_val: {len(df_val)}, n_test: {len(df_test)}"
+        )
+
+        self.train_ds = SeedDataset(
+            ac,
+            df_train,
+            mod_sig_gen,
+            global_param_names,
+            temp_param_names,
+            randomize_seed=randomize_train_seed,
+        )
+        self.val_ds = SeedDataset(
+            ac,
+            df_val,
+            mod_sig_gen,
+            global_param_names,
+            temp_param_names,
+        )
+        self.test_ds = SeedDataset(
+            ac,
+            df_test,
+            mod_sig_gen,
+            global_param_names,
+            temp_param_names,
+        )
+
+    def train_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.train_ds,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+            drop_last=True,
+        )
+
+    def val_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.val_ds,
+            batch_size=self.batch_size,
+            shuffle=False,
+            # shuffle=True,  # For more diversity in visualization callbacks
+            num_workers=self.num_workers,
+            drop_last=True,
+        )
+
+    def test_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.test_ds,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            drop_last=True,
+        )
 
 
 class WavetableDataModule(pl.LightningDataModule):
@@ -37,6 +142,7 @@ class WavetableDataModule(pl.LightningDataModule):
         temp_param_names: Optional[List[str]] = None,
         val_split: float = 0.2,
         test_split: float = 0.2,
+        randomize_train_seed: bool = False,
         num_workers: int = 0,
     ):
         super().__init__()
@@ -53,6 +159,7 @@ class WavetableDataModule(pl.LightningDataModule):
         self.temp_param_names = temp_param_names
         self.val_split = val_split
         self.test_split = test_split
+        self.randomize_train_seed = randomize_train_seed
         self.num_workers = num_workers
 
         wt_paths = [
@@ -74,17 +181,10 @@ class WavetableDataModule(pl.LightningDataModule):
 
         # Shuffle such that batches in validation and test contain a variety of
         # different theta values. This makes the visualization callbacks more diverse.
+        log.info(f"Shuffling dataset with seed: {tr.random.initial_seed()}")
         df = df.sample(frac=1, random_state=tr.random.initial_seed()).reset_index(
             drop=True
         )
-
-        # n_val = int(val_split * n)
-        # n_test = int(test_split * n)
-        # n_train = n - n_val - n_test
-        # log.info(f"n_train: {n_train}, n_val: {n_val}, n_test: {n_test}")
-        # df_train = df.iloc[:n_train]
-        # df_val = df.iloc[n_train : n_train + n_val]
-        # df_test = df.iloc[n_train + n_val :]
 
         n_val_wts = int(val_split * n_wts)
         n_test_wts = int(test_split * n_wts)
@@ -107,7 +207,7 @@ class WavetableDataModule(pl.LightningDataModule):
             mod_sig_gen,
             global_param_names,
             temp_param_names,
-            # randomize_seed=True,
+            randomize_seed=self.randomize_train_seed,
         )
         self.val_ds = WavetableDataset(
             ac,

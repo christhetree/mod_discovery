@@ -105,6 +105,17 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.global_n = 0
         self.test_out_dicts = []
 
+    def state_dict(self, *args, **kwargs) -> Dict[str, T]:
+        state_dict = super().state_dict(*args, **kwargs)
+        excluded_keys = [
+            k
+            for k in state_dict
+            if ".mel_spec." in k or ".mfcc." in k or ".mel_stft." in k
+        ]
+        for k in excluded_keys:
+            del state_dict[k]
+        return state_dict
+
     def load_state_dict(self, state_dict: Mapping[str, Any], **kwargs):
         return super().load_state_dict(state_dict, strict=False)
 
