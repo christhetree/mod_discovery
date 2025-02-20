@@ -29,14 +29,18 @@ warnings.simplefilter("ignore", UserWarning)
 
 if __name__ == "__main__":
     config_name = "synthetic_2/train.yml"
-    seeds = list(range(3))
+    seeds = [42, 42, 3, 42]
     # seeds = list(range(20))
     log.info(f"Running with seeds: {seeds}")
 
-    wt_dir = os.path.join(WAVETABLES_DIR, "testing")
+    # wt_dir = os.path.join(WAVETABLES_DIR, "testing")
+    wt_dir = os.path.join(WAVETABLES_DIR, "ableton_basic_shapes")
     # # wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
     # # wt_dir = os.path.join(WAVETABLES_DIR, "waveedit")
-    wt_paths = [os.path.join(wt_dir, f) for f in os.listdir(wt_dir) if f.endswith(".pt")]
+    wt_paths = [
+        os.path.join(wt_dir, f) for f in os.listdir(wt_dir) if f.endswith(".pt")
+    ]
+    wt_paths = sorted(wt_paths)
     log.info(f"\nWavetable directory: {wt_dir}\nFound {len(wt_paths)} wavetables")
     # wt_paths = [None]
 
@@ -52,7 +56,9 @@ if __name__ == "__main__":
         )
         if wt_path is not None:
             wt = tr.load(wt_path, weights_only=True)
+            wt_name = os.path.basename(wt_path)[: -len(".pt")]
             # TODO(cm): make this cleaner
+            cli.model.wt_name = wt_name
             synth = cli.model.synth
             sr = synth.ac.sr
             wt_module = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
@@ -61,5 +67,6 @@ if __name__ == "__main__":
             wt_module_hat = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
             synth_hat.register_module("add_synth_module", wt_module_hat)
 
+        cli.before_fit()
         cli.trainer.fit(model=cli.model, datamodule=cli.datamodule)
         cli.trainer.test(model=cli.model, datamodule=cli.datamodule, ckpt_path="best")

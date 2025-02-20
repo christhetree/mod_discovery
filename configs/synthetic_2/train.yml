@@ -6,9 +6,7 @@ custom:
 #  model_name: mss__framewise
   model_name: ploss__s12d3
 #  model_name: mss__s12d3
-#  dataset_name: add_lfo__sin_saw_256
-#  dataset_name: add_lfo__ableton__split_rand_train_seed
-  dataset_name: add_lfo__waveedit
+  dataset_name: ableton_basic_shapes__add_lfo
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
 #  use_wandb_cpu: true
@@ -18,7 +16,7 @@ trainer:
   accelerator: gpu
   benchmark: false
   devices: [6]
-  max_epochs: 1
+  max_epochs: 50
   num_sanity_val_steps: 1
   accumulate_grad_batches: 1
   gradient_clip_val: 0.5
@@ -28,7 +26,7 @@ data:
   init_args:
     batch_size: 32
     ac: audio_config.yml
-    n_seeds: 25
+    n_seeds: 1024
 #    mod_sig_gen: mod_sig_gen.yml
     mod_sig_gen: mod_sig_gen__pointy.yml
     temp_param_names:
@@ -60,5 +58,8 @@ model:
     use_p_loss: true
     loss_func: torch.nn.MSELoss
 
+    run_name: ploss__s12d3__ableton_basic_shapes__add_lfo
+
 #optimizer: ../opt/adam_w__lr_1e-2.yml
-optimizer: ../opt/adam_w__lr_1e-3.yml
+#optimizer: ../opt/adam_w__lr_1e-3.yml
+optimizer: ../opt/sf_adam_w__lr_5e-3.yml

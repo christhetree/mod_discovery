@@ -128,30 +128,30 @@ class CustomLightningCLI(LightningCLI):
         for cb in self.trainer.callbacks:
             if isinstance(cb, ModelCheckpoint):
                 cb.filename = (
-                    f"{self.config.fit.custom.model_name}__"
-                    f"{self.config.fit.custom.dataset_name}__{cb.filename}"
+                    f"{self.config.custom.model_name}__"
+                    f"{self.config.custom.dataset_name}__{cb.filename}"
                 )
                 log.info(f"Setting checkpoint name to: {cb.filename}")
 
         use_gpu = tr.cuda.is_available()
-        if (use_gpu and self.config.fit.custom.use_wandb_gpu) or (
-            not use_gpu and self.config.fit.custom.use_wandb_cpu
+        if (use_gpu and self.config.custom.use_wandb_gpu) or (
+            not use_gpu and self.config.custom.use_wandb_cpu
         ):
             # Used directly by the callbacks
             wandb.init(
                 dir="wandb_logs",
-                project=self.config.fit.custom.project_name,
-                name=f"{self.config.fit.custom.model_name}__"
-                f"{self.config.fit.custom.dataset_name}",
+                project=self.config.custom.project_name,
+                name=f"{self.config.custom.model_name}__"
+                f"{self.config.custom.dataset_name}",
             )
             wandb.define_metric("*", step_metric="global_step")
 
             # Used by lightning to log to wandb
             wandb_logger = WandbLogger(
                 save_dir="wandb_logs",
-                project=self.config.fit.custom.project_name,
-                name=f"{self.config.fit.custom.model_name}__"
-                f"{self.config.fit.custom.dataset_name}",
+                project=self.config.custom.project_name,
+                name=f"{self.config.custom.model_name}__"
+                f"{self.config.custom.dataset_name}",
             )
             self.trainer.loggers.append(wandb_logger)
         else:
@@ -161,14 +161,14 @@ class CustomLightningCLI(LightningCLI):
             log.info("================ Running on CPU ================ ")
 
         log.info(
-            f"================ {self.config.fit.custom.project_name} "
-            f"{self.config.fit.custom.model_name} "
-            f"{self.config.fit.custom.dataset_name} ================"
+            f"================ {self.config.custom.project_name} "
+            f"{self.config.custom.model_name} "
+            f"{self.config.custom.dataset_name} ================"
         )
         try:
             log.info(
-                f"================ {self.config.fit.optimizer.class_path} "
-                f"starting LR = {self.config.fit.optimizer.init_args.lr:.6f} "
+                f"================ {self.config.optimizer.class_path} "
+                f"starting LR = {self.config.optimizer.init_args.lr:.6f} "
                 f"================ "
             )
         except Exception:

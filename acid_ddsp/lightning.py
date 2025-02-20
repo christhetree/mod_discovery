@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional, List, Mapping, Tuple
 
 import auraloss
 import pytorch_lightning as pl
+import schedulefree
 import torch as tr
 from auraloss.time import ESRLoss
 from pytorch_lightning.cli import OptimizerCallable
@@ -15,6 +16,7 @@ import util
 from audio_config import AudioConfig
 from feature_extraction import LogMelSpecFeatureExtractor
 from losses import MFCCL1
+from paths import OUT_DIR
 from synths import SynthBase
 
 logging.basicConfig()
@@ -104,6 +106,33 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         self.global_n = 0
         self.test_out_dicts = []
+
+        # TSV logging
+        self.wt_name = None
+        tsv_cols = [
+            "seed",
+            "wt_name",
+            "stage",
+            "step",
+            "global_n",
+            "loss",
+        ]
+        for p_name in self.temp_param_names:
+            tsv_cols.append(f"l1__{p_name}")
+            tsv_cols.append(f"esr__{p_name}")
+        for p_name in self.global_param_names:
+            tsv_cols.append(f"l1__{p_name}")
+        for metric_name in self.audio_metrics:
+            tsv_cols.append(f"audio__{metric_name}")
+        if run_name:
+            self.tsv_path = os.path.join(OUT_DIR, f"{self.run_name}.tsv")
+            if not os.path.exists(self.tsv_path):
+                with open(self.tsv_path, "w") as f:
+                    f.write("\t".join(tsv_cols) + "\n")
+            else:
+                log.info(f"Appending to existing TSV file: {self.tsv_path}")
+        else:
+            self.tsv_path = None
 
     def state_dict(self, *args, **kwargs) -> Dict[str, T]:
         state_dict = super().state_dict(*args, **kwargs)
@@ -371,6 +400,26 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     )
             except Exception as e:
                 log.error(f"Error in eval synth: {e}")
+
+        # TSV logging
+        if self.tsv_path:
+            with open(self.tsv_path, "a") as f:
+                tsv_row = [
+                    tr.random.initial_seed(),
+                    self.wt_name,
+                    stage,
+                    self.global_step,
+                    self.global_n,
+                    loss.item(),
+                ]
+                for p_name in self.temp_param_names:
+                    tsv_row.append(temp_param_metrics[f"{p_name}_l1"].item())
+                    tsv_row.append(temp_param_metrics[f"{p_name}_esr"].item())
+                for p_name in self.global_param_names:
+                    tsv_row.append(global_param_metrics[f"{p_name}_l1"].item())
+                for metric_name in self.audio_metrics:
+                    tsv_row.append(audio_metrics_hat[metric_name].item())
+                f.write("\t".join(str(v) for v in tsv_row) + "\n")
 
         temp_params_hat = {f"{k}_hat": v for k, v in temp_params_hat.items()}
         global_params_hat = {f"{k}_hat": v for k, v in global_params_hat.items()}
