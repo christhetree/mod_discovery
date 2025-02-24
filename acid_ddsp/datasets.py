@@ -26,16 +26,19 @@ class SeedDataset(Dataset):
         self,
         ac: AudioConfig,
         df: DataFrame,
-        mod_sig_gen: ModSignalGenerator,
+        mod_sig_gens: List[ModSignalGenerator],
         global_param_names: List[str],
         temp_param_names: List[str],
         randomize_seed: bool = False,
     ):
         super().__init__()
         assert "seed" in df.columns
+        assert len(mod_sig_gens) == len(temp_param_names) or len(mod_sig_gens) == 1
+        if len(mod_sig_gens) == 1:
+            mod_sig_gens = mod_sig_gens * len(temp_param_names)
         self.ac = ac
         self.df = df
-        self.mod_sig_gen = mod_sig_gen
+        self.mod_sig_gens = mod_sig_gens
         self.global_param_names = global_param_names
         self.temp_param_names = temp_param_names
         self.randomize_seed = randomize_seed
@@ -66,8 +69,8 @@ class SeedDataset(Dataset):
         for name in self.global_param_names:
             assert "_0to1" not in name
             result[f"{name}_0to1"] = tr.rand((1,), generator=self.rand_gen).squeeze()
-        for name in self.temp_param_names:
-            mod_sig = self.mod_sig_gen(self.ac.n_samples, rand_gen=self.rand_gen)
+        for name, mod_sig_gen in zip(self.temp_param_names, self.mod_sig_gens):
+            mod_sig = mod_sig_gen(self.ac.n_samples, rand_gen=self.rand_gen)
             result[name] = mod_sig
         return result
 
@@ -77,13 +80,13 @@ class WavetableDataset(SeedDataset):
         self,
         ac: AudioConfig,
         df: DataFrame,
-        mod_sig_gen: ModSignalGenerator,
+        mod_sig_gens: List[ModSignalGenerator],
         global_param_names: List[str],
         temp_param_names: List[str],
         randomize_seed: bool = False,
     ):
         super().__init__(
-            ac, df, mod_sig_gen, global_param_names, temp_param_names, randomize_seed
+            ac, df, mod_sig_gens, global_param_names, temp_param_names, randomize_seed
         )
         assert "wt_idx" in df.columns
 

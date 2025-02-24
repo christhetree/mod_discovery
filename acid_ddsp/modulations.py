@@ -8,6 +8,7 @@ from torch import Tensor as T
 from torch import nn
 
 import util
+from curves import PiecewiseBezier
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -18,6 +19,76 @@ class ModSignalGenerator(ABC, nn.Module):
     @abstractmethod
     def forward(self, n_frames: int, rand_gen: Optional[tr.Generator] = None) -> T:
         pass
+
+
+class ModSignalGenRandomBezier(ModSignalGenerator):
+    def __init__(
+        self,
+        min_n_seg: int = 1,
+        max_n_seg: int = 12,
+        min_degree: int = 3,
+        max_degree: int = 3,
+        min_seg_interval_frac: float = 0.5,
+        softmax_tau: float = 1.0,
+        is_c1_cont: bool = False,
+    ):
+        super().__init__()
+        assert 1 <= min_n_seg <= max_n_seg
+        self.min_n_seg = min_n_seg
+        self.max_n_seg = max_n_seg
+        assert 1 <= min_degree <= max_degree
+        self.min_degree = min_degree
+        self.max_degree = max_degree
+        assert 0.0 < min_seg_interval_frac <= 1.0
+        self.min_seg_interval_frac = min_seg_interval_frac
+        self.softmax_tau = softmax_tau
+        assert not is_c1_cont, "C1 continuity not supported currently"
+        if is_c1_cont:
+            assert min_degree >= 3
+        self.is_c1_cont = is_c1_cont
+
+    def forward(self, n_frames: int, rand_gen: Optional[tr.Generator] = None) -> T:
+        if self.min_n_seg == self.max_n_seg:
+            n_seg = self.min_n_seg
+        else:
+            n_seg = tr.randint(
+                self.min_n_seg, self.max_n_seg + 1, (1,), generator=rand_gen
+            ).item()
+        if self.min_degree == self.max_degree:
+            degree = self.min_degree
+        else:
+            degree = tr.randint(
+                self.min_degree, self.max_degree + 1, (1,), generator=rand_gen
+            ).item()
+        si_logits = tr.rand((1, n_seg), generator=rand_gen)
+        min_seg_interval = (1 / n_seg) * self.min_seg_interval_frac
+        si = PiecewiseBezier.logits_to_seg_intervals(
+            si_logits, min_seg_interval, self.softmax_tau
+        )
+        # log.info(f"si_logits = {si_logits}")
+        # log.info(f"si = {si}")
+        modes = tr.cumsum(si, dim=1)[:, :-1]
+        bezier = PiecewiseBezier(
+            n_frames,
+            n_seg,
+            degree=degree,
+            modes=modes,
+            is_c1_cont=self.is_c1_cont,
+        )
+        cp = (
+            tr.rand((1, (n_seg * degree) + 1), generator=rand_gen)
+            .unfold(dimension=1, size=degree + 1, step=degree)
+            .contiguous()
+        )
+
+        mod_sig = bezier.make_bezier(cp=cp)
+        mod_sig = mod_sig.squeeze(0)
+        assert mod_sig.min() > 0.0
+        assert mod_sig.max() < 1.0
+        # from matplotlib import pyplot as plt
+        # plt.plot(mod_sig)
+        # plt.show()
+        return mod_sig
 
 
 class ModSignalGeneratorRandom(ModSignalGenerator):

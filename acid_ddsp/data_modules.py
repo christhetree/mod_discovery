@@ -32,7 +32,7 @@ class SeedDataModule(pl.LightningDataModule):
             batch_size: int,
             ac: AudioConfig,
             n_seeds: int,
-            mod_sig_gen: ModSignalGenerator,
+            mod_sig_gens: List[ModSignalGenerator],
             global_param_names: Optional[List[str]] = None,
             temp_param_names: Optional[List[str]] = None,
             val_split: float = 0.2,
@@ -44,7 +44,7 @@ class SeedDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.ac = ac
         self.n_seeds = n_seeds
-        self.mod_sig_gen = mod_sig_gen
+        self.mod_sig_gens = mod_sig_gens
         if global_param_names is None:
             global_param_names = []
         self.global_param_names = global_param_names
@@ -81,7 +81,7 @@ class SeedDataModule(pl.LightningDataModule):
         self.train_ds = SeedDataset(
             ac,
             df_train,
-            mod_sig_gen,
+            mod_sig_gens,
             global_param_names,
             temp_param_names,
             randomize_seed=randomize_train_seed,
@@ -89,14 +89,14 @@ class SeedDataModule(pl.LightningDataModule):
         self.val_ds = SeedDataset(
             ac,
             df_val,
-            mod_sig_gen,
+            mod_sig_gens,
             global_param_names,
             temp_param_names,
         )
         self.test_ds = SeedDataset(
             ac,
             df_test,
-            mod_sig_gen,
+            mod_sig_gens,
             global_param_names,
             temp_param_names,
         )
@@ -137,7 +137,7 @@ class WavetableDataModule(pl.LightningDataModule):
         ac: AudioConfig,
         wt_dir: str,
         n_seeds_per_wt: int,
-        mod_sig_gen: ModSignalGenerator,
+        mod_sig_gens: List[ModSignalGenerator],
         global_param_names: Optional[List[str]] = None,
         temp_param_names: Optional[List[str]] = None,
         val_split: float = 0.2,
@@ -150,7 +150,7 @@ class WavetableDataModule(pl.LightningDataModule):
         self.ac = ac
         self.wt_dir = wt_dir
         self.n_seeds_per_wt = n_seeds_per_wt
-        self.mod_sig_gen = mod_sig_gen
+        self.mod_sig_gens = mod_sig_gens
         if global_param_names is None:
             global_param_names = []
         self.global_param_names = global_param_names
@@ -204,7 +204,7 @@ class WavetableDataModule(pl.LightningDataModule):
         self.train_ds = WavetableDataset(
             ac,
             df_train,
-            mod_sig_gen,
+            mod_sig_gens,
             global_param_names,
             temp_param_names,
             randomize_seed=self.randomize_train_seed,
@@ -212,14 +212,14 @@ class WavetableDataModule(pl.LightningDataModule):
         self.val_ds = WavetableDataset(
             ac,
             df_val,
-            mod_sig_gen,
+            mod_sig_gens,
             global_param_names,
             temp_param_names,
         )
         self.test_ds = WavetableDataset(
             ac,
             df_test,
-            mod_sig_gen,
+            mod_sig_gens,
             global_param_names,
             temp_param_names,
         )

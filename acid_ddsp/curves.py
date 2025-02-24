@@ -17,53 +17,53 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-class PiecewiseSplines(nn.Module):
-    def __init__(
-        self,
-        n_frames: int,
-        n_segments: int,
-        degree: int,
-    ):
-        super().__init__()
-        assert n_frames >= 2
-        assert n_segments >= 1
-        assert degree >= 1
-        self.n_frames = n_frames
-        self.n_segments = n_segments
-        self.degree = degree
-        self.min_t = 0.0
-        self.max_t = 1.0
-
-        support = tr.linspace(self.min_t, self.max_t, n_frames).view(1, -1, 1, 1)
-        support = support.repeat(1, 1, n_segments, degree)
-
-        segment_offsets = tr.linspace(0.0, 1.0, n_segments + 1)[:-1].view(1, 1, -1, 1)
-        support = support - segment_offsets
-        support = tr.clamp(support, min=self.min_t, max=self.max_t / n_segments)
-        exponent = tr.arange(start=1, end=degree + 1).int().view(1, 1, 1, -1)
-        support = support.pow(exponent)
-
-        self.register_buffer("support", support)
-        # self.register_buffer("exponent", tr.arange(start=1, end=degree + 1).int())
-
-    def forward(self, coeff: T, bias: Optional[T] = None) -> T:
-        bs = coeff.size(0)
-        n_dim = coeff.ndim
-        if n_dim == 4:
-            coeff = tr.flatten(coeff, start_dim=0, end_dim=1)
-        assert coeff.ndim == 3
-        assert coeff.size(1) == self.n_segments
-        assert coeff.size(2) == self.degree
-        coeff = coeff.unsqueeze(1)
-        x = coeff * self.support
-        x = x.sum(dim=[2, 3])
-        if bias is not None:
-            bias = bias.view(x.size(0), 1)
-            x = x + bias
-        if n_dim == 4:
-            x = x.view(bs, -1, x.size(1))
-        return x
-
+# class PiecewiseSplines(nn.Module):
+#     def __init__(
+#         self,
+#         n_frames: int,
+#         n_segments: int,
+#         degree: int,
+#     ):
+#         super().__init__()
+#         assert n_frames >= 2
+#         assert n_segments >= 1
+#         assert degree >= 1
+#         self.n_frames = n_frames
+#         self.n_segments = n_segments
+#         self.degree = degree
+#         self.min_t = 0.0
+#         self.max_t = 1.0
+#
+#         support = tr.linspace(self.min_t, self.max_t, n_frames).view(1, -1, 1, 1)
+#         support = support.repeat(1, 1, n_segments, degree)
+#
+#         segment_offsets = tr.linspace(0.0, 1.0, n_segments + 1)[:-1].view(1, 1, -1, 1)
+#         support = support - segment_offsets
+#         support = tr.clamp(support, min=self.min_t, max=self.max_t / n_segments)
+#         exponent = tr.arange(start=1, end=degree + 1).int().view(1, 1, 1, -1)
+#         support = support.pow(exponent)
+#
+#         self.register_buffer("support", support)
+#         # self.register_buffer("exponent", tr.arange(start=1, end=degree + 1).int())
+#
+#     def forward(self, coeff: T, bias: Optional[T] = None) -> T:
+#         bs = coeff.size(0)
+#         n_dim = coeff.ndim
+#         if n_dim == 4:
+#             coeff = tr.flatten(coeff, start_dim=0, end_dim=1)
+#         assert coeff.ndim == 3
+#         assert coeff.size(1) == self.n_segments
+#         assert coeff.size(2) == self.degree
+#         coeff = coeff.unsqueeze(1)
+#         x = coeff * self.support
+#         x = x.sum(dim=[2, 3])
+#         if bias is not None:
+#             bias = bias.view(x.size(0), 1)
+#             x = x + bias
+#         if n_dim == 4:
+#             x = x.view(bs, -1, x.size(1))
+#         return x
+#
     # def forward(self, segment_intervals: T, coeff: T, bias: Optional[T] = None) -> T:
     #     bs = coeff.size(0)
     #     n_dim = coeff.ndim
@@ -214,11 +214,12 @@ class PiecewiseBezier(nn.Module):
         bezier = bezier.squeeze(-1)
         # Process optional segment intervals and maybe apply a mask
         if si is not None:
+            # TODO(cm): debug this
             assert si.ndim == 2
             assert si.size(0) == bs
             assert si.size(1) == self.n_segments
             if si_are_logits:
-                si = self._logits_to_seg_intervals(si)
+                si = PiecewiseBezier.logits_to_seg_intervals(si)
             si_sums = si.sum(dim=1)
             assert tr.allclose(si_sums, tr.ones_like(si_sums))
         mask = self._make_mask(si)
@@ -272,6 +273,21 @@ class PiecewiseBezier(nn.Module):
         bezier = bezier.sum(dim=-2)
         return bezier
 
+    @staticmethod
+    def logits_to_seg_intervals(
+        logits: T, min_seg_interval: Optional[float] = None, softmax_tau: float = 1.0
+    ) -> T:
+        assert logits.ndim == 2
+        n_intervals = logits.size(1)
+        if min_seg_interval is None:
+            min_seg_interval = 1.0 / (2.0 * n_intervals)
+        else:
+            assert 0.0 < min_seg_interval < 1.0 / n_intervals
+        scaling_factor = 1.0 - (n_intervals * min_seg_interval)
+        si = util.stable_softmax(logits, tau=softmax_tau)
+        si = si * scaling_factor + min_seg_interval
+        return si
+
 
 class PiecewiseBezierDiffSeg(PiecewiseBezier):
     def __init__(
@@ -300,20 +316,6 @@ class PiecewiseBezierDiffSeg(PiecewiseBezier):
         # Create segment indices for the continuous mask
         seg_indices = tr.arange(0, n_segments).float()
         self.register_buffer("seg_indices", seg_indices, persistent=False)
-
-    def _logits_to_seg_intervals(
-        self, logits: T, min_seg_interval: Optional[float] = None
-    ) -> T:
-        assert logits.ndim == 2
-        n_intervals = logits.size(1)
-        if min_seg_interval is None:
-            min_seg_interval = 1.0 / (2.0 * n_intervals)
-        else:
-            assert 0.0 < min_seg_interval < 1.0 / n_intervals
-        scaling_factor = 1.0 - (n_intervals * min_seg_interval)
-        si = util.stable_softmax(logits)
-        si = si * scaling_factor + min_seg_interval
-        return si
 
     def _make_mask(self, seg_intervals: Optional[T]) -> Optional[T]:
         if self.n_segments == 1:
@@ -470,7 +472,7 @@ if __name__ == "__main__":
     degree = 3
 
     si_logits = tr.rand(bs, n_segments) * 3.0
-    si = PiecewiseBezierDiffSeg(n_frames, n_segments, degree)._logits_to_seg_intervals(
+    si = PiecewiseBezierDiffSeg.logits_to_seg_intervals(
         si_logits,
         # min_seg_interval=1.0 / (2 * n_segments),
     )

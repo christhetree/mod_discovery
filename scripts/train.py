@@ -4,7 +4,6 @@ import os
 import warnings
 
 import torch as tr
-from torch import nn
 
 from synth_modules import WavetableOsc
 
@@ -29,7 +28,8 @@ warnings.simplefilter("ignore", UserWarning)
 
 if __name__ == "__main__":
     config_name = "synthetic_2/train.yml"
-    seeds = [42, 42, 3, 42]
+    seeds = [42]
+    # seeds = [42, 42, 3, 42]
     # seeds = list(range(20))
     log.info(f"Running with seeds: {seeds}")
 

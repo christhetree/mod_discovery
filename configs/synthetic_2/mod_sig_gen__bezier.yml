@@ -1,0 +1,9 @@
+class_path: modulations.ModSignalGenRandomBezier
+init_args:
+  min_n_seg: 1
+  max_n_seg: 8
+  min_degree: 1
+  max_degree: 3
+  min_seg_interval_frac: 0.25
+  softmax_tau: 0.25
+  is_c1_cont: false
