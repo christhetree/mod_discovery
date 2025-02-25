@@ -1,11 +1,7 @@
 custom:
   project_name: acid_ddsp_2
-#  model_name: ploss__framewise
-#  model_name: mss__framewise
-#  model_name: ploss__s12d3
   model_name: mss__s12d3
-  dataset_name: ableton__add_lfo
-#  dataset_name: ableton_basic_shapes__add_lfo
+  dataset_name: ableton__add_env
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
   use_wandb_gpu: false
@@ -13,7 +9,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [4]
+  devices: [5]
   max_epochs: 50
   num_sanity_val_steps: 1
   accumulate_grad_batches: 1
@@ -36,7 +32,7 @@ data:
           softmax_tau: 0.25
     temp_param_names:
       - add_lfo
-#      - env
+      - env
     num_workers: 4
 
 model:
@@ -48,14 +44,14 @@ model:
     synth: synth.yml
     temp_param_names:
       - add_lfo
-#      - env
+      - env
 
 #    use_model: false
     use_model: true
-    model: spectral_2dcnn.yml
+    model: spectral_2dcnn__add_env.yml
     temp_param_names_hat:
       - add_lfo
-#      - env
+      - env
     synth_hat: synth.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
@@ -63,9 +59,7 @@ model:
 #    use_p_loss: true
 #    loss_func: torch.nn.MSELoss
 
-#    run_name: ploss__s12d3__ableton_basic_shapes__add_lfo
-#    run_name: mss__s12d3__ableton_basic_shapes__add_lfo__adam
-    run_name: mss__s12d3__ableton__add_lfo
+    run_name: mss__s12d3__ableton__add_env
 
 #optimizer: ../opt/adam_w__lr_1e-2.yml
 optimizer: ../opt/adam_w__lr_1e-3.yml

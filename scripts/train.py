@@ -27,16 +27,18 @@ warnings.simplefilter("ignore", UserWarning)
 
 
 if __name__ == "__main__":
-    config_name = "synthetic_2/train.yml"
+    # config_name = "synthetic_2/train.yml"
+    # config_name = "synthetic_2/train__add_env.yml"
+    config_name = "synthetic_2/train__frame__add_env.yml"
     seeds = [42]
     # seeds = [42, 42, 3, 42]
     # seeds = list(range(20))
     log.info(f"Running with seeds: {seeds}")
 
     # wt_dir = os.path.join(WAVETABLES_DIR, "testing")
-    wt_dir = os.path.join(WAVETABLES_DIR, "ableton_basic_shapes")
-    # # wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
-    # # wt_dir = os.path.join(WAVETABLES_DIR, "waveedit")
+    # wt_dir = os.path.join(WAVETABLES_DIR, "ableton_basic_shapes")
+    wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
+    # wt_dir = os.path.join(WAVETABLES_DIR, "waveedit")
     wt_paths = [
         os.path.join(wt_dir, f) for f in os.listdir(wt_dir) if f.endswith(".pt")
     ]
