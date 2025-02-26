@@ -1,11 +1,15 @@
 import logging
 import os
+from typing import Optional
 
 import librosa
 import torch as tr
+import torchaudio
 from torch import Tensor as T
 from torch import nn
 from torchaudio.transforms import MelSpectrogram, FrequencyMasking
+
+from losses_freq import DeltaMultiResolutionSTFTLoss
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -21,6 +25,7 @@ class LogMelSpecFeatureExtractor(nn.Module):
         n_mels: int = 128,
         normalized: bool = False,
         center: bool = True,
+        delta_win_ms: Optional[int] = None,
         freq_mask_amount: float = 0.0,
         eps: float = 1e-7,
     ) -> None:
@@ -31,8 +36,20 @@ class LogMelSpecFeatureExtractor(nn.Module):
         self.n_mels = n_mels
         self.normalized = normalized
         self.center = center
+        self.delta_win_ms = delta_win_ms
         self.freq_mask_amount = freq_mask_amount
         self.eps = eps
+
+        self.delta_win_len = None
+        if self.delta_win_ms is not None:
+            frame_rate = sr / hop_len
+            self.delta_win_len = DeltaMultiResolutionSTFTLoss.calc_delta_win_len(
+                delta_win_ms, frame_rate
+            )
+            log.info(
+                f"delta_win_len: {self.delta_win_len}, delta_win_ms: {delta_win_ms}, "
+                f"frame_rate: {frame_rate:.2f}, hop_len: {hop_len}"
+            )
 
         self.mel_spec = MelSpectrogram(
             sample_rate=int(sr),
@@ -67,6 +84,7 @@ class LogMelSpecFeatureExtractor(nn.Module):
         # time_averaged = x.mean(dim=-1, keepdim=True)
         # x = x - time_averaged
 
-        # x = torchaudio.functional.compute_deltas(x, win_length=3, mode="reflect")
+        if self.delta_win_len is not None:
+            x = torchaudio.functional.compute_deltas(x, win_length=self.delta_win_len)
 
         return x

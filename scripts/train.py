@@ -6,6 +6,7 @@ import warnings
 import torch as tr
 
 from synth_modules import WavetableOsc
+from wavetables import BAD_ABLETON_WTS
 
 # Prevents a bug with PyTorch and CUDA_VISIBLE_DEVICES
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
@@ -29,7 +30,10 @@ warnings.simplefilter("ignore", UserWarning)
 if __name__ == "__main__":
     # config_name = "synthetic_2/train.yml"
     # config_name = "synthetic_2/train__add_env.yml"
-    config_name = "synthetic_2/train__frame__add_env.yml"
+    config_name = "synthetic_2/train__add_env_delta_10_fe.yml"
+    # config_name = "synthetic_2/train__add_env_delta_50_fe.yml"
+    # config_name = "synthetic_2/train__add_env_delta_250_fe.yml"
+    # config_name = "synthetic_2/train__frame__add_env.yml"
     seeds = [42]
     # seeds = [42, 42, 3, 42]
     # seeds = list(range(20))
@@ -39,9 +43,18 @@ if __name__ == "__main__":
     # wt_dir = os.path.join(WAVETABLES_DIR, "ableton_basic_shapes")
     wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
     # wt_dir = os.path.join(WAVETABLES_DIR, "waveedit")
-    wt_paths = [
-        os.path.join(wt_dir, f) for f in os.listdir(wt_dir) if f.endswith(".pt")
+
+    wt_names = [
+        f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")
     ]
+    filtered_wt_names = []
+    for wt_name in wt_names:
+        if any(bad_wt_name in wt_name for bad_wt_name in BAD_ABLETON_WTS):
+            continue
+        if not wt_name.startswith("basics__"):
+            continue
+        filtered_wt_names.append(wt_name)
+    wt_paths = [os.path.join(wt_dir, f"{wt_name}.pt") for wt_name in filtered_wt_names]
     wt_paths = sorted(wt_paths)
     log.info(f"\nWavetable directory: {wt_dir}\nFound {len(wt_paths)} wavetables")
     # wt_paths = [None]

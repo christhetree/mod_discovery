@@ -1,15 +1,17 @@
 import logging
 import os
 from collections import defaultdict
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib.axes import Subplot
 from pandas import DataFrame
+from tqdm import tqdm
 
 from paths import OUT_DIR, WAVETABLES_DIR
+from wavetables import BAD_ABLETON_WTS
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -45,7 +47,7 @@ def prepare_tsv_data(
     y_converge_val: float = 0.1,
     trial_col: str = "seed",
     filter_col: Optional[str] = None,
-    filter_val: Optional[str] = None,
+    filter_vals: Optional[List[str]] = None,
     allow_var_n: bool = False,
 ) -> Dict[str, np.ndarray]:
     tsv_col_names = ["stage", "x_col", "y_col"]
@@ -53,11 +55,14 @@ def prepare_tsv_data(
     df = pd.read_csv(tsv_path, sep="\t", index_col=False)
 
     # Filter out rows
-    if filter_val is not None:
+    if filter_vals is not None:
         assert filter_col is not None
-        tsv_col_names = ["filter_col", "filter_val"] + tsv_col_names
-        print_tsv_vals = [filter_col, filter_val] + print_tsv_vals
-        df = df[df[filter_col] == filter_val]
+        if len(filter_vals) == 1:
+            tsv_col_names = ["filter_col", "filter_val"] + tsv_col_names
+            print_tsv_vals = [filter_col, filter_vals[0]] + print_tsv_vals
+        df = df[df[filter_col].isin(filter_vals)]
+    if len(df) == 0:
+        return {}
 
     # Filter out stage
     df = df[df["stage"] == stage]
@@ -234,8 +239,6 @@ def plot_xy_vals(
     title: Optional[str] = None,
     plot_95ci: bool = True,
     plot_range: bool = True,
-    y_min: Optional[float] = None,
-    y_max: Optional[float] = None,
 ) -> None:
     x_vals = data["x_vals"]
     y_means = data["y_means"]
@@ -257,7 +260,6 @@ def plot_xy_vals(
     if plot_range:
         ax.fill_between(x_vals, y_mins, y_maxs, color="gray", alpha=0.4)
 
-    ax.set_ylim(bottom=y_min, top=y_max)
     # Labels and legend
     ax.set_xlabel(f"{x_col}")
     ax.set_ylabel(f"{y_col}")
@@ -271,23 +273,37 @@ if __name__ == "__main__":
         f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")
     ]
     wt_names = sorted(wt_names)
-    # wt_names = [None]
+
+    filtered_wt_names = []
+    for wt_name in wt_names:
+        if any(bad_wt_name in wt_name for bad_wt_name in BAD_ABLETON_WTS):
+            continue
+        if not wt_name.startswith("basics__"):
+            continue
+        filtered_wt_names.append(wt_name)
+
+    # wt_names = filtered_wt_names
+    wt_names = [None]
+    filtered_wt_names = None
 
     tsv_names_and_paths = [
-        ("add", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__add_lfo.tsv")),
-        ("add_env", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__add_env.tsv")),
-        ("add_env_frame", os.path.join(OUT_DIR, f"out/mss__frame__ableton__add_env.tsv")),
+        # ("add", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__add_lfo.tsv")),
+        ("ae", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__add_env.tsv")),
+        ("ae_frame", os.path.join(OUT_DIR, f"out/mss__frame__ableton__add_env.tsv")),
+        # ("ae_d50", os.path.join(OUT_DIR, f"out/mss__s12d3_delta_50__ableton__add_env.tsv")),
+        ("ae_d50_fe", os.path.join(OUT_DIR, f"out/mss__s12d3_delta_50_fe__ableton__add_env.tsv")),
+        # ("ae_d50_mss", os.path.join(OUT_DIR, f"out/mss__s12d3_delta_50_mss__ableton__add_env.tsv")),
     ]
     # stage = "train"
-    stage = "val"
-    # stage = "test"
+    # stage = "val"
+    stage = "test"
     x_col = "step"
     # x_col = "global_n"
-    y_col = "l1__add_lfo"
+    # y_col = "l1__add_lfo"
     # y_col = "esr__add_lfo"
     # y_col = "l1__env"
     # y_col = "esr__env"
-    # y_col = "audio__mss"
+    y_col = "audio__mss"
     # y_col = "audio__mel_stft"
     # y_col = "audio__mfcc"
     y_con_val = 0.1
@@ -296,8 +312,14 @@ if __name__ == "__main__":
 
     df_rows = []
     df_cols = []
-    for wt_name in wt_names:
+    for wt_name in tqdm(wt_names):
+        # Keep track of number of rows before plotting
         n_df_rows = len(df_rows)
+        # Define filter values
+        if wt_name is None:
+            filter_vals = filtered_wt_names
+        else:
+            filter_vals = [wt_name]
         # Plot
         fig, ax = plt.subplots(figsize=(10, 6))
         ax.set_title(f"wt_name: {wt_name}, stage: {stage}, trial_col: {trial_col}")
@@ -310,35 +332,30 @@ if __name__ == "__main__":
                 y_converge_val=y_con_val,
                 trial_col=trial_col,
                 filter_col="wt_name",
-                filter_val=wt_name,
+                filter_vals=filter_vals,
                 allow_var_n=False,
+                # allow_var_n=True,
             )
             if not data:
                 continue
-            plot_xy_vals(ax, data, title=name, plot_95ci=True, plot_range=False, y_min=None, y_max=None)
+            plot_xy_vals(ax, data, title=name, plot_95ci=True, plot_range=False)
             df_cols = ["name"] + data["tsv_col_names"]
             df_row = [name] + data["tsv_vals"]
             assert len(df_cols) == len(df_row)
             df_rows.append(df_row)
+
+        # Check that something was plotted
         if len(df_rows) == n_df_rows:
             continue
+        # Check that all TSVs were plotted
+        if len(df_rows) != n_df_rows + len(tsv_names_and_paths):
+            continue
 
+        # Only show plot if not test stage
         if stage != "test":
+            ax.set_ylim(bottom=None, top=None)
             plt.show()
             plt.pause(0.20)
 
     df = pd.DataFrame(df_rows, columns=df_cols)
     print(df.to_string(index=False))
-
-
-
-# Bad wavetables
-# basics__beating_1
-# basics__beating_2
-# basics__beating_3
-# basics__beating_4
-# basics__beating_5
-# basics__pulse_pw
-# basics__saw_dual_1
-# basics__saw_dual_2
-# basics__saw_pw_detune

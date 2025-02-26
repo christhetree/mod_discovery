@@ -16,6 +16,7 @@ import util
 from audio_config import AudioConfig
 from feature_extraction import LogMelSpecFeatureExtractor
 from losses import MFCCL1
+from losses_freq import DeltaMultiResolutionSTFTLoss
 from paths import OUT_DIR
 from synths import SynthBase
 
@@ -65,6 +66,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             assert model is not None
         log.info(f"Run name: {self.run_name}")
         assert ac.sr == spectral_visualizer.sr
+        if hasattr(loss_func, "sr"):
+            assert loss_func.sr == ac.sr
 
         self.ac = ac
         self.model = model

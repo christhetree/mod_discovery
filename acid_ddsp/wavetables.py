@@ -10,6 +10,24 @@ logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
+BAD_ABLETON_WTS = [
+    "basics__5th_brutal",
+    "basics__beating_1",
+    "basics__beating_2",
+    "basics__beating_3",
+    "basics__beating_4",
+    "basics__beating_5",
+    "basics__pulse_pw",
+    "basics__saw_dual_1",
+    "basics__saw_dual_2",
+    "basics__saw_dual_3",
+    "basics__saw_harmonics",
+    "basics__saw_pw_detune",
+    "basics__sync_additive",
+    "basics__sync_digital",
+    "basics__white_noise",
+]
+
 
 def create_wavetable(n_wt_samples: int, save_path: str):
     wt_0 = tr.sin(tr.linspace(0.0, 2 * tr.pi, n_wt_samples))
@@ -18,7 +36,7 @@ def create_wavetable(n_wt_samples: int, save_path: str):
     # wt = tr.stack([wt_0], dim=0)
     # wt = tr.stack([wt_0, wt_1], dim=0)
     wt = tr.stack([wt_0, wt_2], dim=0)
-    fig = plot_wavetable(wt)
+    # fig = plot_wavetable(wt)
     tr.save(wt, save_path)
 
 
