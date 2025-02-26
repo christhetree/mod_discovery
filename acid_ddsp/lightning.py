@@ -306,7 +306,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     global_param_metrics[f"{p_name}_l1"] = l1
 
             # Postprocess log_spec_x
-            log_spec_x = model_out.get("log_spec_x").squeeze(1)
+            log_spec_x = model_out.get("log_spec_x")[:, 0, :, :]
 
             # Postprocess q_hat TODO(cm): generalize
             # if "q" in self.global_param_names_hat:

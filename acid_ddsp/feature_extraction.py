@@ -25,7 +25,9 @@ class LogMelSpecFeatureExtractor(nn.Module):
         n_mels: int = 128,
         normalized: bool = False,
         center: bool = True,
-        delta_win_ms: Optional[int] = None,
+        use_delta: bool = False,
+        use_delta_delta: bool = False,
+        delta_win_ms: int = 50,
         freq_mask_amount: float = 0.0,
         eps: float = 1e-7,
     ) -> None:
@@ -36,18 +38,20 @@ class LogMelSpecFeatureExtractor(nn.Module):
         self.n_mels = n_mels
         self.normalized = normalized
         self.center = center
+        self.use_delta = use_delta
+        self.use_delta_delta = use_delta_delta
         self.delta_win_ms = delta_win_ms
         self.freq_mask_amount = freq_mask_amount
         self.eps = eps
 
-        self.delta_win_len = None
-        if self.delta_win_ms is not None:
-            frame_rate = sr / hop_len
-            self.delta_win_len = DeltaMultiResolutionSTFTLoss.calc_delta_win_len(
-                delta_win_ms, frame_rate
-            )
+        frame_rate = sr / hop_len
+        self.delta_win_len = DeltaMultiResolutionSTFTLoss.calc_delta_win_len(
+            delta_win_ms, frame_rate
+        )
+        if use_delta or use_delta_delta:
             log.info(
-                f"delta_win_len: {self.delta_win_len}, delta_win_ms: {delta_win_ms}, "
+                f"use_delta: {use_delta}, use_delta_delta: {use_delta_delta}, "
+                f"delta_win_ms: {delta_win_ms}, delta_win_len: {self.delta_win_len}, "
                 f"frame_rate: {frame_rate:.2f}, hop_len: {hop_len}"
             )
 
@@ -84,7 +88,16 @@ class LogMelSpecFeatureExtractor(nn.Module):
         # time_averaged = x.mean(dim=-1, keepdim=True)
         # x = x - time_averaged
 
-        if self.delta_win_len is not None:
-            x = torchaudio.functional.compute_deltas(x, win_length=self.delta_win_len)
+        if self.use_delta or self.use_delta_delta:
+            delta = torchaudio.functional.compute_deltas(
+                x, win_length=self.delta_win_len
+            )
+            if self.use_delta:
+                x = tr.cat([x, delta], dim=1)
+            if self.use_delta_delta:
+                delta_delta = torchaudio.functional.compute_deltas(
+                    delta, win_length=self.delta_win_len
+                )
+                x = tr.cat([x, delta_delta], dim=1)
 
         return x

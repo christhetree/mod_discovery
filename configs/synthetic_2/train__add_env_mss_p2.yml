@@ -1,6 +1,6 @@
 custom:
   project_name: acid_ddsp_2
-  model_name: mss__s12d3
+  model_name: mss__s12d3_mss_p2
   dataset_name: ableton__add_env
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
@@ -46,7 +46,6 @@ model:
       - add_lfo
       - env
 
-#    use_model: false
     use_model: true
     model: spectral_2dcnn__add_env.yml
     temp_param_names_hat:
@@ -54,13 +53,11 @@ model:
       - env
     synth_hat: synth.yml
 
-    loss_func: auraloss.freq.MultiResolutionSTFTLoss
+    loss_func: mss_p2.yml
     use_p_loss: false
 #    use_p_loss: true
 #    loss_func: torch.nn.MSELoss
 
-    run_name: mss__s12d3__ableton__add_env
+    run_name: mss__s12d3_mss_p2__ableton__add_env
 
-#optimizer: ../opt/adam_w__lr_1e-2.yml
 optimizer: ../opt/adam_w__lr_1e-3.yml
-#optimizer: ../opt/sf_adam_w__lr_5e-3.yml

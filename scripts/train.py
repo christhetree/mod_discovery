@@ -29,11 +29,7 @@ warnings.simplefilter("ignore", UserWarning)
 
 if __name__ == "__main__":
     # config_name = "synthetic_2/train.yml"
-    # config_name = "synthetic_2/train__add_env.yml"
-    config_name = "synthetic_2/train__add_env_delta_10_fe.yml"
-    # config_name = "synthetic_2/train__add_env_delta_50_fe.yml"
-    # config_name = "synthetic_2/train__add_env_delta_250_fe.yml"
-    # config_name = "synthetic_2/train__frame__add_env.yml"
+    config_name = "synthetic_2/train__ae.yml"
     seeds = [42]
     # seeds = [42, 42, 3, 42]
     # seeds = list(range(20))
@@ -49,10 +45,10 @@ if __name__ == "__main__":
     ]
     filtered_wt_names = []
     for wt_name in wt_names:
-        if any(bad_wt_name in wt_name for bad_wt_name in BAD_ABLETON_WTS):
-            continue
-        if not wt_name.startswith("basics__"):
-            continue
+        # if any(bad_wt_name in wt_name for bad_wt_name in BAD_ABLETON_WTS):
+        #     continue
+        # if not wt_name.startswith("basics__"):
+        #     continue
         filtered_wt_names.append(wt_name)
     wt_paths = [os.path.join(wt_dir, f"{wt_name}.pt") for wt_name in filtered_wt_names]
     wt_paths = sorted(wt_paths)

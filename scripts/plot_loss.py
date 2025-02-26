@@ -282,21 +282,23 @@ if __name__ == "__main__":
             continue
         filtered_wt_names.append(wt_name)
 
-    # wt_names = filtered_wt_names
-    wt_names = [None]
-    filtered_wt_names = None
+    wt_names = filtered_wt_names
+    # wt_names = [None]
+    # filtered_wt_names = None
 
     tsv_names_and_paths = [
         # ("add", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__add_lfo.tsv")),
         ("ae", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__add_env.tsv")),
-        ("ae_frame", os.path.join(OUT_DIR, f"out/mss__frame__ableton__add_env.tsv")),
-        # ("ae_d50", os.path.join(OUT_DIR, f"out/mss__s12d3_delta_50__ableton__add_env.tsv")),
-        ("ae_d50_fe", os.path.join(OUT_DIR, f"out/mss__s12d3_delta_50_fe__ableton__add_env.tsv")),
-        # ("ae_d50_mss", os.path.join(OUT_DIR, f"out/mss__s12d3_delta_50_mss__ableton__add_env.tsv")),
+        ("ae_p2", os.path.join(OUT_DIR, f"out/mss__s12d3_mss_p2__ableton__add_env.tsv")),
+        ("ae_pr", os.path.join(OUT_DIR, f"out/mss__s12d3_mss_prime__ableton__add_env.tsv")),
+        # ("ae_frame", os.path.join(OUT_DIR, f"out/mss__frame__ableton__add_env.tsv")),
+        # ("ae_d10_fe", os.path.join(OUT_DIR, f"out/mss__s12d3_delta_10_fe__ableton__add_env.tsv")),
+        # ("ae_d50_fe", os.path.join(OUT_DIR, f"out/mss__s12d3_delta_50_fe__ableton__add_env.tsv")),
+        # ("ae_d250_fe", os.path.join(OUT_DIR, f"out/mss__s12d3_delta_250_fe__ableton__add_env.tsv")),
     ]
     # stage = "train"
-    # stage = "val"
-    stage = "test"
+    stage = "val"
+    # stage = "test"
     x_col = "step"
     # x_col = "global_n"
     # y_col = "l1__add_lfo"

@@ -7,6 +7,8 @@ import torch.nn.functional as F
 from torch import Tensor as T, nn
 
 import util
+from audio_config import AudioConfig
+from filters import TimeVaryingLPBiquad
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -742,6 +744,54 @@ class DDSPHarmonicOsc(nn.Module):
         )
         aa = (f0_hz_harmonics < self.sr / 2).float()
         return harmonic_amplitudes * aa
+
+
+class LPBiquadFilter(SynthModule):
+    forward_param_names = [
+        "f0_hz",
+        "wt_pos_0to1",
+        "n_samples",
+        "phase",
+        "wt",
+    ]
+    lfo_name = "w_mod_sig"
+
+    def __init__(
+        self,
+        sr: int,
+        min_w_hz: float,
+        max_w_hz: float,
+        min_q: float,
+        max_q: float,
+        eps: float = 1e-3,
+        modulate_log_w: bool = True,
+        modulate_log_q: bool = True,
+    ):
+        super().__init__()
+        self.sr = sr
+        self.min_w_hz = min_w_hz
+        self.max_w_hz = max_w_hz
+        self.min_q = min_q
+        self.max_q = max_q
+        self.eps = eps
+        self.modulate_log_w = modulate_log_w
+        self.modulate_log_q = modulate_log_q
+
+        self.min_w = 2 * tr.pi * min_w_hz / sr
+        self.max_w = 2 * tr.pi * max_w_hz / sr
+        self.filter = TimeVaryingLPBiquad(
+            self.min_w, self.max_w, min_q, max_q, eps, modulate_log_w, modulate_log_q
+        )
+
+    def forward(
+        self, x: T, w_mod_sig: Optional[T] = None, q_mod_sig: Optional[T] = None
+    ) -> T:
+        if w_mod_sig is not None:
+            assert x.shape == w_mod_sig.shape
+        if q_mod_sig is not None:
+            assert x.shape == q_mod_sig.shape
+        y_ab, a_coeff, b_coeff, y_a = self.filter(x, w_mod_sig, q_mod_sig)
+        return y_ab
 
 
 if __name__ == "__main__":
