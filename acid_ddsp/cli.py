@@ -9,7 +9,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from pytorch_lightning.cli import LightningCLI, LightningArgumentParser
 from pytorch_lightning.loggers import WandbLogger
 
-from callbacks import LogModSigAndSpecCallback
+from callbacks import LogModSigAndSpecCallback, LogAudioCallback
 from paths import CONFIGS_DIR
 
 logging.basicConfig()
@@ -190,7 +190,7 @@ class CustomLightningCLI(LightningCLI):
                     save_top_k=1,
                     verbose=False,
                 ),
-                LogModSigAndSpecCallback(),
+                # LogModSigAndSpecCallback(),
                 # LogAudioCallback(),
                 # LogWavetablesCallback(),
             ],

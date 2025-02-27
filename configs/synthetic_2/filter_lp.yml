@@ -1,0 +1,10 @@
+class_path: acid_ddsp.synth_modules.LPBiquadFilter
+init_args:
+  sr: 16000
+  min_w_hz: 100
+  max_w_hz: 8000
+  min_q: 1.0
+  max_q: 1.0
+  eps: 1e-3
+  modulate_log_w: true
+  modulate_log_q: true

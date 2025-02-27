@@ -748,11 +748,8 @@ class DDSPHarmonicOsc(nn.Module):
 
 class LPBiquadFilter(SynthModule):
     forward_param_names = [
-        "f0_hz",
-        "wt_pos_0to1",
-        "n_samples",
-        "phase",
-        "wt",
+        "w_mod_sig",
+        "q_mod_sig",
     ]
     lfo_name = "w_mod_sig"
 

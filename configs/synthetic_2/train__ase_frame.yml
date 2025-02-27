@@ -1,7 +1,7 @@
 custom:
   project_name: acid_ddsp_2
-  model_name: mss__s12d3
-  dataset_name: ableton__ae
+  model_name: mss__frame
+  dataset_name: ableton__ase
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
   use_wandb_gpu: false
@@ -9,7 +9,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [6]
+  devices: [4]
   max_epochs: 50
   num_sanity_val_steps: 1
   accumulate_grad_batches: 1
@@ -32,6 +32,7 @@ data:
           softmax_tau: 0.25
     temp_param_names:
       - add_lfo
+      - sub_lfo
       - env
     num_workers: 4
 
@@ -41,23 +42,25 @@ model:
     ac: audio_config.yml
     spectral_visualizer: log_mel_spec.yml
 
-    synth: synth.yml
+    synth: synth_ase.yml
     temp_param_names:
       - add_lfo
+      - sub_lfo
       - env
 
     use_model: true
-    model: spectral_2dcnn_dd50__ae.yml
+    model: spectral_2dcnn_dd50__ase_frame.yml
     temp_param_names_hat:
       - add_lfo
+      - sub_lfo
       - env
-    synth_hat: synth.yml
+    synth_hat: synth_ase.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
     use_p_loss: false
 #    use_p_loss: true
 #    loss_func: torch.nn.MSELoss
 
-    run_name: mss__s12d3__ableton__ae
+    run_name: mss__frame__ableton__ase
 
 optimizer: ../opt/adam_w__lr_1e-3.yml

@@ -138,7 +138,7 @@ class ComposableSynth(SynthBase):
         global_params: Dict[str, T],
         other_params: Dict[str, T],
     ) -> T:
-        for param_name in self.add_synth_module.forward_param_names:
+        for param_name in synth_module.forward_param_names:
             if hasattr(self.ac, param_name):
                 if param_name in synth_module_kwargs:
                     assert synth_module_kwargs[param_name] == getattr(
@@ -179,9 +179,9 @@ class ComposableSynth(SynthBase):
         add_audio = self._forward_synth_module(
             self.add_synth_module,
             synth_module_kwargs,
-            global_params,
-            temp_params,
-            other_params,
+            temp_params=temp_params,
+            global_params=global_params,
+            other_params=other_params,
         )
         return add_audio, {}
 
@@ -204,11 +204,11 @@ class ComposableSynth(SynthBase):
         sub_audio = self._forward_synth_module(
             self.sub_synth_module,
             synth_module_kwargs,
-            global_params,
-            temp_params,
-            other_params,
+            temp_params=temp_params,
+            global_params=global_params,
+            other_params=other_params,
         )
-        return sub_audio
+        return sub_audio, {}
 
 
 class AcidSynthBase(SynthBase):

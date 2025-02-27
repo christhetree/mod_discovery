@@ -276,10 +276,12 @@ if __name__ == "__main__":
 
     filtered_wt_names = []
     for wt_name in wt_names:
-        if any(bad_wt_name in wt_name for bad_wt_name in BAD_ABLETON_WTS):
-            continue
+        # if any(bad_wt_name in wt_name for bad_wt_name in BAD_ABLETON_WTS):
+        #     continue
         if not wt_name.startswith("basics__"):
             continue
+        # if not "fm_fold" in wt_name:
+        #     continue
         filtered_wt_names.append(wt_name)
 
     wt_names = filtered_wt_names
@@ -288,10 +290,13 @@ if __name__ == "__main__":
 
     tsv_names_and_paths = [
         # ("add", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__add_lfo.tsv")),
-        ("ae", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__add_env.tsv")),
-        ("ae_p2", os.path.join(OUT_DIR, f"out/mss__s12d3_mss_p2__ableton__add_env.tsv")),
-        ("ae_pr", os.path.join(OUT_DIR, f"out/mss__s12d3_mss_prime__ableton__add_env.tsv")),
+        # ("ae", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__add_env.tsv")),
         # ("ae_frame", os.path.join(OUT_DIR, f"out/mss__frame__ableton__add_env.tsv")),
+        # ("ae_dd50", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ae.tsv")),
+        ("ase", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase.tsv")),
+        ("ase_fr", os.path.join(OUT_DIR, f"out/mss__frame__ableton__ase.tsv")),
+        # ("ae_p2", os.path.join(OUT_DIR, f"out/mss__s12d3_mss_p2__ableton__add_env.tsv")),
+        # ("ae_pr", os.path.join(OUT_DIR, f"out/mss__s12d3_mss_prime__ableton__add_env.tsv")),
         # ("ae_d10_fe", os.path.join(OUT_DIR, f"out/mss__s12d3_delta_10_fe__ableton__add_env.tsv")),
         # ("ae_d50_fe", os.path.join(OUT_DIR, f"out/mss__s12d3_delta_50_fe__ableton__add_env.tsv")),
         # ("ae_d250_fe", os.path.join(OUT_DIR, f"out/mss__s12d3_delta_250_fe__ableton__add_env.tsv")),
@@ -302,10 +307,11 @@ if __name__ == "__main__":
     x_col = "step"
     # x_col = "global_n"
     # y_col = "l1__add_lfo"
-    # y_col = "esr__add_lfo"
     # y_col = "l1__env"
+    # y_col = "esr__add_lfo"
+    y_col = "esr__sub_lfo"
     # y_col = "esr__env"
-    y_col = "audio__mss"
+    # y_col = "audio__mss"
     # y_col = "audio__mel_stft"
     # y_col = "audio__mfcc"
     y_con_val = 0.1
@@ -335,8 +341,8 @@ if __name__ == "__main__":
                 trial_col=trial_col,
                 filter_col="wt_name",
                 filter_vals=filter_vals,
-                allow_var_n=False,
-                # allow_var_n=True,
+                # allow_var_n=False,
+                allow_var_n=True,
             )
             if not data:
                 continue

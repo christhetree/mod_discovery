@@ -29,7 +29,9 @@ warnings.simplefilter("ignore", UserWarning)
 
 if __name__ == "__main__":
     # config_name = "synthetic_2/train.yml"
-    config_name = "synthetic_2/train__ae.yml"
+    # config_name = "synthetic_2/train__ae.yml"
+    # config_name = "synthetic_2/train__ase.yml"
+    config_name = "synthetic_2/train__ase_frame.yml"
     seeds = [42]
     # seeds = [42, 42, 3, 42]
     # seeds = list(range(20))
