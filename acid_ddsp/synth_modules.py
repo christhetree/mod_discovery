@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 import torch as tr
 import torch.nn.functional as F
@@ -8,7 +8,7 @@ from torch import Tensor as T, nn
 
 import util
 from audio_config import AudioConfig
-from filters import TimeVaryingLPBiquad
+from filters import TimeVaryingBiquad
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -746,8 +746,9 @@ class DDSPHarmonicOsc(nn.Module):
         return harmonic_amplitudes * aa
 
 
-class LPBiquadFilter(SynthModule):
+class BiquadFilter(SynthModule):
     forward_param_names = [
+        "filter_type",
         "w_mod_sig",
         "q_mod_sig",
     ]
@@ -763,6 +764,7 @@ class LPBiquadFilter(SynthModule):
         eps: float = 1e-3,
         modulate_log_w: bool = True,
         modulate_log_q: bool = True,
+        interp_coeff: bool = False,
     ):
         super().__init__()
         self.sr = sr
@@ -773,21 +775,30 @@ class LPBiquadFilter(SynthModule):
         self.eps = eps
         self.modulate_log_w = modulate_log_w
         self.modulate_log_q = modulate_log_q
+        self.interp_coeff = interp_coeff
 
         self.min_w = 2 * tr.pi * min_w_hz / sr
         self.max_w = 2 * tr.pi * max_w_hz / sr
-        self.filter = TimeVaryingLPBiquad(
+        self.filter = TimeVaryingBiquad(
             self.min_w, self.max_w, min_q, max_q, eps, modulate_log_w, modulate_log_q
         )
 
     def forward(
-        self, x: T, w_mod_sig: Optional[T] = None, q_mod_sig: Optional[T] = None
+        self,
+        x: T,
+        filter_type: Literal["lp", "hp", "bp", "no"],
+        w_mod_sig: Optional[T] = None,
+        q_mod_sig: Optional[T] = None,
     ) -> T:
         if w_mod_sig is not None:
             assert x.shape == w_mod_sig.shape
         if q_mod_sig is not None:
-            assert x.shape == q_mod_sig.shape
-        y_ab, a_coeff, b_coeff, y_a = self.filter(x, w_mod_sig, q_mod_sig)
+            if q_mod_sig.shape != x.shape:
+                assert q_mod_sig.shape == (x.size(0),)
+                q_mod_sig = q_mod_sig.unsqueeze(1).expand(-1, x.size(1))
+        y_ab, a_coeff, b_coeff, y_a = self.filter(
+            x, filter_type, w_mod_sig, q_mod_sig, interp_coeff=self.interp_coeff
+        )
         return y_ab
 
 

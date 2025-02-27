@@ -18,7 +18,6 @@ from acid_ddsp.synth_modules import (
 )
 from audio_config import AudioConfig
 from filters import (
-    TimeVaryingLPBiquad,
     calc_logits_to_biquad_a_coeff_triangle,
     time_varying_fir,
     calc_logits_to_biquad_coeff_pole_zero,

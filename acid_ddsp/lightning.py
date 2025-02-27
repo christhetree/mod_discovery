@@ -183,6 +183,16 @@ class AcidDDSPLightingModule(pl.LightningModule):
         other_params = {}
         if "wt" in batch:
             other_params["wt"] = batch["wt"]
+        if "q_0to1" in batch:
+            other_params["q_mod_sig"] = batch["q_0to1"]
+        filter_types = [
+            "lp", "hp", "bp", "no"
+        ]
+        if "filter_type_0to1" in batch:
+            filter_type_0to1 = batch["filter_type_0to1"][0]
+            filter_type_idx = int(filter_type_0to1 * len(filter_types))
+            filter_type = filter_types[filter_type_idx]
+            other_params["filter_type"] = filter_type
 
         # Postprocess q_hat TODO(cm): generalize
         # if "q" in self.global_param_names:

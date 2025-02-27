@@ -7,5 +7,3 @@ init_args:
   min_f0_hz: 32.70   # midi_f0 24
   max_f0_hz: 523.25  # midi_f0 72
 #  max_f0_hz: 261.63  # midi_f0 60
-
-  stability_eps: 0.001

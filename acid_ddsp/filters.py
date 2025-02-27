@@ -1,7 +1,7 @@
 import logging
 import math
 import os
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Literal
 
 import torch as tr
 import torch.nn.functional as F
@@ -106,34 +106,83 @@ def calc_logits_to_biquad_coeff_pole_zero(
     return a, b
 
 
-def calc_lp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> Tuple[T, T]:
+def _calc_a_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T, T, T, T, T):
+    stability_factor = 1.0 - eps
+    sin_w = tr.sin(w)
+    cos_w = tr.cos(w)
+    alpha_q = sin_w / (2 * q)
+    a0 = 1.0 + alpha_q
+    a1 = -2.0 * cos_w * stability_factor
+    a2 = (1.0 - alpha_q) * stability_factor
+    return a0, a1, a2, sin_w, cos_w, alpha_q
+
+
+def _calc_lp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T, T, T, T, T):
+    a0, a1, a2, sin_w, cos_w, alpha_q = _calc_a_coeff(w, q, eps)
+    b0 = (1.0 - cos_w) / 2.0
+    b1 = 1.0 - cos_w
+    b2 = (1.0 - cos_w) / 2.0
+    return a0, a1, a2, b0, b1, b2
+
+
+def _calc_hp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T, T, T, T, T):
+    a0, a1, a2, sin_w, cos_w, alpha_q = _calc_a_coeff(w, q, eps)
+    b0 = (1.0 + cos_w) / 2.0
+    b1 = -1.0 - cos_w
+    b2 = (1.0 + cos_w) / 2.0
+    return a0, a1, a2, b0, b1, b2
+
+
+def _calc_bp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T, T, T, T, T):
+    a0, a1, a2, sin_w, cos_w, alpha_q = _calc_a_coeff(w, q, eps)
+    b0 = alpha_q
+    b1 = tr.zeros_like(w)
+    b2 = -alpha_q
+    # b0 = sin_w / 2.0
+    # b1 = tr.zeros_like(w)
+    # b2 = -sin_w / 2.0
+    return a0, a1, a2, b0, b1, b2
+
+
+def _calc_no_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T, T, T, T, T):
+    a0, a1, a2, sin_w, cos_w, alpha_q = _calc_a_coeff(w, q, eps)
+    b0 = tr.ones_like(w)
+    b1 = -2.0 * cos_w
+    b2 = tr.ones_like(w)
+    return a0, a1, a2, b0, b1, b2
+
+
+def calc_biquad_coeff(
+    filter_type: Literal["lp", "hp", "bp", "no"], w: T, q: T, eps: float = 1e-3
+) -> Tuple[T, T]:
     assert w.ndim == 2
     assert q.ndim == 2
     assert 0.0 <= w.min()
     assert tr.pi >= w.max()
     assert 0.0 < q.min()
-
-    stability_factor = 1.0 - eps
-    alpha_q = tr.sin(w) / (2 * q)
-    a0 = 1.0 + alpha_q
-    a1 = -2.0 * tr.cos(w) * stability_factor
+    if filter_type == "lp":
+        coeff_fn = _calc_lp_biquad_coeff
+    elif filter_type == "hp":
+        coeff_fn = _calc_hp_biquad_coeff
+    elif filter_type == "bp":
+        coeff_fn = _calc_bp_biquad_coeff
+    elif filter_type == "no":
+        coeff_fn = _calc_no_biquad_coeff
+    else:
+        raise ValueError(f"Unknown filter type: {filter_type}")
+    a0, a1, a2, b0, b1, b2 = coeff_fn(w, q, eps)
+    assert a0.abs().min() > 0.0
     a1 = a1 / a0
-    a2 = (1.0 - alpha_q) * stability_factor
     a2 = a2 / a0
     assert (a1.abs() < 2.0).all()
     assert (a2 < 1.0).all()
     assert (a1 < a2 + 1.0).all()
     assert (a1 > -(a2 + 1.0)).all()
     a = tr.stack([a1, a2], dim=2)
-
-    b0 = (1.0 - tr.cos(w)) / 2.0
     b0 = b0 / a0
-    b1 = 1.0 - tr.cos(w)
     b1 = b1 / a0
-    b2 = (1.0 - tr.cos(w)) / 2.0
     b2 = b2 / a0
     b = tr.stack([b0, b1, b2], dim=2)
-
     return a, b
 
 
@@ -215,7 +264,7 @@ class TimeVaryingIIRFSM(nn.Module):
         return y
 
 
-class TimeVaryingLPBiquad(nn.Module):
+class TimeVaryingBiquad(nn.Module):
     def __init__(
         self,
         min_w: float = 0.0,
@@ -283,6 +332,7 @@ class TimeVaryingLPBiquad(nn.Module):
     def forward(
         self,
         x: T,
+        filter_type: Literal["lp", "hp", "bp", "no"],
         w_mod_sig: Optional[T] = None,
         q_mod_sig: Optional[T] = None,
         interp_coeff: bool = False,
@@ -294,7 +344,7 @@ class TimeVaryingLPBiquad(nn.Module):
             w = util.linear_interpolate_dim(w, n_samples, dim=1, align_corners=True)
             q = util.linear_interpolate_dim(q, n_samples, dim=1, align_corners=True)
             assert x.shape == w.shape == q.shape
-        a_coeff, b_coeff = calc_lp_biquad_coeff(w, q, eps=self.eps)
+        a_coeff, b_coeff = calc_biquad_coeff(filter_type, w, q, eps=self.eps)
         if interp_coeff:
             a_coeff = util.linear_interpolate_dim(
                 a_coeff, n_samples, dim=1, align_corners=True
@@ -316,7 +366,7 @@ class TimeVaryingLPBiquad(nn.Module):
         return y_ab, a_coeff, b_coeff, y_a
 
 
-class TimeVaryingLPBiquadFSM(TimeVaryingLPBiquad):
+class TimeVaryingLPBiquadFSM(TimeVaryingBiquad):
     def __init__(
         self,
         win_len: Optional[int] = None,
@@ -377,3 +427,22 @@ class TimeVaryingLPBiquadFSM(TimeVaryingLPBiquad):
         a_coeff = tr.stack([a0, a1, a2], dim=2)
         y = self.filter(x, a_coeff, b_coeff)
         return y, a_coeff, b_coeff, None
+
+
+if __name__ == "__main__":
+    w = tr.full((1, 1), 0.125 * tr.pi)
+    # q = tr.full_like(w, 0.7071)
+    q = tr.full_like(w, 4.0)
+    # a, b = calc_biquad_coeff("lp", w, q)
+    # a, b = calc_biquad_coeff("hp", w, q)
+    a, b = calc_biquad_coeff("bp", w, q)
+    # a, b = calc_biquad_coeff("no", w, q)
+    a = a.squeeze()
+    b = b.squeeze()
+    print(b[0].item())
+    print(b[1].item())
+    print(b[2].item())
+    print(f"")
+    print(1.0)
+    print(a[0].item())
+    print(a[1].item())
