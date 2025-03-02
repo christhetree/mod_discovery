@@ -281,16 +281,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
                         self.log(f"{stage}/{p_name}_esr", esr, prog_bar=False)
                         temp_param_metrics[f"{p_name}_esr"] = esr
                 temp_params_hat[p_name] = p_hat
-                if f"{p_name}_before_adapter" in model_out:
-                    p_hat = model_out[f"{p_name}_before_adapter"]
-                    if p_name in temp_params:
-                        p_hat = util.linear_interpolate_dim(
-                            p_hat,
-                            temp_params[p_name].size(1),
-                            dim=1,
-                            align_corners=True,
-                        )
-                    temp_params_hat[f"{p_name}_before_adapter"] = p_hat
                 if f"{p_name}_adapted" in model_out:
                     p_hat = model_out[f"{p_name}_adapted"]
                     if p_name in temp_params:
@@ -496,8 +486,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             self.synth_opt = self.synth_opt(self.synth_hat.parameters())
             log.info(
                 f"Using multiple optimizers: "
-                f"\n - model_opt initial LR: {self.model_opt.defaults['lr']:.4f}"
-                f"\n - synth_opt initial LR: {self.synth_opt.defaults['lr']:.4f}"
+                f"\n - model_opt initial LR: {self.model_opt.defaults['lr']:.6f}"
+                f"\n - synth_opt initial LR: {self.synth_opt.defaults['lr']:.6f}"
             )
             return self.model_opt, self.synth_opt
 

@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Tuple
 
 import torch as tr
 import torch.nn.functional as F
@@ -8,7 +8,9 @@ from torch import Tensor as T, nn
 
 import util
 from audio_config import AudioConfig
-from filters import TimeVaryingBiquad
+from filters import TimeVaryingBiquad, calc_logits_to_biquad_a_coeff_triangle, \
+    time_varying_fir
+from torchlpc import sample_wise_lpc
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -746,11 +748,11 @@ class DDSPHarmonicOsc(nn.Module):
         return harmonic_amplitudes * aa
 
 
-class BiquadFilter(SynthModule):
+class BiquadWQFilter(SynthModule):
     forward_param_names = [
-        "filter_type",
         "w_mod_sig",
         "q_mod_sig",
+        "filter_type",
     ]
     lfo_name = "w_mod_sig"
 
@@ -765,6 +767,7 @@ class BiquadFilter(SynthModule):
         modulate_log_w: bool = True,
         modulate_log_q: bool = True,
         interp_coeff: bool = False,
+        filter_type: Optional[Literal["lp", "hp", "bp", "no"]] = None,
     ):
         super().__init__()
         self.sr = sr
@@ -776,6 +779,7 @@ class BiquadFilter(SynthModule):
         self.modulate_log_w = modulate_log_w
         self.modulate_log_q = modulate_log_q
         self.interp_coeff = interp_coeff
+        self.filter_type = filter_type
 
         self.min_w = 2 * tr.pi * min_w_hz / sr
         self.max_w = 2 * tr.pi * max_w_hz / sr
@@ -786,9 +790,9 @@ class BiquadFilter(SynthModule):
     def forward(
         self,
         x: T,
-        filter_type: Literal["lp", "hp", "bp", "no"],
         w_mod_sig: Optional[T] = None,
         q_mod_sig: Optional[T] = None,
+        filter_type: Optional[Literal["lp", "hp", "bp", "no"]] = None,
     ) -> T:
         if w_mod_sig is not None:
             assert x.shape == w_mod_sig.shape
@@ -796,9 +800,64 @@ class BiquadFilter(SynthModule):
             if q_mod_sig.shape != x.shape:
                 assert q_mod_sig.shape == (x.size(0),)
                 q_mod_sig = q_mod_sig.unsqueeze(1).expand(-1, x.size(1))
+        if filter_type is None:
+            assert self.filter_type is not None
+            filter_type = self.filter_type
+        else:
+            assert self.filter_type is None, f"Dynamic filter_type not supported "
         y_ab, a_coeff, b_coeff, y_a = self.filter(
             x, filter_type, w_mod_sig, q_mod_sig, interp_coeff=self.interp_coeff
         )
+        return y_ab
+
+
+class BiquadCoeffFilter(SynthModule):
+    forward_param_names = [
+        "coeff_logits",
+    ]
+    lfo_name = "coeff_logits"
+
+    def __init__(self, interp_coeff: bool = False, eps: float = 1e-3):
+        super().__init__()
+        self.interp_coeff = interp_coeff
+        self.eps = eps
+
+        self.lpc_func = sample_wise_lpc
+
+    def _calc_coeff(self, logits: T, n_frames: int) -> (T, T):
+        bs = logits.size(0)
+        if not self.interp_coeff:
+            logits = util.linear_interpolate_dim(
+                logits, n_frames, dim=1, align_corners=True
+            )
+            assert logits.shape == (bs, n_frames, 5)
+        a_logits = logits[..., :2]
+        a_coeff = calc_logits_to_biquad_a_coeff_triangle(
+            a_logits, self.eps
+        )
+        b_coeff = logits[..., 2:]
+        if self.interp_coeff:
+            a_coeff = util.linear_interpolate_dim(
+                a_coeff, n_frames, dim=1, align_corners=True
+            )
+            assert a_coeff.shape == (bs, n_frames, 2)
+            b_coeff = util.linear_interpolate_dim(
+                b_coeff, n_frames, dim=1, align_corners=True
+            )
+            assert b_coeff.shape == (bs, n_frames, 3)
+        return a_coeff, b_coeff
+
+    def forward(self, x: T, coeff_logits: T = None, zi: Optional[T] = None) -> T:
+        assert coeff_logits.ndim == 3
+        n_samples = x.size(1)
+        a_coeff, b_coeff = self._calc_coeff(coeff_logits, n_samples)
+        zi_a = zi
+        if zi_a is not None:
+            zi_a = tr.flip(zi_a, dims=[1])  # Match scipy's convention for torchlpc
+        y_a = self.lpc_func(x, a_coeff, zi=zi_a)
+        assert not tr.isinf(y_a).any()
+        assert not tr.isnan(y_a).any()
+        y_ab = time_varying_fir(y_a, b_coeff, zi=zi)
         return y_ab
 
 

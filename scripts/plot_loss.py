@@ -295,6 +295,7 @@ if __name__ == "__main__":
         # ("ae_dd50", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ae.tsv")),
         ("ase", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase.tsv")),
         ("ase_fr", os.path.join(OUT_DIR, f"out/mss__frame__ableton__ase.tsv")),
+        ("ase_bi", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase_biquad.tsv")),
         # ("ae_p2", os.path.join(OUT_DIR, f"out/mss__s12d3_mss_p2__ableton__add_env.tsv")),
         # ("ae_pr", os.path.join(OUT_DIR, f"out/mss__s12d3_mss_prime__ableton__add_env.tsv")),
         # ("ae_d10_fe", os.path.join(OUT_DIR, f"out/mss__s12d3_delta_10_fe__ableton__add_env.tsv")),
@@ -307,6 +308,7 @@ if __name__ == "__main__":
     x_col = "step"
     # x_col = "global_n"
     # y_col = "l1__add_lfo"
+    # y_col = "l1__sub_lfo"
     # y_col = "l1__env"
     # y_col = "esr__add_lfo"
     y_col = "esr__sub_lfo"

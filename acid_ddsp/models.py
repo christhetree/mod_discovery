@@ -385,12 +385,10 @@ class Spectral2DCNN(nn.Module):
 
             x = self.out_temp_acts[name](x)
 
-            out_dict[f"{name}_before_adapter"] = x.squeeze(-1)
             out_dict[name] = x.squeeze(-1)
             if name in self.adapters:
                 x = self.adapters[name](x)
                 out_dict[f"{name}_adapted"] = x.squeeze(-1)
-                out_dict[name] = x.squeeze(-1)
 
         # Calc global params
         for param_name, mlp in self.out_global.items():

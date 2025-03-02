@@ -31,7 +31,8 @@ if __name__ == "__main__":
     # config_name = "synthetic_2/train.yml"
     # config_name = "synthetic_2/train__ae.yml"
     # config_name = "synthetic_2/train__ase.yml"
-    config_name = "synthetic_2/train__ase_biquad.yml"
+    config_name = "synthetic_2/train__ase__sm_4_1024.yml"
+    # config_name = "synthetic_2/train__ase_biquad.yml"
     # config_name = "synthetic_2/train__ase_frame.yml"
     seeds = [42]
     # seeds = [42, 42, 3, 42]
@@ -74,12 +75,14 @@ if __name__ == "__main__":
             # TODO(cm): make this cleaner
             cli.model.wt_name = wt_name
             synth = cli.model.synth
+            assert not synth.add_synth_module.is_trainable
             sr = synth.ac.sr
             wt_module = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
             synth.register_module("add_synth_module", wt_module)
             synth_hat = cli.model.synth_hat
-            wt_module_hat = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
-            synth_hat.register_module("add_synth_module", wt_module_hat)
+            if not synth_hat.add_synth_module.is_trainable:
+                wt_module_hat = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
+                synth_hat.register_module("add_synth_module", wt_module_hat)
 
         cli.before_fit()
         cli.trainer.fit(model=cli.model, datamodule=cli.datamodule)
