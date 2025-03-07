@@ -294,8 +294,11 @@ if __name__ == "__main__":
         # ("ae_frame", os.path.join(OUT_DIR, f"out/mss__frame__ableton__add_env.tsv")),
         # ("ae_dd50", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ae.tsv")),
         ("ase", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase.tsv")),
-        ("ase_fr", os.path.join(OUT_DIR, f"out/mss__frame__ableton__ase.tsv")),
-        ("ase_bi", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase_biquad.tsv")),
+        ("ase_sm_4", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase__sm_4_1024.tsv")),
+        ("ase_sm_4_sf", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase__sm_4_1024_sf.tsv")),
+        ("ase_sm_8_sf", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase__sm_8_1024_sf.tsv")),
+        # ("ase_fr", os.path.join(OUT_DIR, f"out/mss__frame__ableton__ase.tsv")),
+        # ("ase_bi", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase_biquad.tsv")),
         # ("ae_p2", os.path.join(OUT_DIR, f"out/mss__s12d3_mss_p2__ableton__add_env.tsv")),
         # ("ae_pr", os.path.join(OUT_DIR, f"out/mss__s12d3_mss_prime__ableton__add_env.tsv")),
         # ("ae_d10_fe", os.path.join(OUT_DIR, f"out/mss__s12d3_delta_10_fe__ableton__add_env.tsv")),
@@ -310,8 +313,8 @@ if __name__ == "__main__":
     # y_col = "l1__add_lfo"
     # y_col = "l1__sub_lfo"
     # y_col = "l1__env"
-    # y_col = "esr__add_lfo"
-    y_col = "esr__sub_lfo"
+    y_col = "esr__add_lfo"
+    # y_col = "esr__sub_lfo"
     # y_col = "esr__env"
     # y_col = "audio__mss"
     # y_col = "audio__mel_stft"
@@ -343,8 +346,8 @@ if __name__ == "__main__":
                 trial_col=trial_col,
                 filter_col="wt_name",
                 filter_vals=filter_vals,
-                # allow_var_n=False,
-                allow_var_n=True,
+                allow_var_n=False,
+                # allow_var_n=True,
             )
             if not data:
                 continue
@@ -364,6 +367,7 @@ if __name__ == "__main__":
         # Only show plot if not test stage
         if stage != "test":
             ax.set_ylim(bottom=None, top=None)
+            # ax.set_ylim(bottom=0.0, top=None)
             plt.show()
             plt.pause(0.20)
 

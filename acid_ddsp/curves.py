@@ -244,10 +244,10 @@ class PiecewiseBezier(nn.Module):
                 assert si_logits.shape == (bs, n_ch, self.n_segments)
                 si_logits = tr.flatten(si_logits, start_dim=0, end_dim=1)
         x = self.make_bezier(
-            cp_logits, cp_are_logits=True, si=si_logits, si_are_logits=True
+            cp_logits, cp_are_logits=False, si=si_logits, si_are_logits=True
         )
-        assert x.min() >= 0.0, f"x.min(): {x.min()}"
-        assert x.max() <= 1.0, f"x.max(): {x.max()}"
+        # assert x.min() >= 0.0, f"x.min(): {x.min()}"
+        # assert x.max() <= 1.0, f"x.max(): {x.max()}"
         if n_dim == 4:
             x = x.view(bs, n_ch, x.size(1))
         return x

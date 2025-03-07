@@ -15,8 +15,12 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-def linear_interpolate_dim(
-    x: T, n: int, dim: int = -1, align_corners: bool = True
+def interpolate_dim(
+    x: T,
+    n: int,
+    dim: int = -1,
+    mode: str = "linear",
+    align_corners: Optional[bool] = True,
 ) -> T:
     n_dim = x.ndim
     assert 0 < n_dim <= 3
@@ -37,8 +41,7 @@ def linear_interpolate_dim(
         if dim == 1:
             x = x.swapaxes(1, 2)
             swapped_dims = True
-
-    x = F.interpolate(x, n, mode="linear", align_corners=align_corners)
+    x = F.interpolate(x, n, mode=mode, align_corners=align_corners)
     if n_dim == 1:
         x = x.view(-1)
     elif n_dim == 2:
@@ -75,8 +78,8 @@ def sample_log_uniform(
 def calc_h(a: T, b: T, n_frames: int = 50, n_fft: int = 1024) -> T:
     assert a.ndim == 3
     assert a.shape == b.shape
-    a = linear_interpolate_dim(a, n_frames, dim=1, align_corners=True)
-    b = linear_interpolate_dim(b, n_frames, dim=1, align_corners=True)
+    a = interpolate_dim(a, n_frames, dim=1)
+    b = interpolate_dim(b, n_frames, dim=1)
     A = tr.fft.rfft(a, n_fft)
     B = tr.fft.rfft(b, n_fft)
     H = B / A  # TODO(cm): Make more stable

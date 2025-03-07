@@ -8,8 +8,11 @@ from torch import Tensor as T, nn
 
 import util
 from audio_config import AudioConfig
-from filters import TimeVaryingBiquad, calc_logits_to_biquad_a_coeff_triangle, \
-    time_varying_fir
+from filters import (
+    TimeVaryingBiquad,
+    calc_logits_to_biquad_a_coeff_triangle,
+    time_varying_fir,
+)
 from torchlpc import sample_wise_lpc
 
 logging.basicConfig()
@@ -434,9 +437,7 @@ class WavetableOsc(SynthModule):
                 f"to {self.n_pos}"
             )
             new_wt = tr.swapaxes(new_wt, 0, 1)  # TODO(cm): tmp
-            new_wt = util.linear_interpolate_dim(
-                new_wt, n=self.n_pos, dim=1, align_corners=True
-            )
+            new_wt = util.interpolate_dim(new_wt, n=self.n_pos, dim=1)
             new_wt = tr.swapaxes(new_wt, 0, 1)  # TODO(cm): tmp
         assert new_wt.min() >= -1.0, f"new_wt.min() = {new_wt.min()}"
         assert new_wt.max() <= 1.0, f"new_wt.max() = {new_wt.max()}"
@@ -827,23 +828,15 @@ class BiquadCoeffFilter(SynthModule):
     def _calc_coeff(self, logits: T, n_frames: int) -> (T, T):
         bs = logits.size(0)
         if not self.interp_coeff:
-            logits = util.linear_interpolate_dim(
-                logits, n_frames, dim=1, align_corners=True
-            )
+            logits = util.interpolate_dim(logits, n_frames, dim=1)
             assert logits.shape == (bs, n_frames, 5)
         a_logits = logits[..., :2]
-        a_coeff = calc_logits_to_biquad_a_coeff_triangle(
-            a_logits, self.eps
-        )
+        a_coeff = calc_logits_to_biquad_a_coeff_triangle(a_logits, self.eps)
         b_coeff = logits[..., 2:]
         if self.interp_coeff:
-            a_coeff = util.linear_interpolate_dim(
-                a_coeff, n_frames, dim=1, align_corners=True
-            )
+            a_coeff = util.interpolate_dim(a_coeff, n_frames, dim=1)
             assert a_coeff.shape == (bs, n_frames, 2)
-            b_coeff = util.linear_interpolate_dim(
-                b_coeff, n_frames, dim=1, align_corners=True
-            )
+            b_coeff = util.interpolate_dim(b_coeff, n_frames, dim=1)
             assert b_coeff.shape == (bs, n_frames, 3)
         return a_coeff, b_coeff
 

@@ -1,4 +1,5 @@
 class_path: acid_ddsp.synth_modules.BiquadCoeffFilter
 init_args:
   interp_coeff: false
+#  interp_coeff: true
   eps: 1e-3

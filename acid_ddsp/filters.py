@@ -341,17 +341,36 @@ class TimeVaryingBiquad(nn.Module):
         w, q = self.calc_w_and_q(x, w_mod_sig, q_mod_sig)
         n_samples = x.size(1)
         if not interp_coeff:
-            w = util.linear_interpolate_dim(w, n_samples, dim=1, align_corners=True)
-            q = util.linear_interpolate_dim(q, n_samples, dim=1, align_corners=True)
+            w = util.interpolate_dim(w, n_samples, dim=1)
+            q = util.interpolate_dim(q, n_samples, dim=1)
             assert x.shape == w.shape == q.shape
         a_coeff, b_coeff = calc_biquad_coeff(filter_type, w, q, eps=self.eps)
+
+        # a1 = a_coeff[0, :, 0].detach().numpy()
+        # a1 = (a1 - a1.min()) / (a1.max() - a1.min())
+        # a2 = a_coeff[0, :, 1].detach().numpy()
+        # a2 = (a2 - a2.min()) / (a2.max() - a2.min())
+        # b0 = b_coeff[0, :, 0].detach().numpy()
+        # b0 = (b0 - b0.min()) / (b0.max() - b0.min())
+        # b1 = b_coeff[0, :, 1].detach().numpy()
+        # b1 = (b1 - b1.min()) / (b1.max() - b1.min())
+        # b2 = b_coeff[0, :, 2].detach().numpy()
+        # b2 = (b2 - b2.min()) / (b2.max() - b2.min())
+        # mog_sig = w_mod_sig[0].detach().numpy()
+        # mog_sig = (mog_sig - mog_sig.min()) / (mog_sig.max() - mog_sig.min())
+        # from matplotlib import pyplot as plt
+        # plt.plot(a1, label="a1")
+        # plt.plot(a2, label="a2")
+        # plt.plot(b0, label="b0")
+        # plt.plot(b1, label="b1")
+        # plt.plot(b2, label="b2")
+        # plt.plot(mog_sig, label="mog_sig", linestyle="--")
+        # plt.legend()
+        # plt.show()
+
         if interp_coeff:
-            a_coeff = util.linear_interpolate_dim(
-                a_coeff, n_samples, dim=1, align_corners=True
-            )
-            b_coeff = util.linear_interpolate_dim(
-                b_coeff, n_samples, dim=1, align_corners=True
-            )
+            a_coeff = util.interpolate_dim(a_coeff, n_samples, dim=1)
+            b_coeff = util.interpolate_dim(b_coeff, n_samples, dim=1)
         zi_a = zi
         if zi_a is not None:
             zi_a = tr.flip(zi_a, dims=[1])  # Match scipy's convention for torchlpc
@@ -411,16 +430,12 @@ class TimeVaryingLPBiquadFSM(TimeVaryingBiquad):
         n_samples = x.size(1)
         n_frames = self.filter.calc_n_frames(n_samples)
         if not interp_coeff:
-            w = util.linear_interpolate_dim(w, n_frames, dim=1, align_corners=True)
-            q = util.linear_interpolate_dim(q, n_frames, dim=1, align_corners=True)
+            w = util.interpolate_dim(w, n_frames, dim=1)
+            q = util.interpolate_dim(q, n_frames, dim=1)
         a_coeff, b_coeff = calc_lp_biquad_coeff(w, q, eps=self.eps)
         if interp_coeff:
-            a_coeff = util.linear_interpolate_dim(
-                a_coeff, n_frames, dim=1, align_corners=True
-            )
-            b_coeff = util.linear_interpolate_dim(
-                b_coeff, n_frames, dim=1, align_corners=True
-            )
+            a_coeff = util.interpolate_dim(a_coeff, n_frames, dim=1)
+            b_coeff = util.interpolate_dim(b_coeff, n_frames, dim=1)
         a1 = a_coeff[:, :, 0]
         a2 = a_coeff[:, :, 1]
         a0 = tr.ones_like(a1)

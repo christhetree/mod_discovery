@@ -255,7 +255,8 @@ class LogModSigAndSpecCallback(Callback):
             for temp_param, color in temp_params_all:
                 if temp_param is None:
                     continue
-                assert temp_param.ndim == 2
+                if temp_param.ndim != 2:
+                    continue
                 curr_n_frames = temp_param.size(1)
                 if n_frames is None:
                     n_frames = curr_n_frames
@@ -478,17 +479,17 @@ class LogWavetablesCallback(Callback):
         images = []
         with suppress(Exception):
             title = f"{trainer.global_step}_wt"
-            osc = pl_module.synth.osc
+            osc = pl_module.synth.add_synth_module
             images += self.create_wt_images(osc, title)
 
         with suppress(Exception):
             title = f"{trainer.global_step}_wt_hat"
-            osc_hat = pl_module.synth_hat.osc
+            osc_hat = pl_module.synth_hat.add_synth_module
             images += self.create_wt_images(osc_hat, title)
 
         with suppress(Exception):
             title = f"{trainer.global_step}_wt_eval"
-            osc_eval = pl_module.synth_eval.osc
+            osc_eval = pl_module.synth_eval.add_synth_module
             images += self.create_wt_images(osc_eval, title)
 
         if images and wandb.run:

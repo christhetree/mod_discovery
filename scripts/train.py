@@ -31,7 +31,10 @@ if __name__ == "__main__":
     # config_name = "synthetic_2/train.yml"
     # config_name = "synthetic_2/train__ae.yml"
     # config_name = "synthetic_2/train__ase.yml"
-    config_name = "synthetic_2/train__ase__sm_4_1024.yml"
+    # config_name = "synthetic_2/train__ase__sm_4_1024.yml"
+    # config_name = "synthetic_2/train__ase__sm_4_1024_sf.yml"
+    config_name = "synthetic_2/train__s__sm.yml"
+    # config_name = "synthetic_2/train__ase__sm_8_1024_sf.yml"
     # config_name = "synthetic_2/train__ase_biquad.yml"
     # config_name = "synthetic_2/train__ase_frame.yml"
     seeds = [42]
@@ -49,10 +52,12 @@ if __name__ == "__main__":
     ]
     filtered_wt_names = []
     for wt_name in wt_names:
-        # if any(bad_wt_name in wt_name for bad_wt_name in BAD_ABLETON_WTS):
-        #     continue
-        # if not wt_name.startswith("basics__"):
-        #     continue
+        if any(bad_wt_name in wt_name for bad_wt_name in BAD_ABLETON_WTS):
+            continue
+        if not wt_name.startswith("basics__"):
+            continue
+        if not "galactica" in wt_name:
+            continue
         filtered_wt_names.append(wt_name)
     wt_paths = [os.path.join(wt_dir, f"{wt_name}.pt") for wt_name in filtered_wt_names]
     wt_paths = sorted(wt_paths)

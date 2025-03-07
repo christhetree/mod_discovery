@@ -173,8 +173,11 @@ class ComposableSynth(SynthBase):
         }
         module_lfo_name = self.add_synth_module.lfo_name
         if module_lfo_name is not None:
-            assert self.add_lfo_name in temp_params
-            synth_module_kwargs[module_lfo_name] = temp_params[self.add_lfo_name]
+            assert self.add_lfo_name in temp_params or self.add_lfo_name in other_params
+            if self.add_lfo_name in temp_params:
+                synth_module_kwargs[module_lfo_name] = temp_params[self.add_lfo_name]
+            else:
+                synth_module_kwargs[module_lfo_name] = other_params[self.add_lfo_name]
         add_audio = self._forward_synth_module(
             self.add_synth_module,
             synth_module_kwargs,
@@ -232,12 +235,8 @@ class AcidSynthBase(SynthBase):
 
     def resize_mod_sig(self, x: T, w_mod_sig: T, q_mod_sig: T) -> Tuple[T, T]:
         assert w_mod_sig.ndim == q_mod_sig.ndim == x.ndim == 2
-        w_mod_sig = util.linear_interpolate_dim(
-            w_mod_sig, x.size(1), align_corners=True
-        )
-        q_mod_sig = util.linear_interpolate_dim(
-            q_mod_sig, x.size(1), align_corners=True
-        )
+        w_mod_sig = util.interpolate_dim(w_mod_sig, x.size(1))
+        q_mod_sig = util.interpolate_dim(q_mod_sig, x.size(1))
         return w_mod_sig, q_mod_sig
 
     def forward(
@@ -383,9 +382,7 @@ class AcidSynthLearnedBiquadCoeff(AcidSynthBase):
         assert logits.ndim == 3
         bs = logits.size(0)
         if self.interp_logits:
-            logits = util.linear_interpolate_dim(
-                logits, n_frames, dim=1, align_corners=True
-            )
+            logits = util.interpolate_dim(logits, n_frames, dim=1)
             assert logits.shape == (bs, n_frames, 5)
         a_logits = logits[..., :2]
         a_coeff = calc_logits_to_biquad_a_coeff_triangle(
@@ -393,13 +390,9 @@ class AcidSynthLearnedBiquadCoeff(AcidSynthBase):
         )
         b_coeff = logits[..., 2:]
         if not self.interp_logits:
-            a_coeff = util.linear_interpolate_dim(
-                a_coeff, n_frames, dim=1, align_corners=True
-            )
+            a_coeff = util.interpolate_dim(a_coeff, n_frames, dim=1)
             assert a_coeff.shape == (bs, n_frames, 2)
-            b_coeff = util.linear_interpolate_dim(
-                b_coeff, n_frames, dim=1, align_corners=True
-            )
+            b_coeff = util.interpolate_dim(b_coeff, n_frames, dim=1)
             assert b_coeff.shape == (bs, n_frames, 3)
         return a_coeff, b_coeff
 
@@ -470,9 +463,7 @@ class AcidSynthLearnedBiquadPoleZero(AcidSynthBase):
         assert logits.ndim == 3
         # TODO(cm): enable coeff interpolation
         if logits.size(1) != x.size(1):
-            logits = util.linear_interpolate_dim(
-                logits, x.size(1), dim=1, align_corners=True
-            )
+            logits = util.interpolate_dim(logits, x.size(1), dim=1)
         assert logits.shape == (x.size(0), x.size(1), 4)
         q_real = logits[..., 0]
         q_imag = logits[..., 1]
@@ -580,9 +571,7 @@ class WavetableSynth(SynthBase):
         #     wt_pos = tr.full_like(f0_hz, -1.0).unsqueeze(1)
         # else:
         wt_pos = wt_pos.squeeze(2) * 2.0 - 1.0
-        wt_pos = util.linear_interpolate_dim(
-            wt_pos, self.ac.n_samples, align_corners=True
-        )
+        wt_pos = util.interpolate_dim(wt_pos, self.ac.n_samples)
         temp_params["wt_pos"] = wt_pos
         dry_audio = self.osc(f0_hz, wt_pos, n_samples=n_samples, phase=phase)
         return dry_audio, {}
@@ -598,13 +587,9 @@ class WavetableSynth(SynthBase):
             a_logits, self.ac.stability_eps
         )
         b_coeff = logits[..., 2:]
-        a_coeff = util.linear_interpolate_dim(
-            a_coeff, n_frames, dim=1, align_corners=True
-        )
+        a_coeff = util.interpolate_dim(a_coeff, n_frames, dim=1)
         assert a_coeff.shape == (bs, n_frames, 2)
-        b_coeff = util.linear_interpolate_dim(
-            b_coeff, n_frames, dim=1, align_corners=True
-        )
+        b_coeff = util.interpolate_dim(b_coeff, n_frames, dim=1)
         assert b_coeff.shape == (bs, n_frames, 3)
         y_a = self.lpc_func(x, a_coeff)
         assert not tr.isinf(y_a).any()
@@ -661,9 +646,7 @@ class WavetableSynth(SynthBase):
                 note_on_duration,
             )
         else:
-            envelope = util.linear_interpolate_dim(
-                envelope, n_samples, align_corners=True
-            )
+            envelope = util.interpolate_dim(envelope, n_samples)
         # TODO(cm): tmp
         logits = temp_params.get("sub_lfo")
         if logits is not None:
@@ -727,9 +710,7 @@ class WavetableSynthShan(WavetableSynth):
     ) -> (T, Dict[str, T]):
         attention_matrix = temp_params["add_lfo"]
         attention_matrix = tr.swapaxes(attention_matrix, 1, 2)
-        attention_matrix = util.linear_interpolate_dim(
-            attention_matrix, self.ac.n_samples, align_corners=True
-        )
+        attention_matrix = util.interpolate_dim(attention_matrix, self.ac.n_samples)
         temp_params["attention_matrix"] = attention_matrix
         dry_audio = self.osc(f0_hz, attention_matrix, n_samples=n_samples, phase=phase)
         return dry_audio, {}
@@ -762,8 +743,8 @@ class DDSPSynth(SynthBase):
         temp_params["add_lfo"] = DDSPSynth.scale_function(temp_params["add_lfo"])
 
         harmonic_amplitudes = temp_params["add_lfo"][..., : self.osc.n_harmonics + 1]
-        harmonic_amplitudes = util.linear_interpolate_dim(
-            harmonic_amplitudes, self.ac.n_samples, align_corners=True, dim=1
+        harmonic_amplitudes = util.interpolate_dim(
+            harmonic_amplitudes, self.ac.n_samples, dim=1
         )
         temp_params["harmonic_amplitudes"] = harmonic_amplitudes
 

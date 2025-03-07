@@ -24,6 +24,13 @@ class SpectralConvergenceLoss(torch.nn.Module):
         self.delta_win_len = delta_win_len
 
     def forward(self, x_mag, y_mag):
+        # eps = 1e-8
+        # x_mean = x_mag.mean(dim=[1, 2], keepdim=True)
+        # x_std = x_mag.std(dim=[1, 2], keepdim=True)
+        # x_mag = (x_mag - x_mean) / (x_std + eps)
+        # y_mean = y_mag.mean(dim=[1, 2], keepdim=True)
+        # y_std = y_mag.std(dim=[1, 2], keepdim=True)
+        # y_mag = (y_mag - y_mean) / (y_std + eps)
         if self.delta_win_len is not None:
             x_mag = torchaudio.functional.compute_deltas(x_mag, self.delta_win_len)
             y_mag = torchaudio.functional.compute_deltas(y_mag, self.delta_win_len)
@@ -64,6 +71,14 @@ class STFTMagnitudeLoss(torch.nn.Module):
         if self.log:
             x_mag = torch.log(x_mag)
             y_mag = torch.log(y_mag)
+        # eps = 1e-8
+        # x_mean = x_mag.mean(dim=[1, 2], keepdim=True)
+        # x_std = x_mag.std(dim=[1, 2], keepdim=True)
+        # x_mag = (x_mag - x_mean) / (x_std + eps)
+        # y_mean = y_mag.mean(dim=[1, 2], keepdim=True)
+        # y_std = y_mag.std(dim=[1, 2], keepdim=True)
+        # y_mag = (y_mag - y_mean) / (y_std + eps)
+
         # Ensure the delta is applied after the log
         if self.delta_win_len is not None:
             x_mag = torchaudio.functional.compute_deltas(x_mag, self.delta_win_len)
@@ -274,7 +289,7 @@ class STFTLoss(torch.nn.Module):
         # normalize scales
         if self.scale_invariance:
             alpha = (x_mag * y_mag).sum([-2, -1]) / ((y_mag**2).sum([-2, -1]))
-            y_mag = y_mag * alpha.unsqueeze(-1)
+            y_mag = y_mag * alpha.unsqueeze(-1).unsqueeze(-1)
 
         # compute loss terms
         sc_mag_loss = self.spectralconv(x_mag, y_mag) if self.w_sc else 0.0

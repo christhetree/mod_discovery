@@ -110,7 +110,7 @@ class Spectral2DCNN(nn.Module):
         temp_dilations: Optional[List[int]] = None,
         pool_size: Tuple[int, int] = (2, 1),
         use_ln: bool = True,
-        temp_params: Optional[Dict[str, Dict[str, str | int]]] = None,
+        temp_params: Optional[Dict[str, Dict[str, str | int | bool]]] = None,
         global_param_names: Optional[List[str]] = None,
         dropout: float = 0.25,
         use_splines: bool = True,
@@ -173,6 +173,7 @@ class Spectral2DCNN(nn.Module):
             in_ch = out_ch
             curr_n_bins = curr_n_bins // pool_size[0]
         self.cnn = nn.Sequential(*layers)
+        self.latent_dim = out_channels[-1]
 
         # ADSR
         # self.loudness_extractor = LoudnessExtractor(
@@ -203,6 +204,8 @@ class Spectral2DCNN(nn.Module):
             act = temp_param["act"]
             adapt_dim = temp_param["adapt_dim"]
             adapt_act = temp_param["adapt_act"]
+            adapt_use_latent = temp_param.get("adapt_use_latent", False)
+            adapt_use_separate = temp_param.get("adapt_use_separate", False)
             if use_splines:
                 if adapt_dim:
                     assert adapt_act == "none"
@@ -226,21 +229,39 @@ class Spectral2DCNN(nn.Module):
             self.out_temp_acts[name] = get_activation(act)
             # Make adapters (changes dimensions of mod sig from N to M)
             if adapt_dim:
-                n_hidden = (dim + adapt_dim) // 2
-                self.adapters[name] = nn.Sequential(
-                    nn.Linear(dim, n_hidden),
-                    nn.Dropout(p=dropout),
-                    nn.PReLU(),
-                    nn.Linear(n_hidden, n_hidden),
-                    nn.Dropout(p=dropout),
-                    nn.PReLU(),
-                    nn.Linear(n_hidden, adapt_dim),
-                    get_activation(adapt_act),
-                )
+                adapt_in_dim = dim
+                if adapt_use_latent:
+                    adapt_in_dim = dim + self.latent_dim
+                n_hidden = (adapt_in_dim + adapt_dim) // 2
+                if adapt_use_separate:
+                    for dim_idx in range(adapt_dim):
+                        self.adapters[f"{name}_{dim_idx}"] = nn.Sequential(
+                            nn.Linear(adapt_in_dim, n_hidden),
+                            nn.Dropout(p=dropout),
+                            nn.PReLU(),
+                            nn.Linear(n_hidden, n_hidden),
+                            nn.Dropout(p=dropout),
+                            nn.PReLU(),
+                            nn.Linear(n_hidden, 1),
+                            get_activation(adapt_act),
+                        )
+                else:
+                    self.adapters[name] = nn.Sequential(
+                        nn.Linear(adapt_in_dim, n_hidden),
+                        nn.Dropout(p=dropout),
+                        nn.PReLU(),
+                        nn.Linear(n_hidden, n_hidden),
+                        nn.Dropout(p=dropout),
+                        nn.PReLU(),
+                        nn.Linear(n_hidden, adapt_dim),
+                        get_activation(adapt_act),
+                    )
             if self.use_splines:
                 # Make splines
                 # For PiecewiseBezier
-                self.splines[name] = PiecewiseBezier(n_frames, n_segments, degree, is_c1_cont=False)
+                self.splines[name] = PiecewiseBezier(
+                    n_frames, n_segments, degree, is_c1_cont=False
+                )
                 # self.splines[name] = PiecewiseBezier(n_frames, n_segments, degree, is_c1_cont=True)
 
                 # # For PiecewiseBezierDiffSeg
@@ -336,12 +357,13 @@ class Spectral2DCNN(nn.Module):
             # seg_end_indices_all = tr.stack(seg_end_indices_all, dim=0)
             # out_dict[f"{name}_seg_indices"] = seg_end_indices_all
 
+            chunks = None
             if self.use_splines:
                 # For PiecewiseBezier
                 chunks = tr.tensor_split(x, self.n_segments, dim=1)
                 chunks = [tr.mean(c, dim=1) for c in chunks]
-                x = tr.stack(chunks, dim=1)
-                x = self.out_temp[name](x)
+                chunks = tr.stack(chunks, dim=1)
+                x = self.out_temp[name](chunks)
                 # TODO(cm): is there a better way to do this?
                 end_vals = x[:, :-1, -1]
                 start_vals = x[:, 1:, 0]
@@ -384,11 +406,32 @@ class Spectral2DCNN(nn.Module):
                 x = self.out_temp[name](x)
 
             x = self.out_temp_acts[name](x)
-
             out_dict[name] = x.squeeze(-1)
-            if name in self.adapters:
-                x = self.adapters[name](x)
-                out_dict[f"{name}_adapted"] = x.squeeze(-1)
+
+            adapt_dim = temp_param["adapt_dim"]
+            if adapt_dim:
+                adapt_in = x
+                adapt_use_latent = temp_param.get("adapt_use_latent", False)
+                adapt_use_separate = temp_param.get("adapt_use_separate", False)
+                if adapt_use_latent:
+                    assert chunks is not None
+                    # TODO(cm): look into this
+                    adapt_latent = util.interpolate_dim(
+                        # chunks, self.n_frames, dim=1, mode="nearest", align_corners=None
+                        chunks, self.n_frames, dim=1, mode="linear", align_corners=True
+                    )
+                    adapt_in = tr.cat([adapt_in, adapt_latent], dim=-1)
+                if adapt_use_separate:
+                    adapt_outs = []
+                    for dim_idx in range(adapt_dim):
+                        adapter = self.adapters[f"{name}_{dim_idx}"]
+                        adapt_out = adapter(adapt_in)
+                        adapt_outs.append(adapt_out)
+                    adapt_out = tr.cat(adapt_outs, dim=-1)
+                    out_dict[f"{name}_adapted"] = adapt_out.squeeze(-1)
+                else:
+                    adapt_out = self.adapters[name](adapt_in)
+                    out_dict[f"{name}_adapted"] = adapt_out.squeeze(-1)
 
         # Calc global params
         for param_name, mlp in self.out_global.items():
@@ -408,11 +451,7 @@ class Spectral2DCNN(nn.Module):
         return rf
 
 
-def mlp(
-    in_size: int, 
-    hidden_size: int, 
-    n_layers: int
-) -> nn.Sequential: 
+def mlp(in_size: int, hidden_size: int, n_layers: int) -> nn.Sequential:
     channels = [in_size] + (n_layers) * [hidden_size]
     net = []
     for i in range(n_layers):
@@ -422,10 +461,7 @@ def mlp(
     return nn.Sequential(*net)
 
 
-def gru(
-    n_input: int, 
-    hidden_size: int
-) -> nn.GRU:
+def gru(n_input: int, hidden_size: int) -> nn.GRU:
     return nn.GRU(n_input * hidden_size, hidden_size, batch_first=True)
 
 
@@ -433,11 +469,11 @@ class DDSPSimpleModel(nn.Module):
     def __init__(
         self,
         fe: LogMelSpecFeatureExtractor,
-        hidden_size: int, 
-        n_harmonic: int, 
-        n_bands: int, 
+        hidden_size: int,
+        n_harmonic: int,
+        n_bands: int,
         sampling_rate: int,
-        block_size: int
+        block_size: int,
     ):
         super().__init__()
         self.register_buffer("sampling_rate", tr.tensor(sampling_rate))
@@ -447,10 +483,12 @@ class DDSPSimpleModel(nn.Module):
         self.gru = gru(2, hidden_size)
         self.out_mlp = mlp(hidden_size + 2, hidden_size, 3)
 
-        self.proj_matrices = nn.ModuleList([
-            nn.Linear(hidden_size, n_harmonic + 1),
-            nn.Linear(hidden_size, n_bands),
-        ])
+        self.proj_matrices = nn.ModuleList(
+            [
+                nn.Linear(hidden_size, n_harmonic + 1),
+                nn.Linear(hidden_size, n_bands),
+            ]
+        )
 
         self.register_buffer("cache_gru", tr.zeros(1, 1, hidden_size))
         self.register_buffer("phase", tr.zeros(1))
@@ -459,10 +497,7 @@ class DDSPSimpleModel(nn.Module):
             sr=fe.sr, n_fft=fe.n_fft, hop_len=fe.hop_len
         )
 
-    def forward(
-        self, 
-        x: Dict[str, T]
-    ) -> Dict[str, T]:
+    def forward(self, x: Dict[str, T]) -> Dict[str, T]:
         audio, pitch = x["audio"], x["f0_hz"]
         pitch = pitch.unsqueeze(-1).unsqueeze(-1)
 
@@ -471,14 +506,15 @@ class DDSPSimpleModel(nn.Module):
         loudness = self.loudness_extractor(audio.squeeze(1))
         loudness = loudness.unsqueeze(-1)
 
-        loudness = util.linear_interpolate_dim(
-            loudness, num_blocks, dim=1
-        )
+        loudness = util.interpolate_dim(loudness, num_blocks, dim=1)
 
-        hidden = tr.cat([
-            self.in_mlps[0](pitch),
-            self.in_mlps[1](loudness),
-        ], -1)
+        hidden = tr.cat(
+            [
+                self.in_mlps[0](pitch),
+                self.in_mlps[1](loudness),
+            ],
+            -1,
+        )
         hidden = tr.cat([self.gru(hidden)[0], pitch, loudness], -1)
         hidden = self.out_mlp(hidden)
 
@@ -510,9 +546,13 @@ class LoudnessExtractor(nn.Module):
         frequencies = li.fft_frequencies(sr=sr, n_fft=n_fft)
         a_weighting = li.A_weighting(frequencies, min_db=-top_db)
         self.register_buffer(
-            "a_weighting", tr.from_numpy(a_weighting).view(1, -1, 1).float(), persistent=False
+            "a_weighting",
+            tr.from_numpy(a_weighting).view(1, -1, 1).float(),
+            persistent=False,
         )
-        self.register_buffer("hann", tr.hann_window(n_fft, periodic=True), persistent=False)
+        self.register_buffer(
+            "hann", tr.hann_window(n_fft, periodic=True), persistent=False
+        )
 
     def forward(self, x: T) -> T:
         assert x.ndim == 2

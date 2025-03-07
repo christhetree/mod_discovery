@@ -37,6 +37,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         synth_eval: Optional[SynthBase] = None,
         temp_param_names: Optional[List[str]] = None,
         temp_param_names_hat: Optional[List[str]] = None,
+        interp_temp_param_names_hat: Optional[List[str]] = None,
         global_param_names: Optional[List[str]] = None,
         global_param_names_hat: Optional[List[str]] = None,
         use_p_loss: bool = False,
@@ -52,6 +53,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             temp_param_names = []
         if temp_param_names_hat is None:
             temp_param_names_hat = []
+        if interp_temp_param_names_hat is None:
+            interp_temp_param_names_hat = []
         if global_param_names is None:
             global_param_names = []
         if global_param_names_hat is None:
@@ -78,6 +81,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.synth_eval = synth_eval
         self.temp_param_names = temp_param_names
         self.temp_param_names_hat = temp_param_names_hat
+        self.interp_temp_param_names_hat = interp_temp_param_names_hat
         self.global_param_names = global_param_names
         self.global_param_names_hat = global_param_names_hat
         self.use_p_loss = use_p_loss
@@ -181,13 +185,18 @@ class AcidDDSPLightingModule(pl.LightningModule):
         }
 
         other_params = {}
+        if "add_lfo" in temp_params:
+            other_params["add_lfo"] = temp_params["add_lfo"]
+        else:
+            other_mod_sig = list(temp_params.values())[0]
+            add_mod_sig = tr.zeros_like(other_mod_sig)
+            # add_mod_sig = tr.ones_like(other_mod_sig)
+            other_params["add_lfo"] = add_mod_sig
         if "wt" in batch:
             other_params["wt"] = batch["wt"]
         if "q_0to1" in batch:
             other_params["q_mod_sig"] = batch["q_0to1"]
-        filter_types = [
-            "lp", "hp", "bp", "no"
-        ]
+        filter_types = ["lp", "hp", "bp", "no"]
         if "filter_type_0to1" in batch:
             filter_type_0to1 = batch["filter_type_0to1"][0]
             filter_type_idx = int(filter_type_0to1 * len(filter_types))
@@ -267,24 +276,37 @@ class AcidDDSPLightingModule(pl.LightningModule):
             # Postprocess temp_params_hat
             for p_name in self.temp_param_names_hat:
                 p_hat = model_out[p_name]
+                p_hat_interp = None
                 if p_name in temp_params:
-                    p_hat = util.linear_interpolate_dim(
-                        p_hat, temp_params[p_name].size(1), dim=1, align_corners=True
-                    )
                     p = temp_params[p_name]
-                    if p.shape == p_hat.shape:
+                    p_hat_interp = util.interpolate_dim(
+                        p_hat, p.size(1), dim=1, align_corners=True
+                    )
+                    # Prevents adapter outputs from being analyzed
+                    if p.shape == p_hat_interp.shape:
                         with tr.no_grad():
-                            l1 = self.l1(p_hat, p)
-                            esr = self.esr(p_hat, p)
+                            l1 = self.l1(p_hat_interp, p)
+                            esr = self.esr(p_hat_interp, p)
                         self.log(f"{stage}/{p_name}_l1", l1, prog_bar=False)
                         temp_param_metrics[f"{p_name}_l1"] = l1
                         self.log(f"{stage}/{p_name}_esr", esr, prog_bar=False)
                         temp_param_metrics[f"{p_name}_esr"] = esr
-                temp_params_hat[p_name] = p_hat
+                # Config decides which temp params are interpolated for synth_hat
+                if (
+                    p_name in self.interp_temp_param_names_hat
+                    and p_hat_interp is not None
+                ):
+                    temp_params_hat[p_name] = p_hat_interp
+                else:
+                    temp_params_hat[p_name] = p_hat
                 if f"{p_name}_adapted" in model_out:
                     p_hat = model_out[f"{p_name}_adapted"]
-                    if p_name in temp_params:
-                        p_hat = util.linear_interpolate_dim(
+                    # Config decides which temp params are interpolated for synth_hat
+                    if (
+                        p_name in temp_params
+                        and p_name in self.interp_temp_param_names_hat
+                    ):
+                        p_hat = util.interpolate_dim(
                             p_hat,
                             temp_params[p_name].size(1),
                             dim=1,
@@ -425,6 +447,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 f.write("\t".join(str(v) for v in tsv_row) + "\n")
 
         temp_params_hat = {f"{k}_hat": v for k, v in temp_params_hat.items()}
+        temp_params_hat = {
+            k: util.interpolate_dim(v, n=self.ac.n_samples, dim=1, align_corners=True)
+            for k, v in temp_params_hat.items()
+        }
         global_params_hat = {f"{k}_hat": v for k, v in global_params_hat.items()}
         audio_metrics_hat = {f"{k}_hat": v for k, v in audio_metrics_hat.items()}
         audio_metrics_eval = {f"{k}_eval": v for k, v in audio_metrics_eval.items()}
