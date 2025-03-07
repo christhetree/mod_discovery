@@ -231,20 +231,21 @@ class PiecewiseBezier(nn.Module):
 
     def forward(
         self,
-        cp_logits: T,
+        cp: T,
+        cp_are_logits: bool = False,
         si_logits: Optional[T] = None,
     ) -> T:
-        bs = cp_logits.size(0)
-        n_dim = cp_logits.ndim
+        bs = cp.size(0)
+        n_dim = cp.ndim
         n_ch = 1
         if n_dim == 4:
-            n_ch = cp_logits.size(1)
-            cp_logits = tr.flatten(cp_logits, start_dim=0, end_dim=1)
+            n_ch = cp.size(1)
+            cp = tr.flatten(cp, start_dim=0, end_dim=1)
             if si_logits is not None:
                 assert si_logits.shape == (bs, n_ch, self.n_segments)
                 si_logits = tr.flatten(si_logits, start_dim=0, end_dim=1)
         x = self.make_bezier(
-            cp_logits, cp_are_logits=False, si=si_logits, si_are_logits=True
+            cp, cp_are_logits=cp_are_logits, si=si_logits, si_are_logits=True
         )
         # assert x.min() >= 0.0, f"x.min(): {x.min()}"
         # assert x.max() <= 1.0, f"x.max(): {x.max()}"

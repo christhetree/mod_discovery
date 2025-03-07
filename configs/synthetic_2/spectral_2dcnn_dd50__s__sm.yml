@@ -11,11 +11,12 @@ init_args:
   temp_params:
     sub_lfo:
       dim: 1
-#      dim: 5
       act: none
-#      act: sigmoid
+      is_spline: true
+      n_segments: 12
+      degree: 3
+      is_bounded: false
       adapt_dim: 5
-#      adapt_dim: 0
       adapt_act: none
       adapt_use_latent: true
       adapt_use_separate: true
@@ -55,8 +56,4 @@ init_args:
 #      adapt_act: none
   global_param_names: []
   dropout: 0.25
-#  use_splines: false
-  use_splines: true
   n_frames: 1501
-  n_segments: 12
-  degree: 3

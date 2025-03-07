@@ -1,5 +1,6 @@
 import logging
 import os
+from dataclasses import dataclass
 from typing import Optional, List, Tuple, Dict
 
 import librosa as li
@@ -30,6 +31,33 @@ def get_activation(act_name: str) -> nn.Module:
         return nn.Softmax(dim=-1)
     else:
         raise ValueError(f"Unknown activation: {act_name}")
+
+
+@dataclass
+class TempParam:
+    dim: int = 1
+    act: str = "none"
+    is_spline: bool = False
+    n_segments: int = 12
+    degree: int = 3
+    is_c1_cont: bool = False
+    is_bounded: bool = False
+    adapt_dim: int = 0
+    adapt_act: str = "none"
+    adapt_use_latent: bool = False
+    adapt_use_separate: bool = False
+
+    def __post_init__(self):
+        if self.is_spline:
+            assert (
+                self.act == "none"
+            ), "Spline control points should not have an activation"
+        else:
+            assert not self.adapt_use_latent, "Using the latent dim is not supported"
+        if self.is_c1_cont:
+            assert self.is_spline
+            assert not self.is_bounded
+            assert self.degree >= 3
 
 
 class BidirectionalLSTM(nn.Module):
@@ -113,10 +141,7 @@ class Spectral2DCNN(nn.Module):
         temp_params: Optional[Dict[str, Dict[str, str | int | bool]]] = None,
         global_param_names: Optional[List[str]] = None,
         dropout: float = 0.25,
-        use_splines: bool = True,
         n_frames: int = 188,
-        n_segments: int = 4,
-        degree: int = 3,
     ) -> None:
         super().__init__()
         self.fe = fe
@@ -126,10 +151,7 @@ class Spectral2DCNN(nn.Module):
         self.pool_size = pool_size
         self.use_ln = use_ln
         self.dropout = dropout
-        self.use_splines = use_splines
         self.n_frames = n_frames
-        self.n_segments = n_segments
-        self.degree = degree
 
         # Define default params
         if out_channels is None:
@@ -144,7 +166,7 @@ class Spectral2DCNN(nn.Module):
         assert len(out_channels) == len(bin_dilations) == len(temp_dilations)
         if temp_params is None:
             temp_params = {}
-        self.temp_params = temp_params
+        self.temp_params = {k: TempParam(**v) for k, v in temp_params.items()}
         if global_param_names is None:
             global_param_names = []
         self.global_param_names = global_param_names
@@ -195,26 +217,15 @@ class Spectral2DCNN(nn.Module):
         # Define temporal params
         self.out_temp = nn.ModuleDict()
         self.out_temp_acts = nn.ModuleDict()
+        self.splines = nn.ModuleDict()
         self.adapters = nn.ModuleDict()
-        if self.use_splines:
-            self.splines = nn.ModuleDict()
-            # self.seg_intervals_mlp = nn.ModuleDict()  # For PiecewiseBezierDiffSeg
-        for name, temp_param in self.temp_params.items():
-            dim = temp_param["dim"]
-            act = temp_param["act"]
-            adapt_dim = temp_param["adapt_dim"]
-            adapt_act = temp_param["adapt_act"]
-            adapt_use_latent = temp_param.get("adapt_use_latent", False)
-            adapt_use_separate = temp_param.get("adapt_use_separate", False)
-            if use_splines:
-                if adapt_dim:
-                    assert adapt_act == "none"
-                else:
-                    assert act == "none"
+        # self.seg_intervals_mlp = nn.ModuleDict()  # For PiecewiseBezierDiffSeg
+
+        for name, tp in self.temp_params.items():
             # Make frame by frame spline params or features
-            out_dim = dim
-            if self.use_splines:
-                out_dim = dim * (self.degree + 1)  # For PiecewiseBezierDiffSeg
+            out_dim = tp.dim
+            if tp.is_spline:
+                out_dim = tp.dim * (tp.degree + 1)  # For PiecewiseBezierDiffSeg
             n_hidden = (out_channels[-1] + out_dim) // 2
             self.out_temp[name] = nn.Sequential(
                 BidirectionalLSTM(out_channels[-1], out_channels[-1] // 2, unroll=True),
@@ -226,15 +237,15 @@ class Spectral2DCNN(nn.Module):
                 nn.PReLU(),
                 nn.Linear(n_hidden, out_dim),
             )
-            self.out_temp_acts[name] = get_activation(act)
+            self.out_temp_acts[name] = get_activation(tp.act)
             # Make adapters (changes dimensions of mod sig from N to M)
-            if adapt_dim:
-                adapt_in_dim = dim
-                if adapt_use_latent:
-                    adapt_in_dim = dim + self.latent_dim
-                n_hidden = (adapt_in_dim + adapt_dim) // 2
-                if adapt_use_separate:
-                    for dim_idx in range(adapt_dim):
+            if tp.adapt_dim:
+                adapt_in_dim = tp.dim
+                if tp.adapt_use_latent:
+                    adapt_in_dim = tp.dim + self.latent_dim
+                n_hidden = (adapt_in_dim + tp.adapt_dim) // 2
+                if tp.adapt_use_separate:
+                    for dim_idx in range(tp.adapt_dim):
                         self.adapters[f"{name}_{dim_idx}"] = nn.Sequential(
                             nn.Linear(adapt_in_dim, n_hidden),
                             nn.Dropout(p=dropout),
@@ -243,7 +254,7 @@ class Spectral2DCNN(nn.Module):
                             nn.Dropout(p=dropout),
                             nn.PReLU(),
                             nn.Linear(n_hidden, 1),
-                            get_activation(adapt_act),
+                            get_activation(tp.adapt_act),
                         )
                 else:
                     self.adapters[name] = nn.Sequential(
@@ -253,14 +264,14 @@ class Spectral2DCNN(nn.Module):
                         nn.Linear(n_hidden, n_hidden),
                         nn.Dropout(p=dropout),
                         nn.PReLU(),
-                        nn.Linear(n_hidden, adapt_dim),
-                        get_activation(adapt_act),
+                        nn.Linear(n_hidden, tp.adapt_dim),
+                        get_activation(tp.adapt_act),
                     )
-            if self.use_splines:
+            if tp.is_spline:
                 # Make splines
                 # For PiecewiseBezier
                 self.splines[name] = PiecewiseBezier(
-                    n_frames, n_segments, degree, is_c1_cont=False
+                    n_frames, tp.n_segments, tp.degree, is_c1_cont=tp.is_c1_cont
                 )
                 # self.splines[name] = PiecewiseBezier(n_frames, n_segments, degree, is_c1_cont=True)
 
@@ -302,26 +313,9 @@ class Spectral2DCNN(nn.Module):
         log_spec = self.fe(x)
         out_dict["log_spec_x"] = log_spec
         n_frames = log_spec.size(-1)
-        if self.use_splines:
-            assert (
-                n_frames == self.n_frames
-            ), f"Expected n_frames: {self.n_frames} but got: {n_frames}"
-
-        # Extract envelope by conditioning on loudness
-        # loudness = self.loudness_extractor(x.squeeze(1))
-        # loudness = loudness.unsqueeze(1).unsqueeze(1)
-        # x = self.loudness_cnn(loudness)
-        # x = x.squeeze(2)
-        # x = tr.mean(x, dim=-1)
-        # x = self.loudness_mlp(x)
-        # attack = x[:, 0]
-        # decay = x[:, 1]
-        # sustain = x[:, 2]
-        # release = x[:, 3]
-        # out_dict["attack_0to1"] = attack
-        # out_dict["decay_0to1"] = decay
-        # out_dict["sustain_0to1"] = sustain
-        # out_dict["release_0to1"] = release
+        assert (
+            n_frames == self.n_frames
+        ), f"Expected n_frames: {self.n_frames} but got: {n_frames}"
 
         # Calc latent
         x = self.cnn(log_spec)
@@ -331,7 +325,7 @@ class Spectral2DCNN(nn.Module):
         global_latent = tr.mean(latent, dim=-2)
 
         # Calc temporal params
-        for name, temp_param in self.temp_params.items():
+        for name, tp in self.temp_params.items():
             # # For PiecewiseBezierDiffSeg
             # si_logits = self.seg_intervals_mlp[name](latent)
             # si = self.splines[name].logits_to_seg_intervals(si_logits)
@@ -339,8 +333,6 @@ class Spectral2DCNN(nn.Module):
             # seg_end_indices = tr.clamp(seg_end_indices, min=0, max=self.n_frames - 1)
             # out_dict[f"{name}_seg_indices"] = seg_end_indices
             si_logits = None
-
-            dim = temp_param["dim"]
             x = latent
 
             # x_s = []
@@ -358,9 +350,9 @@ class Spectral2DCNN(nn.Module):
             # out_dict[f"{name}_seg_indices"] = seg_end_indices_all
 
             chunks = None
-            if self.use_splines:
+            if tp.is_spline:
                 # For PiecewiseBezier
-                chunks = tr.tensor_split(x, self.n_segments, dim=1)
+                chunks = tr.tensor_split(x, tp.n_segments, dim=1)
                 chunks = [tr.mean(c, dim=1) for c in chunks]
                 chunks = tr.stack(chunks, dim=1)
                 x = self.out_temp[name](chunks)
@@ -373,10 +365,14 @@ class Spectral2DCNN(nn.Module):
                 # TODO(cm): check whether this is required,
                 #  I'm trying to prevent flattening occurring along the temporal axis
                 x = tr.swapaxes(x, 1, 2)
-                x = x.view(x.size(0), dim, self.degree + 1, x.size(2))
-                coeff_logits = tr.swapaxes(x, 2, 3)
+                x = x.view(x.size(0), tp.dim, tp.degree + 1, x.size(2))
+                cp = tr.swapaxes(x, 2, 3)
                 # x = self.splines[name](segment_intervals, coeff_logits, last_p_logits)
-                x = self.splines[name](coeff_logits, si_logits)
+                if tp.is_bounded:
+                    cp_are_logits = True
+                else:
+                    cp_are_logits = False
+                x = self.splines[name](cp, cp_are_logits, si_logits)
                 x = tr.swapaxes(x, 1, 2)
 
                 # # For PiecewiseBezierDiffSeg
@@ -408,22 +404,17 @@ class Spectral2DCNN(nn.Module):
             x = self.out_temp_acts[name](x)
             out_dict[name] = x.squeeze(-1)
 
-            adapt_dim = temp_param["adapt_dim"]
-            if adapt_dim:
+            if tp.adapt_dim:
                 adapt_in = x
-                adapt_use_latent = temp_param.get("adapt_use_latent", False)
-                adapt_use_separate = temp_param.get("adapt_use_separate", False)
-                if adapt_use_latent:
+                if tp.adapt_use_latent:
                     assert chunks is not None
                     # TODO(cm): look into this
-                    adapt_latent = util.interpolate_dim(
-                        # chunks, self.n_frames, dim=1, mode="nearest", align_corners=None
-                        chunks, self.n_frames, dim=1, mode="linear", align_corners=True
-                    )
+                    adapt_latent = util.interpolate_dim(chunks, self.n_frames, dim=1)
+                    # adapt_latent = util.interpolate_dim(chunks, self.n_frames, dim=1, mode="nearest", align_corners=None)
                     adapt_in = tr.cat([adapt_in, adapt_latent], dim=-1)
-                if adapt_use_separate:
+                if tp.adapt_use_separate:
                     adapt_outs = []
-                    for dim_idx in range(adapt_dim):
+                    for dim_idx in range(tp.adapt_dim):
                         adapter = self.adapters[f"{name}_{dim_idx}"]
                         adapt_out = adapter(adapt_in)
                         adapt_outs.append(adapt_out)
