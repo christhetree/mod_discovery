@@ -245,10 +245,10 @@ class LogModSigAndSpecCallback(Callback):
             temp_params_all = [
                 (out_dict.get("env"), "orchid"),
                 (out_dict.get("add_lfo"), "lightcoral"),
-                (out_dict.get("sub_lfo"), "lightblue"),
+                (out_dict.get("sub_lfo_inv"), "lightblue"),
                 (out_dict.get("env_hat"), "purple"),
                 (out_dict.get("add_lfo_hat"), "red"),
-                (out_dict.get("sub_lfo_hat"), "blue"),
+                (out_dict.get("sub_lfo_inv_hat"), "blue"),
             ]
             n_frames = None
 

@@ -5,7 +5,6 @@ from typing import Dict, Any, Optional, List, Mapping, Tuple
 
 import auraloss
 import pytorch_lightning as pl
-import schedulefree
 import torch as tr
 from auraloss.time import ESRLoss
 from pytorch_lightning.cli import OptimizerCallable
@@ -16,7 +15,6 @@ import util
 from audio_config import AudioConfig
 from feature_extraction import LogMelSpecFeatureExtractor
 from losses import MFCCL1
-from losses_freq import DeltaMultiResolutionSTFTLoss
 from paths import OUT_DIR
 from synths import SynthBase
 
@@ -46,6 +44,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         use_model: bool = True,
         model_opt: Optional[OptimizerCallable] = None,
         synth_opt: Optional[OptimizerCallable] = None,
+        eps: float = 1e-8,
     ):
         super().__init__()
         assert synth_hat is not None
@@ -89,6 +88,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.use_model = use_model
         self.model_opt = model_opt
         self.synth_opt = synth_opt
+        self.eps = eps
 
         self.loss_name = self.loss_func.__class__.__name__
         self.esr = ESRLoss()
@@ -126,7 +126,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
         ]
         for p_name in self.temp_param_names:
             tsv_cols.append(f"l1__{p_name}")
+            tsv_cols.append(f"l1_inv__{p_name}")
             tsv_cols.append(f"esr__{p_name}")
+            tsv_cols.append(f"esr_inv__{p_name}")
         for p_name in self.global_param_names:
             tsv_cols.append(f"l1__{p_name}")
         for metric_name in self.audio_metrics:
@@ -269,6 +271,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
         temp_param_metrics = {}
         global_param_metrics = {}
 
+        temp_params_inv = {}
+        temp_params_inv_hat = {}
+
         # Perform model forward pass
         if self.use_model:
             model_out = self.model(model_in_dict)
@@ -291,6 +296,47 @@ class AcidDDSPLightingModule(pl.LightningModule):
                         temp_param_metrics[f"{p_name}_l1"] = l1
                         self.log(f"{stage}/{p_name}_esr", esr, prog_bar=False)
                         temp_param_metrics[f"{p_name}_esr"] = esr
+
+                        # Do invariant comparison
+                        if stage != "train":
+                            l1_inv, p_inv, p_inv_hat, inv_name = (
+                                self.invariant_compare_individual(
+                                    p,
+                                    p_hat_interp,
+                                    self.l1,
+                                    normalize=True,
+                                    vflip=True,
+                                    eps=self.eps,
+                                )
+                            )
+                            # log.info(f"l1 inv_name = {inv_name}")
+                            self.log(f"{stage}/{p_name}_l1_inv", l1_inv, prog_bar=False)
+                            temp_param_metrics[f"{p_name}_l1_inv"] = l1_inv
+                            temp_params_inv[p_name] = p_inv
+                            temp_params_inv_hat[p_name] = p_inv_hat
+                            esr_inv, p_inv, p_inv_hat, inv_name = (
+                                self.invariant_compare_individual(
+                                    p,
+                                    p_hat_interp,
+                                    self.esr,
+                                    normalize=True,
+                                    vflip=True,
+                                    eps=self.eps,
+                                )
+                            )
+                            # log.info(f"esr inv_name = {inv_name}")
+                            self.log(
+                                f"{stage}/{p_name}_esr_inv", esr_inv, prog_bar=False
+                            )
+                            temp_param_metrics[f"{p_name}_esr_inv"] = esr_inv
+                            # temp_params_inv[p_name] = p_inv
+                            # temp_params_inv_hat[p_name] = p_inv_hat
+                        else:
+                            temp_param_metrics[f"{p_name}_l1_inv"] = tr.tensor(-1)
+                            temp_param_metrics[f"{p_name}_esr_inv"] = tr.tensor(-1)
+                            temp_params_inv[p_name] = p
+                            temp_params_inv_hat[p_name] = p_hat_interp
+
                 # Config decides which temp params are interpolated for synth_hat
                 if (
                     p_name in self.interp_temp_param_names_hat
@@ -439,7 +485,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 ]
                 for p_name in self.temp_param_names:
                     tsv_row.append(temp_param_metrics[f"{p_name}_l1"].item())
+                    tsv_row.append(temp_param_metrics[f"{p_name}_l1_inv"].item())
                     tsv_row.append(temp_param_metrics[f"{p_name}_esr"].item())
+                    tsv_row.append(temp_param_metrics[f"{p_name}_esr_inv"].item())
                 for p_name in self.global_param_names:
                     tsv_row.append(global_param_metrics[f"{p_name}_l1"].item())
                 for metric_name in self.audio_metrics:
@@ -450,6 +498,14 @@ class AcidDDSPLightingModule(pl.LightningModule):
         temp_params_hat = {
             k: util.interpolate_dim(v, n=self.ac.n_samples, dim=1, align_corners=True)
             for k, v in temp_params_hat.items()
+        }
+        temp_params_inv = {f"{k}_inv": v for k, v in temp_params_inv.items()}
+        temp_params_inv_hat = {
+            f"{k}_inv_hat": v for k, v in temp_params_inv_hat.items()
+        }
+        temp_params_inv_hat = {
+            k: util.interpolate_dim(v, n=self.ac.n_samples, dim=1, align_corners=True)
+            for k, v in temp_params_inv_hat.items()
         }
         global_params_hat = {f"{k}_hat": v for k, v in global_params_hat.items()}
         audio_metrics_hat = {f"{k}_hat": v for k, v in audio_metrics_hat.items()}
@@ -468,6 +524,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         assert all(k not in out_dict for k in temp_params)
         assert all(k not in out_dict for k in temp_params_hat)
         assert all(k not in out_dict for k in temp_param_metrics)
+        assert all(k not in out_dict for k in temp_params_inv)
+        assert all(k not in out_dict for k in temp_params_inv_hat)
         assert all(k not in out_dict for k in global_params)
         assert all(k not in out_dict for k in global_params_hat)
         assert all(k not in out_dict for k in global_param_metrics)
@@ -475,6 +533,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         assert all(k not in out_dict for k in audio_metrics_eval)
         out_dict.update(temp_params)
         out_dict.update(temp_params_hat)
+        out_dict.update(temp_params_inv)
+        out_dict.update(temp_params_inv_hat)
         out_dict.update(temp_param_metrics)
         out_dict.update(global_params)
         out_dict.update(global_params_hat)
@@ -516,6 +576,93 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 f"\n - synth_opt initial LR: {self.synth_opt.defaults['lr']:.6f}"
             )
             return self.model_opt, self.synth_opt
+
+    @staticmethod
+    def normalize_signal(x: T, eps: float = 1e-8) -> T:
+        assert x.ndim == 2
+        x_min = x.min(dim=1, keepdim=True).values
+        x_max = x.max(dim=1, keepdim=True).values
+        x_range = tr.clamp(x_max - x_min, min=eps)
+        x_norm = (x - x_min) / x_range
+        return x_norm
+
+    @staticmethod
+    def flip_signal_vertically(x: T) -> T:
+        assert x.ndim == 2
+        x_min = x.min(dim=1, keepdim=True).values
+        x_max = x.max(dim=1, keepdim=True).values
+        x_flipped = x_max + x_min - x
+        return x_flipped
+
+    @staticmethod
+    def invariant_compare_batch(
+        x: T,
+        x_hat: T,
+        compare_fn: nn.Module,
+        normalize: bool = True,
+        vflip: bool = True,
+        eps: float = 1e-8,
+    ) -> (T, T, T, str):
+        assert x.ndim == 2
+        assert x.shape == x_hat.shape
+        comparisons = [(x, x_hat, "default")]
+        if vflip:
+            x_hat_vflip = AcidDDSPLightingModule.flip_signal_vertically(x_hat)
+            comparisons.append((x, x_hat_vflip, "vflip"))
+        if normalize:
+            x_norm = AcidDDSPLightingModule.normalize_signal(x, eps)
+            x_hat_norm = AcidDDSPLightingModule.normalize_signal(x_hat, eps)
+            comparisons.append((x_norm, x_hat_norm, "norm"))
+            if vflip:
+                x_hat_norm_flipped = AcidDDSPLightingModule.flip_signal_vertically(
+                    x_hat_norm
+                )
+                comparisons.append((x_norm, x_hat_norm_flipped, "norm_vflip"))
+
+        min_val = float("inf")
+        min_x = None
+        min_x_hat = None
+        min_name = None
+        for x, x_hat, name in comparisons:
+            with tr.no_grad():
+                val = compare_fn(x_hat, x)
+            if val < min_val:
+                min_val = val
+                min_x = x
+                min_x_hat = x_hat
+                min_name = name
+        return min_val, min_x, min_x_hat, min_name
+
+    @staticmethod
+    def invariant_compare_individual(
+        x: T,
+        x_hat: T,
+        compare_fn: nn.Module,
+        normalize: bool = True,
+        vflip: bool = True,
+        eps: float = 1e-8,
+    ) -> (T, T, T, List[str]):
+        min_vals = []
+        min_x_s = []
+        min_x_hat_s = []
+        min_names = []
+        bs = x.size(0)
+        for idx in range(bs):
+            curr_x = x[idx : idx + 1]
+            curr_x_hat = x_hat[idx : idx + 1]
+            min_val, min_x, min_x_hat, min_name = (
+                AcidDDSPLightingModule.invariant_compare_batch(
+                    curr_x, curr_x_hat, compare_fn, normalize, vflip, eps
+                )
+            )
+            min_vals.append(min_val)
+            min_x_s.append(min_x)
+            min_x_hat_s.append(min_x_hat)
+            min_names.append(min_name)
+        min_val = tr.stack(min_vals, dim=0).mean()
+        min_x = tr.cat(min_x_s, dim=0)
+        min_x_hat = tr.cat(min_x_hat_s, dim=0)
+        return min_val, min_x, min_x_hat, min_names
 
     # def on_test_epoch_end(self) -> None:
     #     tsv_rows = []
