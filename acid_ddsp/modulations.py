@@ -25,11 +25,11 @@ class ModSignalGenRandomBezier(ModSignalGenerator):
     def __init__(
         self,
         min_n_seg: int = 1,
-        max_n_seg: int = 12,
-        min_degree: int = 3,
+        max_n_seg: int = 8,
+        min_degree: int = 1,
         max_degree: int = 3,
-        min_seg_interval_frac: float = 0.5,
-        softmax_tau: float = 1.0,
+        min_seg_interval_frac: float = 0.25,
+        softmax_tau: float = 0.25,
         is_c1_cont: bool = False,
     ):
         super().__init__()

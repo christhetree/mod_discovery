@@ -15,6 +15,7 @@ import util
 from audio_config import AudioConfig
 from feature_extraction import LogMelSpecFeatureExtractor
 from losses import MFCCL1
+from modulations import ModSignalGenRandomBezier
 from paths import OUT_DIR
 from synths import SynthBase
 
@@ -93,6 +94,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.loss_name = self.loss_func.__class__.__name__
         self.esr = ESRLoss()
         self.l1 = nn.L1Loss()
+        self.mse = nn.MSELoss()
 
         self.audio_metrics = nn.ModuleDict()
         self.audio_metrics["mss"] = auraloss.freq.MultiResolutionSTFTLoss()
@@ -129,6 +131,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             tsv_cols.append(f"l1_inv__{p_name}")
             tsv_cols.append(f"esr__{p_name}")
             tsv_cols.append(f"esr_inv__{p_name}")
+            tsv_cols.append(f"mse__{p_name}")
+            tsv_cols.append(f"mse_inv__{p_name}")
+            tsv_cols.append(f"fft__{p_name}")
         for p_name in self.global_param_names:
             tsv_cols.append(f"l1__{p_name}")
         for metric_name in self.audio_metrics:
@@ -264,15 +269,13 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "f0_hz": f0_hz,
         }
         temp_params_hat = {}
+        temp_params_hat_inv = {}
         global_params_0to1_hat = {}
         global_params_hat = {}
         log_spec_x = None
 
         temp_param_metrics = {}
         global_param_metrics = {}
-
-        temp_params_inv = {}
-        temp_params_inv_hat = {}
 
         # Perform model forward pass
         if self.use_model:
@@ -292,50 +295,48 @@ class AcidDDSPLightingModule(pl.LightningModule):
                         with tr.no_grad():
                             l1 = self.l1(p_hat_interp, p)
                             esr = self.esr(p_hat_interp, p)
+                            mse = self.mse(p_hat_interp, p)
+                            fft_mag_dist = AcidDDSPLightingModule.calc_fft_mag_dist(
+                                p_hat_interp, p, ignore_dc=True
+                            )
                         self.log(f"{stage}/{p_name}_l1", l1, prog_bar=False)
                         temp_param_metrics[f"{p_name}_l1"] = l1
                         self.log(f"{stage}/{p_name}_esr", esr, prog_bar=False)
                         temp_param_metrics[f"{p_name}_esr"] = esr
+                        self.log(f"{stage}/{p_name}_mse", mse, prog_bar=False)
+                        temp_param_metrics[f"{p_name}_mse"] = mse
+                        self.log(f"{stage}/{p_name}_fft", fft_mag_dist, prog_bar=False)
+                        temp_param_metrics[f"{p_name}_fft"] = fft_mag_dist
 
                         # Do invariant comparison
                         if stage != "train":
-                            l1_inv, p_inv, p_inv_hat, inv_name = (
-                                self.invariant_compare_individual(
-                                    p,
-                                    p_hat_interp,
-                                    self.l1,
-                                    normalize=True,
-                                    vflip=True,
-                                    eps=self.eps,
+                            with tr.no_grad():
+                                p_hat_inv = (
+                                    AcidDDSPLightingModule.compute_lstsq_with_bias(
+                                        x_hat=p_hat_interp.unsqueeze(1),
+                                        x=p.unsqueeze(1),
+                                    ).squeeze(1)
                                 )
-                            )
-                            # log.info(f"l1 inv_name = {inv_name}")
+                            temp_params_hat_inv[p_name] = p_hat_inv
+
+                            l1_inv = self.l1(p_hat_inv, p)
                             self.log(f"{stage}/{p_name}_l1_inv", l1_inv, prog_bar=False)
                             temp_param_metrics[f"{p_name}_l1_inv"] = l1_inv
-                            temp_params_inv[p_name] = p_inv
-                            temp_params_inv_hat[p_name] = p_inv_hat
-                            esr_inv, p_inv, p_inv_hat, inv_name = (
-                                self.invariant_compare_individual(
-                                    p,
-                                    p_hat_interp,
-                                    self.esr,
-                                    normalize=True,
-                                    vflip=True,
-                                    eps=self.eps,
-                                )
-                            )
-                            # log.info(f"esr inv_name = {inv_name}")
+                            esr_inv = self.esr(p_hat_inv, p)
                             self.log(
                                 f"{stage}/{p_name}_esr_inv", esr_inv, prog_bar=False
                             )
                             temp_param_metrics[f"{p_name}_esr_inv"] = esr_inv
-                            # temp_params_inv[p_name] = p_inv
-                            # temp_params_inv_hat[p_name] = p_inv_hat
+                            mse_inv = self.mse(p_hat_inv, p)
+                            self.log(
+                                f"{stage}/{p_name}_mse_inv", mse_inv, prog_bar=False
+                            )
+                            temp_param_metrics[f"{p_name}_mse_inv"] = mse_inv
                         else:
+                            temp_params_hat_inv[p_name] = p_hat_interp
                             temp_param_metrics[f"{p_name}_l1_inv"] = tr.tensor(-1)
                             temp_param_metrics[f"{p_name}_esr_inv"] = tr.tensor(-1)
-                            temp_params_inv[p_name] = p
-                            temp_params_inv_hat[p_name] = p_hat_interp
+                            temp_param_metrics[f"{p_name}_mse_inv"] = tr.tensor(-1)
 
                 # Config decides which temp params are interpolated for synth_hat
                 if (
@@ -488,6 +489,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     tsv_row.append(temp_param_metrics[f"{p_name}_l1_inv"].item())
                     tsv_row.append(temp_param_metrics[f"{p_name}_esr"].item())
                     tsv_row.append(temp_param_metrics[f"{p_name}_esr_inv"].item())
+                    tsv_row.append(temp_param_metrics[f"{p_name}_mse"].item())
+                    tsv_row.append(temp_param_metrics[f"{p_name}_mse_inv"].item())
+                    tsv_row.append(temp_param_metrics[f"{p_name}_fft"].item())
                 for p_name in self.global_param_names:
                     tsv_row.append(global_param_metrics[f"{p_name}_l1"].item())
                 for metric_name in self.audio_metrics:
@@ -499,13 +503,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
             k: util.interpolate_dim(v, n=self.ac.n_samples, dim=1, align_corners=True)
             for k, v in temp_params_hat.items()
         }
-        temp_params_inv = {f"{k}_inv": v for k, v in temp_params_inv.items()}
-        temp_params_inv_hat = {
-            f"{k}_inv_hat": v for k, v in temp_params_inv_hat.items()
+        temp_params_hat_inv = {
+            f"{k}_hat_inv": v for k, v in temp_params_hat_inv.items()
         }
-        temp_params_inv_hat = {
+        temp_params_hat_inv = {
             k: util.interpolate_dim(v, n=self.ac.n_samples, dim=1, align_corners=True)
-            for k, v in temp_params_inv_hat.items()
+            for k, v in temp_params_hat_inv.items()
         }
         global_params_hat = {f"{k}_hat": v for k, v in global_params_hat.items()}
         audio_metrics_hat = {f"{k}_hat": v for k, v in audio_metrics_hat.items()}
@@ -524,8 +527,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         assert all(k not in out_dict for k in temp_params)
         assert all(k not in out_dict for k in temp_params_hat)
         assert all(k not in out_dict for k in temp_param_metrics)
-        assert all(k not in out_dict for k in temp_params_inv)
-        assert all(k not in out_dict for k in temp_params_inv_hat)
+        assert all(k not in out_dict for k in temp_params_hat_inv)
         assert all(k not in out_dict for k in global_params)
         assert all(k not in out_dict for k in global_params_hat)
         assert all(k not in out_dict for k in global_param_metrics)
@@ -533,8 +535,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         assert all(k not in out_dict for k in audio_metrics_eval)
         out_dict.update(temp_params)
         out_dict.update(temp_params_hat)
-        out_dict.update(temp_params_inv)
-        out_dict.update(temp_params_inv_hat)
+        out_dict.update(temp_params_hat_inv)
         out_dict.update(temp_param_metrics)
         out_dict.update(global_params)
         out_dict.update(global_params_hat)
@@ -663,6 +664,66 @@ class AcidDDSPLightingModule(pl.LightningModule):
         min_x = tr.cat(min_x_s, dim=0)
         min_x_hat = tr.cat(min_x_hat_s, dim=0)
         return min_val, min_x, min_x_hat, min_names
+
+    @staticmethod
+    def calc_fft_mag_dist(x_hat: T, x: T, ignore_dc: bool = True) -> T:
+        assert x.ndim == 2
+        assert x.shape == x_hat.shape
+        X = tr.fft.rfft(x, dim=1).abs()
+        X_hat = tr.fft.rfft(x_hat, dim=1).abs()
+        # log.info(f"X = {X.squeeze()}")
+        # log.info(f"X_hat = {X_hat.squeeze()}")
+        if ignore_dc:
+            X = X[:, 1:]
+            X_hat = X_hat[:, 1:]
+        dist = tr.nn.functional.l1_loss(X_hat, X)
+        return dist
+
+    @staticmethod
+    def compute_lstsq_with_bias(x_hat: T, x: T) -> T:
+        """
+        Given x and x_hat of shape (bs, n_signals, n_samples), compute the best
+        linear combination matrix W and bias vector b (per batch) such that:
+            x ≈ W @ x_hat + b
+        using a batched least-squares approach.
+
+        Args:
+            x (Tensor): Target tensor of shape (bs, n_signals, n_samples).
+            x_hat (Tensor): Basis tensor of shape (bs, n_signals, n_samples).
+
+        Returns:
+
+        """
+        assert x_hat.shape == x.shape
+        bs, n_signals, n_samples = x_hat.shape
+
+        # Augment x_hat with a row of ones to account for the bias term.
+        # ones shape: (bs, 1, n_samples)
+        ones = tr.ones(bs, 1, n_samples, device=x_hat.device, dtype=x_hat.dtype)
+        x_hat_aug = tr.cat([x_hat, ones], dim=1)  # shape: (bs, n_signals+1, n_samples)
+
+        # Transpose the last two dimensions so that we set up the least-squares problem as:
+        # A @ (solution) ≈ B
+        A = x_hat_aug.transpose(1, 2)  # shape: (bs, n_samples, n_signals+1)
+        B = x.transpose(1, 2)  # shape: (bs, n_samples, n_signals)
+
+        # Solve the least-squares problem for the augmented system.
+        lstsq_result = tr.linalg.lstsq(A, B)
+        solution = lstsq_result.solution  # shape: (bs, n_signals+1, n_signals)
+
+        # The solution consists of weights and bias:
+        # The first n_signals rows correspond to the weight matrix (transposed), and the last row is the bias.
+        W_t = solution[:, :-1, :]  # shape: (bs, n_signals, n_signals)
+        bias_t = solution[:, -1:, :]  # shape: (bs, 1, n_signals)
+
+        # Transpose to obtain the weight matrix in the right orientation.
+        W = W_t.transpose(1, 2)  # shape: (bs, n_signals, n_signals)
+        bias = bias_t.transpose(1, 2)  # shape: (bs, n_signals, 1)
+
+        # Compute the predicted x using the estimated weights and bias.
+        # Note: bias is added to each sample in the time dimension.
+        x_pred = tr.bmm(W, x_hat) + bias  # shape: (bs, n_signals, n_samples)
+        return x_pred
 
     # def on_test_epoch_end(self) -> None:
     #     tsv_rows = []
@@ -804,3 +865,71 @@ class PreprocLightningModule(AcidDDSPLightingModule):
         assert f0_hz.shape == (batch_size,)
         assert note_on_duration.shape == (batch_size,)
         return batch
+
+
+if __name__ == "__main__":
+    n_signals: int = 3
+    n_samples: int = 1000
+    mod_gen_x = ModSignalGenRandomBezier()
+    mod_gen_x_hat = ModSignalGenRandomBezier(
+        min_n_seg=12,
+        max_n_seg=12,
+        min_degree=3,
+        max_degree=3,
+        min_seg_interval_frac=0.99,
+    )
+    x_s = []
+    x_hat_s = []
+    for _ in range(n_signals):
+        x = mod_gen_x(n_samples)
+        x_s.append(x)
+        # x_vflip = AcidDDSPLightingModule.flip_signal_vertically(x.view(1, -1)).view(-1) + 1.0
+        # x_hat_s.append(x_vflip)
+        x_hat = mod_gen_x_hat(n_samples)
+        x_hat_s.append(x_hat)
+    x = tr.stack(x_s, dim=0).unsqueeze(0)
+    x_hat = tr.stack(x_hat_s, dim=0).unsqueeze(0)
+    l1, x_pred = AcidDDSPLightingModule.compute_lstsq_with_bias(x, x_hat)
+
+    from matplotlib import pyplot as plt
+
+    for idx in range(n_signals):
+        plt.plot(x_hat[0, idx, :])
+    plt.title("x_hat")
+    plt.ylim(-0.1, 1.1)
+    plt.show()
+
+    for idx in range(n_signals):
+        curr_l1 = l1[0, idx]
+        plt.plot(x[0, idx, :], label="x", color="black")
+        plt.plot(x_pred[0, idx, :], label="x_pred", color="orange")
+        plt.legend()
+        plt.title(f"x, x_pred, l1 = {curr_l1:.4f}")
+        plt.ylim(-0.1, 1.1)
+        plt.show()
+
+    exit()
+
+    n_samples = 7
+    x = tr.rand((1, n_samples))
+    y = tr.rand((1, n_samples))
+    x_scaled = x * 3.0
+    x_scaled_shifted = x_scaled + -2.0
+
+    dist = AcidDDSPLightingModule.calc_fft_mag_dist(x, x_scaled)
+    log.info(f"dist x, x_scaled = {dist}")
+    dist = AcidDDSPLightingModule.calc_fft_mag_dist(x, x_scaled_shifted)
+    log.info(f"dist x, x_scaled_shifted = {dist}")
+
+    x_norm = AcidDDSPLightingModule.normalize_signal(x)
+    x_scaled_shifted_norm = AcidDDSPLightingModule.normalize_signal(x_scaled_shifted)
+    dist = AcidDDSPLightingModule.calc_fft_mag_dist(x_norm, x_scaled_shifted_norm)
+    log.info(f"dist x_norm, x_scaled_shifted_norm = {dist}")
+
+    y_norm = AcidDDSPLightingModule.normalize_signal(y)
+    xy = x_norm + y_norm
+    x_norm_vflip = AcidDDSPLightingModule.flip_signal_vertically(x_norm)
+    y_norm_vflip = AcidDDSPLightingModule.flip_signal_vertically(y_norm)
+    xy_vflip = x_norm_vflip + y_norm_vflip
+    dist = AcidDDSPLightingModule.calc_fft_mag_dist(xy, xy_vflip)
+    log.info(f"dist xy, xy_vflip = {dist}")
