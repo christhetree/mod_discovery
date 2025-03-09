@@ -137,7 +137,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             tsv_cols.append(f"mse_inv__{p_name}")
             tsv_cols.append(f"mse_inv_all__{p_name}")
             tsv_cols.append(f"fft__{p_name}")
-            tsv_cols.append(f"fft_all__{p_name}")
+            tsv_cols.append(f"fft_inv__{p_name}")
+            tsv_cols.append(f"fft_inv_all__{p_name}")
         for p_name in self.global_param_names:
             tsv_cols.append(f"l1__{p_name}")
         for metric_name in self.audio_metrics:
@@ -304,12 +305,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
                                 p_hat_interp, p, ignore_dc=True
                             )
                         self.log(f"{stage}/{p_name}_l1", l1, prog_bar=False)
-                        temp_param_metrics[f"{p_name}_l1"] = l1
                         self.log(f"{stage}/{p_name}_esr", esr, prog_bar=False)
-                        temp_param_metrics[f"{p_name}_esr"] = esr
                         self.log(f"{stage}/{p_name}_mse", mse, prog_bar=False)
-                        temp_param_metrics[f"{p_name}_mse"] = mse
                         self.log(f"{stage}/{p_name}_fft", fft_mag_dist, prog_bar=False)
+                        temp_param_metrics[f"{p_name}_l1"] = l1
+                        temp_param_metrics[f"{p_name}_esr"] = esr
+                        temp_param_metrics[f"{p_name}_mse"] = mse
                         temp_param_metrics[f"{p_name}_fft"] = fft_mag_dist
 
                         # Do invariant comparison
@@ -321,26 +322,36 @@ class AcidDDSPLightingModule(pl.LightningModule):
                                         x=p.unsqueeze(1),
                                     ).squeeze(1)
                                 )
-                            temp_params_hat_inv[p_name] = p_hat_inv
-
-                            l1_inv = self.l1(p_hat_inv, p)
+                                l1_inv = self.l1(p_hat_inv, p)
+                                esr_inv = self.esr(p_hat_inv, p)
+                                mse_inv = self.mse(p_hat_inv, p)
+                                fft_mag_dist_inv = (
+                                    AcidDDSPLightingModule.calc_fft_mag_dist(
+                                        p_hat_inv, p, ignore_dc=True
+                                    )
+                                )
+                            temp_params_hat_inv[f"{p_name}_hat_inv"] = p_hat_inv
                             self.log(f"{stage}/{p_name}_l1_inv", l1_inv, prog_bar=False)
-                            temp_param_metrics[f"{p_name}_l1_inv"] = l1_inv
-                            esr_inv = self.esr(p_hat_inv, p)
                             self.log(
                                 f"{stage}/{p_name}_esr_inv", esr_inv, prog_bar=False
                             )
-                            temp_param_metrics[f"{p_name}_esr_inv"] = esr_inv
-                            mse_inv = self.mse(p_hat_inv, p)
                             self.log(
                                 f"{stage}/{p_name}_mse_inv", mse_inv, prog_bar=False
                             )
+                            self.log(
+                                f"{stage}/{p_name}_fft_inv",
+                                fft_mag_dist_inv,
+                                prog_bar=False,
+                            )
+                            temp_param_metrics[f"{p_name}_l1_inv"] = l1_inv
+                            temp_param_metrics[f"{p_name}_esr_inv"] = esr_inv
                             temp_param_metrics[f"{p_name}_mse_inv"] = mse_inv
+                            temp_param_metrics[f"{p_name}_fft_inv"] = fft_mag_dist_inv
                         else:
-                            temp_params_hat_inv[p_name] = p_hat_interp
                             temp_param_metrics[f"{p_name}_l1_inv"] = tr.tensor(-1)
                             temp_param_metrics[f"{p_name}_esr_inv"] = tr.tensor(-1)
                             temp_param_metrics[f"{p_name}_mse_inv"] = tr.tensor(-1)
+                            temp_param_metrics[f"{p_name}_fft_inv"] = tr.tensor(-1)
 
                 # Config decides which temp params are interpolated for synth_hat
                 if (
@@ -395,7 +406,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             for name in self.temp_param_names_hat:
                 tp_hat = temp_params_hat[name]
                 assert tp_hat.ndim == 2
-                tp_hat = util.interpolate_dim(tp_hat, tp.size(2), dim=1, align_corners=True)
+                tp_hat = util.interpolate_dim(
+                    tp_hat, tp.size(2), dim=1, align_corners=True
+                )
                 tp_hat_s.append(tp_hat)
             tp_hat = tr.stack(tp_hat_s, dim=1)
             tp_pred = AcidDDSPLightingModule.compute_lstsq_with_bias(tp_hat, tp)
@@ -403,25 +416,28 @@ class AcidDDSPLightingModule(pl.LightningModule):
             for idx, p_name in enumerate(self.temp_param_names):
                 curr_tp = tp[:, idx, :]
                 curr_tp_pred = tp_pred[:, idx, :]
+                temp_params_hat_inv[f"{p_name}_hat_inv_all"] = curr_tp_pred
                 with tr.no_grad():
                     l1 = self.l1(curr_tp_pred, curr_tp)
                     esr = self.esr(curr_tp_pred, curr_tp)
                     mse = self.mse(curr_tp_pred, curr_tp)
-                    fft_mag_dist = AcidDDSPLightingModule.calc_fft_mag_dist(curr_tp_pred, curr_tp)
+                    fft_mag_dist = AcidDDSPLightingModule.calc_fft_mag_dist(
+                        curr_tp_pred, curr_tp
+                    )
                 self.log(f"{stage}/{p_name}_l1_inv_all", l1, prog_bar=False)
                 self.log(f"{stage}/{p_name}_esr_inv_all", esr, prog_bar=False)
                 self.log(f"{stage}/{p_name}_mse_inv_all", mse, prog_bar=False)
-                self.log(f"{stage}/{p_name}_fft_all", fft_mag_dist, prog_bar=False)
+                self.log(f"{stage}/{p_name}_fft_inv_all", fft_mag_dist, prog_bar=False)
                 temp_param_metrics[f"{p_name}_l1_inv_all"] = l1
                 temp_param_metrics[f"{p_name}_esr_inv_all"] = esr
                 temp_param_metrics[f"{p_name}_mse_inv_all"] = mse
-                temp_param_metrics[f"{p_name}_fft_all"] = fft_mag_dist
+                temp_param_metrics[f"{p_name}_fft_inv_all"] = fft_mag_dist
         else:
             for p_name in self.temp_param_names:
                 temp_param_metrics[f"{p_name}_l1_inv_all"] = tr.tensor(-1)
                 temp_param_metrics[f"{p_name}_esr_inv_all"] = tr.tensor(-1)
                 temp_param_metrics[f"{p_name}_mse_inv_all"] = tr.tensor(-1)
-                temp_param_metrics[f"{p_name}_fft_all"] = tr.tensor(-1)
+                temp_param_metrics[f"{p_name}_fft_inv_all"] = tr.tensor(-1)
 
         if log_spec_x is None:
             with tr.no_grad():
@@ -535,7 +551,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     tsv_row.append(temp_param_metrics[f"{p_name}_mse_inv"].item())
                     tsv_row.append(temp_param_metrics[f"{p_name}_mse_inv_all"].item())
                     tsv_row.append(temp_param_metrics[f"{p_name}_fft"].item())
-                    tsv_row.append(temp_param_metrics[f"{p_name}_fft_all"].item())
+                    tsv_row.append(temp_param_metrics[f"{p_name}_fft_inv"].item())
+                    tsv_row.append(temp_param_metrics[f"{p_name}_fft_inv_all"].item())
                 for p_name in self.global_param_names:
                     tsv_row.append(global_param_metrics[f"{p_name}_l1"].item())
                 for metric_name in self.audio_metrics:
@@ -546,9 +563,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         temp_params_hat = {
             k: util.interpolate_dim(v, n=self.ac.n_samples, dim=1, align_corners=True)
             for k, v in temp_params_hat.items()
-        }
-        temp_params_hat_inv = {
-            f"{k}_hat_inv": v for k, v in temp_params_hat_inv.items()
         }
         temp_params_hat_inv = {
             k: util.interpolate_dim(v, n=self.ac.n_samples, dim=1, align_corners=True)
