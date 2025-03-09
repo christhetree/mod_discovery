@@ -141,3 +141,14 @@ def stable_softmax(logits: T, tau: float = 1.0) -> T:
     sum_exp_logits = tr.sum(exp_logits, dim=-1, keepdim=True)
     softmax_probs = exp_logits / sum_exp_logits
     return softmax_probs
+
+
+def load_class_from_yaml(config_path: str) -> Any:
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
+    class_path = config["class_path"]
+    module_name, class_name = class_path.rsplit(".", 1)
+    module = importlib.import_module(module_name)
+    cls = getattr(module, class_name)
+    cls_instantiated = cls(**config["init_args"])
+    return cls_instantiated

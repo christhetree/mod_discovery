@@ -60,14 +60,17 @@ class ModSignalGenRandomBezier(ModSignalGenerator):
             degree = tr.randint(
                 self.min_degree, self.max_degree + 1, (1,), generator=rand_gen
             ).item()
-        si_logits = tr.rand((1, n_seg), generator=rand_gen)
-        min_seg_interval = (1 / n_seg) * self.min_seg_interval_frac
-        si = PiecewiseBezier.logits_to_seg_intervals(
-            si_logits, min_seg_interval, self.softmax_tau
-        )
-        # log.info(f"si_logits = {si_logits}")
-        # log.info(f"si = {si}")
-        modes = tr.cumsum(si, dim=1)[:, :-1]
+        if self.min_seg_interval_frac == 1.0:
+            modes = None
+        else:
+            si_logits = tr.rand((1, n_seg), generator=rand_gen)
+            min_seg_interval = (1 / n_seg) * self.min_seg_interval_frac
+            si = PiecewiseBezier.logits_to_seg_intervals(
+                si_logits, min_seg_interval, self.softmax_tau
+            )
+            # log.info(f"si_logits = {si_logits}")
+            # log.info(f"si = {si}")
+            modes = tr.cumsum(si, dim=1)[:, :-1]
         bezier = PiecewiseBezier(
             n_frames,
             n_seg,

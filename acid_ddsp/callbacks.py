@@ -243,16 +243,19 @@ class LogModSigAndSpecCallback(Callback):
 
             # TODO(cm): tmp
             temp_params_all = [
-                (out_dict.get("env"), "orchid"),
-                (out_dict.get("add_lfo"), "lightcoral"),
-                (out_dict.get("sub_lfo"), "lightblue"),
-                (out_dict.get("env_hat_inv"), "purple"),
-                (out_dict.get("add_lfo_hat_inv"), "red"),
-                (out_dict.get("sub_lfo_hat_inv"), "blue"),
+                (out_dict.get("env"), "orchid", None),
+                (out_dict.get("add_lfo"), "lightcoral", None),
+                (out_dict.get("sub_lfo"), "lightblue", None),
+                (out_dict.get("env_hat_inv"), "purple", None),
+                (out_dict.get("env_hat_inv_all"), "purple", "--"),
+                (out_dict.get("add_lfo_hat_inv"), "red", None),
+                (out_dict.get("add_lfo_hat_inv_all"), "red", "--"),
+                (out_dict.get("sub_lfo_hat_inv"), "blue", None),
+                (out_dict.get("sub_lfo_hat_inv_all"), "blue", "--"),
             ]
             n_frames = None
 
-            for temp_param, color in temp_params_all:
+            for temp_param, color, linestyle in temp_params_all:
                 if temp_param is None:
                     continue
                 if temp_param.ndim != 2:
@@ -263,7 +266,7 @@ class LogModSigAndSpecCallback(Callback):
                 else:
                     assert n_frames == curr_n_frames
                 temp_param = temp_param[0].numpy()
-                ax[-1].plot(temp_param, color=color)
+                ax[-1].plot(temp_param, color=color, linestyle=linestyle)
 
             ax[-1].set_xlabel("n_samples")
             ax[-1].set_ylabel("Amplitude")

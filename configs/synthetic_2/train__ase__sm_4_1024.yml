@@ -1,10 +1,10 @@
 custom:
   project_name: acid_ddsp_2
-  model_name: mss__s12d3
-  dataset_name: ableton__ase__sm_4_1024
+  model_name: mss__s12d3__sm_4_1024
+  dataset_name: ableton__ase
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
-  use_wandb_gpu: false
+  use_wandb_gpu: true
 
 trainer:
   accelerator: gpu
@@ -56,6 +56,9 @@ model:
       - add_lfo
       - sub_lfo
       - env
+    interp_temp_param_names_hat:
+      - add_lfo
+      - env
     synth_hat: synth_ase__sm_4_1024.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
@@ -63,11 +66,11 @@ model:
 #    use_p_loss: true
 #    loss_func: torch.nn.MSELoss
 
-    run_name: mss__s12d3__ableton__ase__sm_4_1024
+#    run_name: mss__s12d3__ableton__ase__sm_4_1024_sf
 
-    synth_opt: ../opt/adam_w__lr_1e-2.yml
-    model_opt: ../opt/adam_w__lr_1e-3.yml
-#    synth_opt: ../opt/sf_adam_w__lr_5e-2.yml
-#    model_opt: ../opt/sf_adam_w__lr_5e-3.yml
+#    synth_opt: ../opt/adam_w__lr_1e-2.yml
+#    model_opt: ../opt/adam_w__lr_1e-3.yml
+    synth_opt: ../opt/sf_adam_w__lr_5e-2.yml
+    model_opt: ../opt/sf_adam_w__lr_5e-3.yml
 
 #optimizer: ../opt/adam_w__lr_1e-3.yml

@@ -12,25 +12,33 @@ init_args:
     add_lfo:
       dim: 1
       act: none
-#      act: sigmoid
+      is_spline: true
+      n_segments: 12
+      degree: 3
+      is_c1_cont: false
+      is_bounded: true
       adapt_dim: 0
-      adapt_act: none
     sub_lfo:
       dim: 1
       act: none
-#      act: sigmoid
+      is_spline: true
+      n_segments: 12
+      degree: 3
+      is_c1_cont: false
+      is_bounded: false
       adapt_dim: 5
       adapt_act: none
+      adapt_use_latent: true
+      adapt_use_separate: true
     env:
       dim: 1
       act: none
-#      act: sigmoid
+      is_spline: true
+      n_segments: 12
+      degree: 3
+      is_c1_cont: false
+      is_bounded: true
       adapt_dim: 0
-      adapt_act: none
   global_param_names: []
   dropout: 0.25
-#  use_splines: false
-  use_splines: true
   n_frames: 1501
-  n_segments: 12
-  degree: 3
