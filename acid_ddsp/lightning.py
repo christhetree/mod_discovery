@@ -129,11 +129,15 @@ class AcidDDSPLightingModule(pl.LightningModule):
         for p_name in self.temp_param_names:
             tsv_cols.append(f"l1__{p_name}")
             tsv_cols.append(f"l1_inv__{p_name}")
+            tsv_cols.append(f"l1_inv_all__{p_name}")
             tsv_cols.append(f"esr__{p_name}")
             tsv_cols.append(f"esr_inv__{p_name}")
+            tsv_cols.append(f"esr_inv_all__{p_name}")
             tsv_cols.append(f"mse__{p_name}")
             tsv_cols.append(f"mse_inv__{p_name}")
+            tsv_cols.append(f"mse_inv_all__{p_name}")
             tsv_cols.append(f"fft__{p_name}")
+            tsv_cols.append(f"fft_all__{p_name}")
         for p_name in self.global_param_names:
             tsv_cols.append(f"l1__{p_name}")
         for metric_name in self.audio_metrics:
@@ -383,6 +387,42 @@ class AcidDDSPLightingModule(pl.LightningModule):
             #     q_mod_sig_hat = q_0to1_hat.unsqueeze(-1)
             #     temp_params_hat["q_mod_sig"] = q_mod_sig_hat
 
+        # Compute invariant all metrics
+        if stage != "train":
+            tp = [temp_params[name] for name in self.temp_param_names]
+            tp = tr.stack(tp, dim=1)
+            tp_hat_s = []
+            for name in self.temp_param_names_hat:
+                tp_hat = temp_params_hat[name]
+                assert tp_hat.ndim == 2
+                tp_hat = util.interpolate_dim(tp_hat, tp.size(2), dim=1, align_corners=True)
+                tp_hat_s.append(tp_hat)
+            tp_hat = tr.stack(tp_hat_s, dim=1)
+            tp_pred = AcidDDSPLightingModule.compute_lstsq_with_bias(tp_hat, tp)
+            assert tp_pred.size(1) == len(self.temp_param_names)
+            for idx, p_name in enumerate(self.temp_param_names):
+                curr_tp = tp[:, idx, :]
+                curr_tp_pred = tp_pred[:, idx, :]
+                with tr.no_grad():
+                    l1 = self.l1(curr_tp_pred, curr_tp)
+                    esr = self.esr(curr_tp_pred, curr_tp)
+                    mse = self.mse(curr_tp_pred, curr_tp)
+                    fft_mag_dist = AcidDDSPLightingModule.calc_fft_mag_dist(curr_tp_pred, curr_tp)
+                self.log(f"{stage}/{p_name}_l1_inv_all", l1, prog_bar=False)
+                self.log(f"{stage}/{p_name}_esr_inv_all", esr, prog_bar=False)
+                self.log(f"{stage}/{p_name}_mse_inv_all", mse, prog_bar=False)
+                self.log(f"{stage}/{p_name}_fft_all", fft_mag_dist, prog_bar=False)
+                temp_param_metrics[f"{p_name}_l1_inv_all"] = l1
+                temp_param_metrics[f"{p_name}_esr_inv_all"] = esr
+                temp_param_metrics[f"{p_name}_mse_inv_all"] = mse
+                temp_param_metrics[f"{p_name}_fft_all"] = fft_mag_dist
+        else:
+            for p_name in self.temp_param_names:
+                temp_param_metrics[f"{p_name}_l1_inv_all"] = tr.tensor(-1)
+                temp_param_metrics[f"{p_name}_esr_inv_all"] = tr.tensor(-1)
+                temp_param_metrics[f"{p_name}_mse_inv_all"] = tr.tensor(-1)
+                temp_param_metrics[f"{p_name}_fft_all"] = tr.tensor(-1)
+
         if log_spec_x is None:
             with tr.no_grad():
                 log_spec_x = self.spectral_visualizer(x).squeeze(1)
@@ -487,11 +527,15 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 for p_name in self.temp_param_names:
                     tsv_row.append(temp_param_metrics[f"{p_name}_l1"].item())
                     tsv_row.append(temp_param_metrics[f"{p_name}_l1_inv"].item())
+                    tsv_row.append(temp_param_metrics[f"{p_name}_l1_inv_all"].item())
                     tsv_row.append(temp_param_metrics[f"{p_name}_esr"].item())
                     tsv_row.append(temp_param_metrics[f"{p_name}_esr_inv"].item())
+                    tsv_row.append(temp_param_metrics[f"{p_name}_esr_inv_all"].item())
                     tsv_row.append(temp_param_metrics[f"{p_name}_mse"].item())
                     tsv_row.append(temp_param_metrics[f"{p_name}_mse_inv"].item())
+                    tsv_row.append(temp_param_metrics[f"{p_name}_mse_inv_all"].item())
                     tsv_row.append(temp_param_metrics[f"{p_name}_fft"].item())
+                    tsv_row.append(temp_param_metrics[f"{p_name}_fft_all"].item())
                 for p_name in self.global_param_names:
                     tsv_row.append(global_param_metrics[f"{p_name}_l1"].item())
                 for metric_name in self.audio_metrics:
@@ -694,8 +738,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
         Returns:
 
         """
-        assert x_hat.shape == x.shape
         bs, n_signals, n_samples = x_hat.shape
+        assert x.ndim == 3
+        assert x.size(0) == bs
+        assert x.size(2) == n_samples
 
         # Augment x_hat with a row of ones to account for the bias term.
         # ones shape: (bs, 1, n_samples)
