@@ -57,6 +57,9 @@ if __name__ == "__main__":
     log.info(f"\nWavetable directory: {wt_dir}\nFound {len(wt_paths)} wavetables")
     # wt_paths = [None]
 
+    # basic_shapes_wt_path = os.path.join(WAVETABLES_DIR, "ableton_basic_shapes", "basics__basic_shapes__4_1024.pt")
+    # basic_shapes_wt = tr.load(basic_shapes_wt_path, weights_only=True)
+
     config_path = os.path.join(CONFIGS_DIR, config_name)
 
     for seed, wt_path in itertools.product(seeds, wt_paths):
@@ -78,6 +81,9 @@ if __name__ == "__main__":
             wt_module = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
             synth.register_module("add_synth_module", wt_module)
             synth_hat = cli.model.synth_hat
+            # wt_module_hat = WavetableOsc(sr=sr, wt=basic_shapes_wt, is_trainable=True)
+            # synth_hat.register_module("add_synth_module", wt_module_hat)
+
             if not synth_hat.add_synth_module.is_trainable:
                 wt_module_hat = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
                 synth_hat.register_module("add_synth_module", wt_module_hat)

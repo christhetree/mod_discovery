@@ -22,10 +22,13 @@ if __name__ == "__main__":
     n_iter = 100
     bs = 32
     n_frames = 1501
-    x_n_signals = 3
-    x_hat_n_signals = 3
-    x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier.yml")
+    x_n_signals = 1
+    x_hat_n_signals = 1
+    # x_hat_n_signals = 3
+    # x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier.yml")
+    x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier_norm.yml")
     x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__model.yml")
+    # x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__model_norm.yml")
     metric_fn_s = {
         "l1": nn.L1Loss(),
         "esr": ESRLoss(),

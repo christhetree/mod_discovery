@@ -31,6 +31,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         loss_func: nn.Module,
         spectral_visualizer: LogMelSpecFeatureExtractor,
         model: Optional[nn.Module] = None,
+        # model_b: Optional[nn.Module] = None,
+        # model_c: Optional[nn.Module] = None,
         synth: Optional[SynthBase] = None,
         synth_hat: Optional[SynthBase] = None,
         synth_eval: Optional[SynthBase] = None,
@@ -74,6 +76,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         self.ac = ac
         self.model = model
+        # self.model_b = model_b
+        # self.model_c = model_c
         self.loss_func = loss_func
         self.spectral_visualizer = spectral_visualizer
         self.synth = synth
@@ -169,6 +173,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
     def on_train_start(self) -> None:
         self.global_n = 0
+        if tr.cuda.is_available():
+            self.model = tr.compile(self.model)
+            # self.synth = tr.compile(self.synth)
+            # self.synth_hat = tr.compile(self.synth_hat)
 
     def preprocess_batch(self, batch: Dict[str, T]) -> Dict[str, T | Dict[str, T]]:
         f0_hz = batch["f0_hz"]
@@ -282,9 +290,60 @@ class AcidDDSPLightingModule(pl.LightningModule):
         temp_param_metrics = {}
         global_param_metrics = {}
 
+        # synth_out_hat = {}
+
         # Perform model forward pass
         if self.use_model:
-            model_out = self.model(model_in_dict)
+            curr_epoch = self.current_epoch
+            total_epochs = self.trainer.max_epochs
+            nonlinear_frac = curr_epoch / total_epochs
+            model_out = self.model(model_in_dict, nonlinear_frac=nonlinear_frac)
+            # model_out = {}
+            # add_in = {"audio": x}
+            # add_model_out = self.model(add_in, tp_name="add_lfo")
+            # model_out.update(add_model_out)
+            # add_lfo = add_model_out["add_lfo"]
+            # if "add_lfo" in self.interp_temp_param_names_hat:
+            #     add_lfo = util.interpolate_dim(
+            #         add_lfo, self.ac.n_samples, dim=1, align_corners=True
+            #     )
+            # add_temp_params_hat = {"add_lfo": add_lfo}
+            # add_audio_hat, _ = self.synth_hat.additive_synthesis(
+            #     self.ac.n_samples,
+            #     f0_hz,
+            #     phase_hat,
+            #     add_temp_params_hat,
+            #     global_params_hat,
+            #     other_params,
+            # )
+            # sub_in = {"audio": x, "dry_audio": add_audio_hat.unsqueeze(1)}
+            # # sub_model_out = self.model(sub_in, tp_name="sub_lfo")
+            # sub_model_out = self.model_b(sub_in, tp_name="sub_lfo")
+            # model_out.update(sub_model_out)
+            # sub_lfo = sub_model_out["sub_lfo_adapted"]
+            # if "sub_lfo_adapted" in self.interp_temp_param_names_hat:
+            #     sub_lfo = util.interpolate_dim(
+            #         sub_lfo, self.ac.n_samples, dim=1, align_corners=True
+            #     )
+            # sub_temp_params_hat = {"sub_lfo_adapted": sub_lfo}
+            # sub_audio_hat, _ = self.synth_hat.subtractive_synthesis(
+            #     add_audio_hat, sub_temp_params_hat, global_params_hat, other_params
+            # )
+            # env_in = {"audio": x, "dry_audio": sub_audio_hat.unsqueeze(1)}
+            # # env_model_out = self.model(env_in, tp_name="env")
+            # env_model_out = self.model_c(env_in, tp_name="env")
+            # model_out.update(env_model_out)
+            # env_hat = env_model_out["env"]
+            # if "env" in self.interp_temp_param_names_hat:
+            #     env_hat = util.interpolate_dim(
+            #         env_hat, self.ac.n_samples, dim=1, align_corners=True
+            #     )
+            # env_audio_hat = sub_audio_hat * env_hat
+            # synth_out_hat = {
+            #     "add_audio": add_audio_hat,
+            #     "sub_audio": sub_audio_hat,
+            #     "env_audio": env_audio_hat,
+            # }
 
             # Postprocess temp_params_hat
             for p_name in self.temp_param_names_hat:
@@ -627,7 +686,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 self.trainer.accumulate_grad_batches == 1
             ), "Grad accumulation is not supported with multiple optimizers"
             self.automatic_optimization = False
-            self.model_opt = self.model_opt(self.model.parameters())
+            model_params = list(self.model.parameters())
+            # model_params.extend(list(self.model_b.parameters()))
+            # model_params.extend(list(self.model_c.parameters()))
+            self.model_opt = self.model_opt(model_params)
             self.synth_opt = self.synth_opt(self.synth_hat.parameters())
             log.info(
                 f"Using multiple optimizers: "

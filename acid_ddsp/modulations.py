@@ -31,6 +31,8 @@ class ModSignalGenRandomBezier(ModSignalGenerator):
         min_seg_interval_frac: float = 0.25,
         softmax_tau: float = 0.25,
         is_c1_cont: bool = False,
+        normalize: bool = False,
+        eps: float = 1e-8,
     ):
         super().__init__()
         assert 1 <= min_n_seg <= max_n_seg
@@ -46,6 +48,8 @@ class ModSignalGenRandomBezier(ModSignalGenerator):
         if is_c1_cont:
             assert min_degree >= 3
         self.is_c1_cont = is_c1_cont
+        self.normalize = normalize
+        self.eps = eps
 
     def forward(self, n_frames: int, rand_gen: Optional[tr.Generator] = None) -> T:
         if self.min_n_seg == self.max_n_seg:
@@ -86,8 +90,12 @@ class ModSignalGenRandomBezier(ModSignalGenerator):
 
         mod_sig = bezier.make_bezier(cp=cp)
         mod_sig = mod_sig.squeeze(0)
-        assert mod_sig.min() > 0.0
-        assert mod_sig.max() < 1.0
+        if self.normalize:
+            mod_sig_range = mod_sig.max() - mod_sig.min()
+            mod_sig = (mod_sig - mod_sig.min()) / (mod_sig_range + self.eps)
+
+        assert mod_sig.min() >= 0.0
+        assert mod_sig.max() <= 1.0
         # from matplotlib import pyplot as plt
         # plt.plot(mod_sig)
         # plt.show()

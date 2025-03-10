@@ -442,6 +442,7 @@ class WavetableOsc(SynthModule):
         assert new_wt.min() >= -1.0, f"new_wt.min() = {new_wt.min()}"
         assert new_wt.max() <= 1.0, f"new_wt.max() = {new_wt.max()}"
         self.wt[:, :] = new_wt[:, :]
+        # self.wt = nn.Parameter(new_wt)
 
     def calc_lp_sinc_blackman_coeff(self, cf_hz: T) -> T:
         assert cf_hz.ndim == 2

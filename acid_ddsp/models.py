@@ -142,6 +142,7 @@ class Spectral2DCNN(nn.Module):
         global_param_names: Optional[List[str]] = None,
         dropout: float = 0.25,
         n_frames: int = 188,
+        eps: float = 1e-8,
     ) -> None:
         super().__init__()
         self.fe = fe
@@ -152,6 +153,7 @@ class Spectral2DCNN(nn.Module):
         self.use_ln = use_ln
         self.dropout = dropout
         self.n_frames = n_frames
+        self.eps = eps
 
         # Define default params
         if out_channels is None:
@@ -304,7 +306,13 @@ class Spectral2DCNN(nn.Module):
                 nn.Sigmoid(),
             )
 
-    def forward(self, x: Dict[str, T]) -> Dict[str, T]:
+    def forward(
+        self,
+        x: Dict[str, T],
+        tp_name: Optional[str] = None,
+        nonlinear_frac: Optional[float] = None,
+    ) -> Dict[str, T]:
+        # x_dry = x.get("dry_audio")
         x = x["audio"]
         assert x.ndim == 3
         out_dict = {}
@@ -317,6 +325,14 @@ class Spectral2DCNN(nn.Module):
             n_frames == self.n_frames
         ), f"Expected n_frames: {self.n_frames} but got: {n_frames}"
 
+        # # Extract dry features
+        # if x_dry is None:
+        #     log_spec_dry = tr.zeros_like(log_spec)
+        # else:
+        #     log_spec_dry = self.fe(x_dry)
+        # out_dict["log_spec_x_dry"] = log_spec_dry
+        # log_spec = tr.cat([log_spec, log_spec_dry], dim=1)
+
         # Calc latent
         x = self.cnn(log_spec)
         x = tr.mean(x, dim=-2)
@@ -326,6 +342,9 @@ class Spectral2DCNN(nn.Module):
 
         # Calc temporal params
         for name, tp in self.temp_params.items():
+            if tp_name is not None and name != tp_name:
+                continue
+
             # # For PiecewiseBezierDiffSeg
             # si_logits = self.seg_intervals_mlp[name](latent)
             # si = self.splines[name].logits_to_seg_intervals(si_logits)
@@ -362,6 +381,15 @@ class Spectral2DCNN(nn.Module):
                 vals = (end_vals + start_vals) / 2
                 x[:, :-1, -1] = vals
                 x[:, 1:, 0] = vals
+
+                if nonlinear_frac is not None and x.size(2) > 2:
+                    assert 0.0 <= nonlinear_frac <= 1.0
+                    x_linear = x[:, :, [0, -1]]
+                    x_linear = util.interpolate_dim(
+                        x_linear, x.size(2), dim=2, align_corners=True
+                    )
+                    x = (nonlinear_frac * x) + ((1.0 - nonlinear_frac) * x_linear)
+
                 # TODO(cm): check whether this is required,
                 #  I'm trying to prevent flattening occurring along the temporal axis
                 x = tr.swapaxes(x, 1, 2)
@@ -374,6 +402,12 @@ class Spectral2DCNN(nn.Module):
                     cp_are_logits = False
                 x = self.splines[name](cp, cp_are_logits, si_logits)
                 x = tr.swapaxes(x, 1, 2)
+
+                # if tp.is_bounded:
+                #     x_min = tr.min(x, dim=1, keepdim=True).values
+                #     x_max = tr.max(x, dim=1, keepdim=True).values
+                #     x_range = x_max - x_min
+                #     x = (x - x_min) / (x_range + self.eps)
 
                 # # For PiecewiseBezierDiffSeg
                 # hop_len = self.n_frames // self.n_segments

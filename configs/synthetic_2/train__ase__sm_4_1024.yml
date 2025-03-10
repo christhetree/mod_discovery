@@ -1,7 +1,9 @@
 custom:
   project_name: acid_ddsp_2
-  model_name: mss__s12d3__sm_4_1024
+  model_name: mss_prime__s12d3__sm_4_1024_linear
+#  model_name: mss__s12d3__sm_4_1024_iter_3models
   dataset_name: ableton__ase
+#  dataset_name: ableton__ase_0to1
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
   use_wandb_gpu: true
@@ -19,6 +21,7 @@ data:
   class_path: acid_ddsp.data_modules.SeedDataModule
   init_args:
     batch_size: 32
+#    batch_size: 16
     ac: audio_config.yml
     n_seeds: 1024
     mod_sig_gens:
@@ -30,6 +33,8 @@ data:
           max_degree: 3
           min_seg_interval_frac: 0.25
           softmax_tau: 0.25
+          normalize: false
+#          normalize: true
     global_param_names:
       - q
     temp_param_names:
@@ -52,6 +57,9 @@ model:
 
     use_model: true
     model: spectral_2dcnn_dd50__ase__sm.yml
+#    model: model_a.yml
+#    model_b: model_s.yml
+#    model_c: model_e.yml
     temp_param_names_hat:
       - add_lfo
       - sub_lfo
@@ -61,7 +69,8 @@ model:
       - env
     synth_hat: synth_ase__sm_4_1024.yml
 
-    loss_func: auraloss.freq.MultiResolutionSTFTLoss
+#    loss_func: auraloss.freq.MultiResolutionSTFTLoss
+    loss_func: mss_prime.yml
     use_p_loss: false
 #    use_p_loss: true
 #    loss_func: torch.nn.MSELoss

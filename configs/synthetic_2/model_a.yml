@@ -1,8 +1,7 @@
 class_path: models.Spectral2DCNN
 init_args:
   fe: log_mel_spec_dd50.yml
-  in_ch: 3
-#  in_ch: 6
+  in_ch: 6
   kernel_size: [5, 7]
   out_channels: [64, 64, 64, 64, 64, 64]
 #  temp_dilations: [1, 4, 16, 64, 256, 512]
@@ -11,28 +10,6 @@ init_args:
   use_ln: true
   temp_params:
     add_lfo:
-      dim: 1
-      act: none
-      is_spline: true
-      n_segments: 12
-      degree: 3
-      is_c1_cont: false
-      is_bounded: true
-      adapt_dim: 0
-    sub_lfo:
-      dim: 1
-      act: none
-      is_spline: true
-      n_segments: 12
-      degree: 3
-      is_c1_cont: false
-      is_bounded: false
-      adapt_dim: 5
-      adapt_act: none
-      adapt_use_latent: true
-#      adapt_use_latent: false
-      adapt_use_separate: true
-    env:
       dim: 1
       act: none
       is_spline: true

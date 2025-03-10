@@ -6,4 +6,4 @@ init_args:
   max_degree: 3
   min_seg_interval_frac: 1.0
   is_c1_cont: false
-  normalize: false
+  normalize: true

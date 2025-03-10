@@ -26,3 +26,4 @@ init_args:
 #  w_lin_mag: 0.0
 #  w_phs: 0.0
 #  mag_distance: L1
+#  mag_distance: L2
