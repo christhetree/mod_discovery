@@ -26,6 +26,9 @@ torch.set_float32_matmul_precision("high")
 # )
 warnings.simplefilter("ignore", UserWarning)
 
+os.makedirs("lightning_logs", exist_ok=True)
+os.makedirs("wandb_logs", exist_ok=True)
+
 
 if __name__ == "__main__":
     # config_name = "synthetic_2/train.yml"
@@ -50,6 +53,7 @@ if __name__ == "__main__":
         if not wt_name.startswith("basics__"):
             continue
         if not "galactica" in wt_name:
+        # if not "basic_shapes" in wt_name:
             continue
         filtered_wt_names.append(wt_name)
     wt_paths = [os.path.join(wt_dir, f"{wt_name}.pt") for wt_name in filtered_wt_names]

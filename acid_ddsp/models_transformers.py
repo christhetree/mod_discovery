@@ -1,9 +1,10 @@
 import logging
 import math
 import os
-from typing import Tuple, Literal
+from typing import Literal
 
 import torch as tr
+from torch import Tensor as T
 from torch import nn
 
 logging.basicConfig()
@@ -24,7 +25,7 @@ class PositionalEncoding(nn.Module):
 
         self.pe = nn.Parameter(pe)
 
-    def forward(self, x: tr.Tensor) -> tr.Tensor:
+    def forward(self, x: T) -> T:
         pe = self.pe[:, : x.size(1), :]
         return x + pe
 
@@ -40,17 +41,17 @@ class PatchEmbed(nn.Module):
         stride: int,
         in_channels: int,
         d_model: int,
-        spec_shape: Tuple[int] = (128, 401),
+        spec_shape: (int, int) = (128, 401),
     ):
         super().__init__()
         assert stride < patch_size, "Overlap must be less than patch size"
 
         self.patch_size = patch_size
 
-        mel_padding = (stride - (spec_shape[0] - patch_size)) % stride
+        freq_padding = (stride - (spec_shape[0] - patch_size)) % stride
         time_padding = (stride - (spec_shape[1] - patch_size)) % stride
 
-        self.pad = nn.ZeroPad2d((0, mel_padding, 0, time_padding))
+        self.pad = nn.ZeroPad2d((0, freq_padding, 0, time_padding))
         self.projection = nn.Conv2d(
             in_channels=in_channels,
             out_channels=d_model,
@@ -60,12 +61,12 @@ class PatchEmbed(nn.Module):
 
         self.num_tokens = self._get_num_tokens(in_channels, spec_shape)
 
-    def _get_num_tokens(self, in_channels, spec_shape):
+    def _get_num_tokens(self, in_channels: int, spec_shape: (int, int)) -> int:
         x = tr.randn(1, in_channels, *spec_shape, device=self.projection.weight.device)
         out_shape = self.projection(self.pad(x)).shape
         return math.prod(out_shape[-2:])
 
-    def forward(self, x: tr.Tensor) -> tr.Tensor:
+    def forward(self, x: T) -> T:
         x = self.pad(x)
         x = self.projection(x)
         x = x.flatten(2).transpose(1, 2)
@@ -86,9 +87,17 @@ class AudioSpectrogramTransformer(nn.Module):
         patch_size: int = 16,
         patch_stride: int = 10,
         input_channels: int = 2,
-        spec_shape: Tuple[int] = (128, 401),
+        spec_shape: (int, int) = (128, 401),
     ):
         super().__init__()
+        self.d_model = d_model
+        self.n_heads = n_heads
+        self.n_layers = n_layers
+        self.n_embed_tokens = n_embed_tokens
+        self.patch_size = patch_size
+        self.patch_stride = patch_stride
+        self.input_channels = input_channels
+        self.spec_shape = spec_shape
 
         self.patch_embed = PatchEmbed(
             patch_size=patch_size,
@@ -103,43 +112,45 @@ class AudioSpectrogramTransformer(nn.Module):
             self.patch_embed.num_tokens + n_embed_tokens,
             init="norm0.02",
         )
-        self.embed_tokens = nn.Parameter(
-            tr.empty(1, n_embed_tokens, d_model).normal_(0.0, 1e-6)
-        )
+        self.embed_tokens = None
+        if n_embed_tokens > 0:
+            self.embed_tokens = nn.Parameter(
+                tr.empty(1, n_embed_tokens, d_model).normal_(mean=0.0, std=1e-6)
+            )
 
-        self.blocks = nn.ModuleList(
-            [
-                nn.TransformerEncoderLayer(
-                    d_model,
-                    n_heads,
-                    d_model,
-                    0.0,
-                    "gelu",
-                    batch_first=True,
-                    norm_first=True,
-                )
-                for _ in range(n_layers)
-            ]
-        )
+        blocks = [
+            nn.TransformerEncoderLayer(
+                d_model,
+                n_heads,
+                d_model,
+                dropout=0.0,
+                activation="gelu",
+                batch_first=True,
+                norm_first=True,
+            )
+            for _ in range(n_layers)
+        ]
+        self.blocks = nn.Sequential(*blocks)
         self.out_proj = nn.Linear(d_model, d_model)
 
-    def forward(self, x: tr.Tensor) -> tr.Tensor:
+    def forward(self, x: T) -> T:
         # produce input sequence
         x = self.patch_embed(x)
 
-        embed_tokens = self.embed_tokens.expand(x.shape[0], -1, -1)
-        x = tr.cat((embed_tokens, x), dim=1)
+        if self.n_embed_tokens > 0:
+            embed_tokens = self.embed_tokens.expand(x.shape[0], -1, -1)
+            x = tr.cat((embed_tokens, x), dim=1)
 
         x = self.positional_encoding(x)
 
         # apply transformer
-        for block in self.blocks:
-            x = block(x)
+        x = self.blocks(x)
 
         # take just the embed tokens
-        x = x[:, : self.embed_tokens.size(1)]
-        x = self.out_proj(x)
+        if self.n_embed_tokens > 0:
+            x = x[:, : self.embed_tokens.size(1)]
 
+        x = self.out_proj(x)
         return x
 
 
@@ -152,16 +163,17 @@ class ASTWithProjectionHead(AudioSpectrogramTransformer):
         d_out: int = 16,
         n_heads: int = 8,
         n_layers: int = 16,
+        n_embed_tokens: int = 1,
         patch_size: int = 16,
         patch_stride: int = 10,
         input_channels: int = 2,
-        spec_shape: Tuple[int] = (128, 401),
+        spec_shape: (int, int) = (128, 401),
     ):
         super().__init__(
             d_model=d_model,
             n_heads=n_heads,
             n_layers=n_layers,
-            n_embed_tokens=1,
+            n_embed_tokens=n_embed_tokens,
             patch_size=patch_size,
             patch_stride=patch_stride,
             input_channels=input_channels,
@@ -175,13 +187,13 @@ class ASTWithProjectionHead(AudioSpectrogramTransformer):
             nn.Linear(d_model, d_out),
         )
 
-    def forward(self, x: tr.Tensor) -> tr.Tensor:
+    def forward(self, x: T) -> T:
         return super().forward(x).squeeze(1)
 
 
 if __name__ == "__main__":
     # Test ASTWithProjectionHead
-    model = ASTWithProjectionHead()
+    model = ASTWithProjectionHead(n_embed_tokens=3)
     x = tr.randn(1, 2, 128, 401)
     y = model(x)
     print(y.shape)

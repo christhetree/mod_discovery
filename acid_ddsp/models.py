@@ -13,6 +13,7 @@ from torchaudio.transforms import AmplitudeToDB
 from curves import PiecewiseBezier, PiecewiseBezierDiffSeg
 from feature_extraction import LogMelSpecFeatureExtractor
 import util
+from models_transformers import ASTWithProjectionHead, AudioSpectrogramTransformer
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -199,6 +200,19 @@ class Spectral2DCNN(nn.Module):
         self.cnn = nn.Sequential(*layers)
         self.latent_dim = out_channels[-1]
 
+        # self.latent_dim = 128
+        # n_embed_tokens = 12
+        # self.transformer = AudioSpectrogramTransformer(
+        #     d_model=self.latent_dim,
+        #     n_heads=8,
+        #     n_layers=16,
+        #     n_embed_tokens=n_embed_tokens,
+        #     patch_size=16,
+        #     patch_stride=8,
+        #     input_channels=in_ch,
+        #     spec_shape=(128, n_frames),
+        # )
+
         # ADSR
         # self.loudness_extractor = LoudnessExtractor(
         #     sr=fe.sr, n_fft=fe.n_fft, hop_len=fe.hop_len
@@ -228,16 +242,25 @@ class Spectral2DCNN(nn.Module):
             out_dim = tp.dim
             if tp.is_spline:
                 out_dim = tp.dim * (tp.degree + 1)  # For PiecewiseBezierDiffSeg
-            n_hidden = (out_channels[-1] + out_dim) // 2
+            n_hidden = (self.latent_dim + out_dim) // 2
             self.out_temp[name] = nn.Sequential(
-                BidirectionalLSTM(out_channels[-1], out_channels[-1] // 2, unroll=True),
-                nn.Linear(out_channels[-1], n_hidden),
+                BidirectionalLSTM(self.latent_dim, self.latent_dim // 2, unroll=True),
+                nn.Linear(self.latent_dim, n_hidden),
                 nn.Dropout(p=dropout),
                 nn.PReLU(),
                 nn.Linear(n_hidden, n_hidden),
                 nn.Dropout(p=dropout),
                 nn.PReLU(),
                 nn.Linear(n_hidden, out_dim),
+
+                # nn.LayerNorm([n_embed_tokens, self.latent_dim]),
+                # nn.Linear(self.latent_dim, n_hidden),
+                # nn.Dropout(p=dropout),
+                # nn.GELU(),
+                # nn.Linear(n_hidden, n_hidden),
+                # nn.Dropout(p=dropout),
+                # nn.GELU(),
+                # nn.Linear(n_hidden, out_dim),
             )
             self.out_temp_acts[name] = get_activation(tp.act)
             # Make adapters (changes dimensions of mod sig from N to M)
@@ -257,6 +280,15 @@ class Spectral2DCNN(nn.Module):
                             nn.PReLU(),
                             nn.Linear(n_hidden, 1),
                             get_activation(tp.adapt_act),
+
+                            # nn.Linear(adapt_in_dim, n_hidden),
+                            # nn.Dropout(p=dropout),
+                            # nn.GELU(),
+                            # nn.Linear(n_hidden, n_hidden),
+                            # nn.Dropout(p=dropout),
+                            # nn.GELU(),
+                            # nn.Linear(n_hidden, 1),
+                            # get_activation(tp.adapt_act),
                         )
                 else:
                     self.adapters[name] = nn.Sequential(
@@ -268,6 +300,15 @@ class Spectral2DCNN(nn.Module):
                         nn.PReLU(),
                         nn.Linear(n_hidden, tp.adapt_dim),
                         get_activation(tp.adapt_act),
+
+                        # nn.Linear(adapt_in_dim, n_hidden),
+                        # nn.Dropout(p=dropout),
+                        # nn.GELU(),
+                        # nn.Linear(n_hidden, n_hidden),
+                        # nn.Dropout(p=dropout),
+                        # nn.GELU(),
+                        # nn.Linear(n_hidden, tp.adapt_dim),
+                        # get_activation(tp.adapt_act),
                     )
             if tp.is_spline:
                 # Make splines
@@ -294,9 +335,9 @@ class Spectral2DCNN(nn.Module):
         # Define global params
         self.out_global = nn.ModuleDict()
         for param_name in global_param_names:
-            n_hidden = (out_channels[-1] + 1) // 2
+            n_hidden = (self.latent_dim + 1) // 2
             self.out_global[param_name] = nn.Sequential(
-                nn.Linear(out_channels[-1], n_hidden),
+                nn.Linear(self.latent_dim, n_hidden),
                 nn.Dropout(p=dropout),
                 nn.PReLU(),
                 nn.Linear(n_hidden, n_hidden),
@@ -337,6 +378,8 @@ class Spectral2DCNN(nn.Module):
         x = self.cnn(log_spec)
         x = tr.mean(x, dim=-2)
         latent = x.swapaxes(1, 2)
+        # latent = self.transformer(log_spec)
+        # assert not latent.isnan().any(), "NaNs in latent"
         out_dict["latent"] = latent
         global_latent = tr.mean(latent, dim=-2)
 

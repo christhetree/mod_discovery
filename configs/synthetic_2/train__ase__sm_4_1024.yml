@@ -1,8 +1,8 @@
 custom:
   project_name: acid_ddsp_2
-  model_name: mss_prime__s12d3__sm_4_1024_linear
-#  model_name: mss__s12d3__sm_4_1024_iter_3models
-  dataset_name: ableton__ase
+#  model_name: mss__s12d3__sm_4_1024_linear__trans_128_embed_12
+  model_name: mss__s12d3__sm_4_1024_linear
+  dataset_name: ableton_bs__ase
 #  dataset_name: ableton__ase_0to1
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
@@ -11,7 +11,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [5]
+  devices: [3]
   max_epochs: 50
   num_sanity_val_steps: 1
   accumulate_grad_batches: 1
@@ -69,8 +69,8 @@ model:
       - env
     synth_hat: synth_ase__sm_4_1024.yml
 
-#    loss_func: auraloss.freq.MultiResolutionSTFTLoss
-    loss_func: mss_prime.yml
+    loss_func: auraloss.freq.MultiResolutionSTFTLoss
+#    loss_func: mss_prime.yml
     use_p_loss: false
 #    use_p_loss: true
 #    loss_func: torch.nn.MSELoss
