@@ -31,7 +31,6 @@ os.makedirs("wandb_logs", exist_ok=True)
 
 
 if __name__ == "__main__":
-    # config_name = "synthetic_2/train.yml"
     config_name = "synthetic_2/train__ase__sm_4_1024.yml"
     seeds = [42]
     # seeds = [42, 42, 3, 42]

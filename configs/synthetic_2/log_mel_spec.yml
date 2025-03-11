@@ -6,5 +6,7 @@ init_args:
   n_mels: 128
   normalized: false
   center: true
+  use_delta: false
+  use_delta_delta: false
   freq_mask_amount: 0.0
-  eps: 1e-7
+  eps: 1e-8

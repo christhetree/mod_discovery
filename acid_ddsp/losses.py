@@ -2,7 +2,6 @@ import logging
 import os
 from typing import Optional
 
-import numpy as np
 import torch as tr
 from kymatio.torch import TimeFrequencyScattering, Scattering1D
 from torch import Tensor as T
@@ -83,15 +82,15 @@ class Scat1DLoss(nn.Module):
         Sx_target = Sx_target[:, :, 1:, :]  # Remove the 0th order coefficients
 
         if self.max_order == 1:
-            dist = tr.linalg.norm(Sx_target - Sx, ord=self.p, dim=(-2, -1))
+            dist = tr.linalg.vector_norm(Sx_target - Sx, ord=self.p, dim=(-2, -1))
         else:
-            dist = tr.linalg.norm(Sx_target - Sx, ord=self.p, dim=-1)
+            dist = tr.linalg.vector_norm(Sx_target - Sx, ord=self.p, dim=-1)
 
         dist = tr.mean(dist)
         return dist
 
 
-class JTFSLoss(nn.Module):
+class JTFSTLoss(nn.Module):
     def __init__(
         self,
         shape: int,
@@ -131,9 +130,9 @@ class JTFSLoss(nn.Module):
         if self.format == "time":
             Sx = Sx[:, :, 1:, :]  # Remove the 0th order coefficients
             Sx_target = Sx_target[:, :, 1:, :]  # Remove the 0th order coefficients
-            dist = tr.linalg.norm(Sx_target - Sx, ord=self.p, dim=-1)
+            dist = tr.linalg.vector_norm(Sx_target - Sx, ord=self.p, dim=-1)
         else:
-            dist = tr.linalg.norm(Sx_target - Sx, ord=self.p, dim=(-2, -1))
+            dist = tr.linalg.vector_norm(Sx_target - Sx, ord=self.p, dim=(-2, -1))
         dist = tr.mean(dist)
         return dist
 
@@ -160,7 +159,7 @@ class ESRLoss(nn.Module):
 
     def forward(self, input: T, target: T) -> T:
         num = ((target - input) ** 2).sum(dim=-1)
-        denom = (target ** 2).sum(dim=-1) + self.eps
+        denom = (target**2).sum(dim=-1) + self.eps
         losses = num / denom
         losses = self.apply_reduction(losses, reduction=self.reduction)
         return losses

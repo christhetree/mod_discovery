@@ -1,6 +1,5 @@
 import logging
 import os
-from typing import Optional
 
 import librosa
 import torch as tr
@@ -29,7 +28,7 @@ class LogMelSpecFeatureExtractor(nn.Module):
         use_delta_delta: bool = False,
         delta_win_ms: int = 50,
         freq_mask_amount: float = 0.0,
-        eps: float = 1e-7,
+        eps: float = 1e-8,
     ) -> None:
         super().__init__()
         self.sr = sr

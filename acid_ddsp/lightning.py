@@ -31,8 +31,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         loss_func: nn.Module,
         spectral_visualizer: LogMelSpecFeatureExtractor,
         model: Optional[nn.Module] = None,
-        # model_b: Optional[nn.Module] = None,
-        # model_c: Optional[nn.Module] = None,
         synth: Optional[SynthBase] = None,
         synth_hat: Optional[SynthBase] = None,
         synth_eval: Optional[SynthBase] = None,
@@ -76,8 +74,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         self.ac = ac
         self.model = model
-        # self.model_b = model_b
-        # self.model_c = model_c
         self.loss_func = loss_func
         self.spectral_visualizer = spectral_visualizer
         self.synth = synth
@@ -317,8 +313,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             #     other_params,
             # )
             # sub_in = {"audio": x, "dry_audio": add_audio_hat.unsqueeze(1)}
-            # # sub_model_out = self.model(sub_in, tp_name="sub_lfo")
-            # sub_model_out = self.model_b(sub_in, tp_name="sub_lfo")
+            # sub_model_out = self.model(sub_in, tp_name="sub_lfo")
             # model_out.update(sub_model_out)
             # sub_lfo = sub_model_out["sub_lfo_adapted"]
             # if "sub_lfo_adapted" in self.interp_temp_param_names_hat:
@@ -330,8 +325,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             #     add_audio_hat, sub_temp_params_hat, global_params_hat, other_params
             # )
             # env_in = {"audio": x, "dry_audio": sub_audio_hat.unsqueeze(1)}
-            # # env_model_out = self.model(env_in, tp_name="env")
-            # env_model_out = self.model_c(env_in, tp_name="env")
+            # env_model_out = self.model(env_in, tp_name="env")
             # model_out.update(env_model_out)
             # env_hat = env_model_out["env"]
             # if "env" in self.interp_temp_param_names_hat:
@@ -599,6 +593,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     self.global_n,
                     loss.item(),
                 ]
+                # TODO(cm): parameterize temp_param metrics
                 for p_name in self.temp_param_names:
                     tsv_row.append(temp_param_metrics[f"{p_name}_l1"].item())
                     tsv_row.append(temp_param_metrics[f"{p_name}_l1_inv"].item())
@@ -686,10 +681,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 self.trainer.accumulate_grad_batches == 1
             ), "Grad accumulation is not supported with multiple optimizers"
             self.automatic_optimization = False
-            model_params = list(self.model.parameters())
-            # model_params.extend(list(self.model_b.parameters()))
-            # model_params.extend(list(self.model_c.parameters()))
-            self.model_opt = self.model_opt(model_params)
+            self.model_opt = self.model_opt(self.model.parameters())
             self.synth_opt = self.synth_opt(self.synth_hat.parameters())
             log.info(
                 f"Using multiple optimizers: "
@@ -714,76 +706,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         x_max = x.max(dim=1, keepdim=True).values
         x_flipped = x_max + x_min - x
         return x_flipped
-
-    @staticmethod
-    def invariant_compare_batch(
-        x: T,
-        x_hat: T,
-        compare_fn: nn.Module,
-        normalize: bool = True,
-        vflip: bool = True,
-        eps: float = 1e-8,
-    ) -> (T, T, T, str):
-        assert x.ndim == 2
-        assert x.shape == x_hat.shape
-        comparisons = [(x, x_hat, "default")]
-        if vflip:
-            x_hat_vflip = AcidDDSPLightingModule.flip_signal_vertically(x_hat)
-            comparisons.append((x, x_hat_vflip, "vflip"))
-        if normalize:
-            x_norm = AcidDDSPLightingModule.normalize_signal(x, eps)
-            x_hat_norm = AcidDDSPLightingModule.normalize_signal(x_hat, eps)
-            comparisons.append((x_norm, x_hat_norm, "norm"))
-            if vflip:
-                x_hat_norm_flipped = AcidDDSPLightingModule.flip_signal_vertically(
-                    x_hat_norm
-                )
-                comparisons.append((x_norm, x_hat_norm_flipped, "norm_vflip"))
-
-        min_val = float("inf")
-        min_x = None
-        min_x_hat = None
-        min_name = None
-        for x, x_hat, name in comparisons:
-            with tr.no_grad():
-                val = compare_fn(x_hat, x)
-            if val < min_val:
-                min_val = val
-                min_x = x
-                min_x_hat = x_hat
-                min_name = name
-        return min_val, min_x, min_x_hat, min_name
-
-    @staticmethod
-    def invariant_compare_individual(
-        x: T,
-        x_hat: T,
-        compare_fn: nn.Module,
-        normalize: bool = True,
-        vflip: bool = True,
-        eps: float = 1e-8,
-    ) -> (T, T, T, List[str]):
-        min_vals = []
-        min_x_s = []
-        min_x_hat_s = []
-        min_names = []
-        bs = x.size(0)
-        for idx in range(bs):
-            curr_x = x[idx : idx + 1]
-            curr_x_hat = x_hat[idx : idx + 1]
-            min_val, min_x, min_x_hat, min_name = (
-                AcidDDSPLightingModule.invariant_compare_batch(
-                    curr_x, curr_x_hat, compare_fn, normalize, vflip, eps
-                )
-            )
-            min_vals.append(min_val)
-            min_x_s.append(min_x)
-            min_x_hat_s.append(min_x_hat)
-            min_names.append(min_name)
-        min_val = tr.stack(min_vals, dim=0).mean()
-        min_x = tr.cat(min_x_s, dim=0)
-        min_x_hat = tr.cat(min_x_hat_s, dim=0)
-        return min_val, min_x, min_x_hat, min_names
 
     @staticmethod
     def calc_fft_mag_dist(x_hat: T, x: T, ignore_dc: bool = True) -> T:

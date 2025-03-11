@@ -1,9 +1,7 @@
 custom:
   project_name: acid_ddsp_2
-#  model_name: mss__s12d3__sm_4_1024_linear__trans_128_embed_12
   model_name: mss__s12d3__sm_4_1024_linear
-  dataset_name: ableton_bs__ase
-#  dataset_name: ableton__ase_0to1
+  dataset_name: ableton__ase
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
   use_wandb_gpu: true
@@ -49,7 +47,7 @@ model:
     ac: audio_config.yml
     spectral_visualizer: log_mel_spec.yml
 
-    synth: synth_ase.yml
+    synth: synth__ase.yml
     temp_param_names:
       - add_lfo
       - sub_lfo
@@ -57,9 +55,6 @@ model:
 
     use_model: true
     model: spectral_2dcnn_dd50__ase__sm.yml
-#    model: model_a.yml
-#    model_b: model_s.yml
-#    model_c: model_e.yml
     temp_param_names_hat:
       - add_lfo
       - sub_lfo
@@ -67,7 +62,7 @@ model:
     interp_temp_param_names_hat:
       - add_lfo
       - env
-    synth_hat: synth_ase__sm_4_1024.yml
+    synth_hat: synth__ase__sm_4_1024.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
 #    loss_func: mss_prime.yml

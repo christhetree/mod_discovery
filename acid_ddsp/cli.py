@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import suppress
 from typing import Optional, Dict, Any
 
 import torch as tr
@@ -165,14 +166,12 @@ class CustomLightningCLI(LightningCLI):
             f"{self.config.custom.model_name} "
             f"{self.config.custom.dataset_name} ================"
         )
-        try:
+        with suppress(Exception):
             log.info(
                 f"================ {self.config.optimizer.class_path} "
                 f"starting LR = {self.config.optimizer.init_args.lr:.6f} "
                 f"================ "
             )
-        except Exception:
-            pass
 
     @staticmethod
     def make_trainer_defaults() -> Dict[str, Any]:

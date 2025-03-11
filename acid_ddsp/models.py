@@ -182,7 +182,6 @@ class Spectral2DCNN(nn.Module):
 
         # Define CNN
         layers = []
-        # loudness_layers = []
         curr_n_bins = fe.n_bins
         for out_ch, b_dil, t_dil in zip(out_channels, bin_dilations, temp_dilations):
             layers.append(
@@ -190,11 +189,6 @@ class Spectral2DCNN(nn.Module):
                     in_ch, out_ch, kernel_size, b_dil, t_dil, pool_size, use_ln
                 )
             )
-            # loudness_layers.append(
-            #     Spectral2DCNNBlock(
-            #         in_ch, out_ch, (1, kernel_size[1]), 1, t_dil, (1, 1), use_ln
-            #     )
-            # )
             in_ch = out_ch
             curr_n_bins = curr_n_bins // pool_size[0]
         self.cnn = nn.Sequential(*layers)
@@ -211,23 +205,6 @@ class Spectral2DCNN(nn.Module):
         #     patch_stride=8,
         #     input_channels=in_ch,
         #     spec_shape=(128, n_frames),
-        # )
-
-        # ADSR
-        # self.loudness_extractor = LoudnessExtractor(
-        #     sr=fe.sr, n_fft=fe.n_fft, hop_len=fe.hop_len
-        # )
-        # self.loudness_cnn = nn.Sequential(*loudness_layers)
-        # n_hidden = (out_channels[-1] + 4) // 2
-        # self.loudness_mlp = nn.Sequential(
-        #     nn.Linear(out_channels[-1], n_hidden),
-        #     nn.Dropout(p=dropout),
-        #     nn.PReLU(),
-        #     nn.Linear(n_hidden, n_hidden),
-        #     nn.Dropout(p=dropout),
-        #     nn.PReLU(),
-        #     nn.Linear(n_hidden, 4),
-        #     nn.Sigmoid(),
         # )
 
         # Define temporal params
@@ -419,12 +396,14 @@ class Spectral2DCNN(nn.Module):
                 chunks = tr.stack(chunks, dim=1)
                 x = self.out_temp[name](chunks)
                 # TODO(cm): is there a better way to do this?
+                # Ensure the spline ends are continuous
                 end_vals = x[:, :-1, -1]
                 start_vals = x[:, 1:, 0]
                 vals = (end_vals + start_vals) / 2
                 x[:, :-1, -1] = vals
                 x[:, 1:, 0] = vals
 
+                # Start splines linear and become curvy as training progresses
                 if nonlinear_frac is not None and x.size(2) > 2:
                     assert 0.0 <= nonlinear_frac <= 1.0
                     x_linear = x[:, :, [0, -1]]
@@ -519,6 +498,8 @@ class Spectral2DCNN(nn.Module):
         return rf
 
 
+
+# Baselines models below here ==========================================================
 def mlp(in_size: int, hidden_size: int, n_layers: int) -> nn.Sequential:
     channels = [in_size] + (n_layers) * [hidden_size]
     net = []

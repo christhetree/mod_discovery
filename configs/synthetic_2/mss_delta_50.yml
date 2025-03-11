@@ -1,4 +1,0 @@
-class_path: losses_freq.DeltaMultiResolutionSTFTLoss
-init_args:
-  sample_rate: 16000
-  delta_win_ms: 50

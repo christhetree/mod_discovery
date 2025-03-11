@@ -6,7 +6,6 @@ from contextlib import suppress
 from typing import Any, Dict, List
 
 import torch as tr
-import torchaudio.functional
 import wandb
 from auraloss.time import ESRLoss
 from matplotlib import pyplot as plt
@@ -14,7 +13,6 @@ from pytorch_lightning import Trainer, Callback
 from pytorch_lightning.callbacks import LearningRateMonitor
 from torch import Tensor as T, nn
 
-import util
 from acid_ddsp.plotting import fig2img, plot_waveforms_stacked, plot_wavetable
 from lightning import AcidDDSPLightingModule
 from synth_modules import WavetableOsc
@@ -86,30 +84,6 @@ class LogModSigAndSpecCallback(Callback):
             log_spec_x = out_dict.get("log_spec_x")
             log_spec_x_hat = out_dict.get("log_spec_x_hat")
 
-            # temp_param = out_dict.get("temp_param")
-            # temp_params_hat = out_dict.get("temp_params_hat")
-            # mod_sig_esr = -1
-            # mod_sig_l1 = -1
-            # if pl_module.temp_params_name == pl_module.temp_params_name_hat:
-            #     if temp_param is not None and temp_params_hat is not None:
-            #         assert temp_param.ndim == 3 and temp_params_hat.ndim == 3
-            #         if temp_param.size(2) == 1 and temp_params_hat.size(2) == 1:
-            #             mod_sig_esr = self.esr(
-            #                 temp_param[0], temp_params_hat[0]
-            #             ).item()
-            #             mod_sig_l1 = self.l1(temp_param[0], temp_params_hat[0]).item()
-            #
-            # q = out_dict.get("q", [-1])
-            # q_hat = out_dict.get("q_hat", [-1])
-            # dist_gain = out_dict.get("dist_gain", [-1])
-            # dist_gain_hat = out_dict.get("dist_gain_hat", [-1])
-            # osc_shape = out_dict.get("osc_shape", [-1])
-            # osc_shape_hat = out_dict.get("osc_shape_hat", [-1])
-            # osc_gain = out_dict.get("osc_gain", [-1])
-            # osc_gain_hat = out_dict.get("osc_gain_hat", [-1])
-            # learned_alpha = out_dict.get("learned_alpha", [-1])
-            # learned_alpha_hat = out_dict.get("learned_alpha_hat", [-1])
-
             y_coords = pl_module.spectral_visualizer.center_freqs
             y_ticks = [
                 (idx, f"{f:.0f}")
@@ -157,89 +131,6 @@ class LogModSigAndSpecCallback(Callback):
                 ax[1].set_yticks(y_indices, y_tick_labels)
                 ax[1].set_ylabel("Freq (Hz)")
                 ax[1].set_title("log_spec_x_hat")
-
-            # # Plot delta spectrograms ===============================================
-            # delta1_log_spec_wet = torchaudio.functional.compute_deltas(
-            #     log_spec_x, win_length=150
-            # )
-            # # delta1_log_spec_wet = (log_spec_x[:, :, 2:] - log_spec_x[:, :, :-2]) / 2.0
-            # delta1_log_spec_wet_hat = torchaudio.functional.compute_deltas(
-            #     log_spec_x_hat, win_length=150
-            # )
-            # # delta1_log_spec_wet_hat = (
-            # #     log_spec_x_hat[:, :, 2:] - log_spec_x_hat[:, :, :-2]
-            # # ) / 2.0
-            # if delta1_log_spec_wet is not None and delta1_log_spec_wet_hat is not None:
-            #     vmin = min(
-            #         delta1_log_spec_wet[0].min(), delta1_log_spec_wet_hat[0].min()
-            #     )
-            #     vmax = max(
-            #         delta1_log_spec_wet[0].max(), delta1_log_spec_wet_hat[0].max()
-            #     )
-            # if delta1_log_spec_wet is not None:
-            #     ax[2].imshow(
-            #         delta1_log_spec_wet[0].numpy(),
-            #         extent=[
-            #             0,
-            #             delta1_log_spec_wet.size(2),
-            #             0,
-            #             delta1_log_spec_wet.size(1),
-            #         ],
-            #         aspect=delta1_log_spec_wet.size(2) / delta1_log_spec_wet.size(1),
-            #         origin="lower",
-            #         cmap="bwr",
-            #         interpolation="none",
-            #         vmin=vmin,
-            #         vmax=vmax,
-            #     )
-            #     ax[2].set_xlabel("n_frames")
-            #     ax[2].set_yticks(y_indices, y_tick_labels)
-            #     ax[2].set_ylabel("Freq (Hz)")
-            #     ax[2].set_title("delta1_log_spec_wet")
-            # if delta1_log_spec_wet_hat is not None:
-            #     ax[3].imshow(
-            #         delta1_log_spec_wet_hat[0].numpy(),
-            #         extent=[
-            #             0,
-            #             delta1_log_spec_wet_hat.size(2),
-            #             0,
-            #             delta1_log_spec_wet_hat.size(1),
-            #         ],
-            #         aspect=delta1_log_spec_wet_hat.size(2)
-            #         / delta1_log_spec_wet_hat.size(1),
-            #         origin="lower",
-            #         cmap="bwr",
-            #         interpolation="none",
-            #         vmin=vmin,
-            #         vmax=vmax,
-            #     )
-            #     ax[3].set_xlabel("n_frames")
-            #     ax[3].set_yticks(y_indices, y_tick_labels)
-            #     ax[3].set_ylabel("Freq (Hz)")
-            #     ax[3].set_title("delta1_log_spec_wet_hat")
-
-            # TODO(cm): tmp
-            # if temp_param is not None:
-            #     assert temp_param.ndim == 3
-            #     temp_param = util.linear_interpolate_dim(
-            #         temp_param, pl_module.ac.n_samples, dim=1, align_corners=True
-            #     )
-            #     temp_params_np = temp_param[0].numpy()
-            #     for idx in range(temp_params_np.shape[1]):
-            #         ax[2].plot(
-            #             temp_params_np[:, idx],
-            #             label=f"{pl_module.temp_params_name}_{idx}",
-            #             color="black",
-            #         )
-            #     ax[2].set(aspect=temp_param.size(1))
-            #     # mod_sig_fitted = piecewise_fitting_noncontinuous(
-            #     #     mod_sig_np, degree=degree, n_knots=n_segments - 1
-            #     # )
-            #     # ax[2].plot(
-            #     #     mod_sig_fitted,
-            #     #     label=f"poly{degree}s{n_segments}",
-            #     #     color="red"
-            #     # )
 
             # TODO(cm): tmp
             temp_params_all = [
