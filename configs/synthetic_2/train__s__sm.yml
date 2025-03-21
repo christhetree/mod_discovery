@@ -1,7 +1,8 @@
 custom:
   project_name: acid_ddsp_2
-  model_name: mss__s12d3_lin__sm_4_1024__no_latent_no_do_pos_enc
-  dataset_name: ableton__ase
+  model_name: mss__s12d3_lin__sm__no_latent_no_do_pos_enc
+#  model_name: mss__s12d3_lin__sm__no_latent_no_do_pos_enc_siren20
+  dataset_name: ableton__s
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
   use_wandb_gpu: true
@@ -9,7 +10,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [2]
+  devices: [7]
   max_epochs: 50
   num_sanity_val_steps: 1
   accumulate_grad_batches: 1
@@ -38,7 +39,6 @@ data:
     temp_param_names:
       - add_lfo
       - sub_lfo
-      - env
     num_workers: 4
 
 model:
@@ -51,18 +51,12 @@ model:
     temp_param_names:
       - add_lfo
       - sub_lfo
-      - env
 
     use_model: true
-    model: spectral_2dcnn_dd50__ase__sm.yml
+    model: spectral_2dcnn_dd50__s__sm.yml
     temp_param_names_hat:
-      - add_lfo
       - sub_lfo
-      - env
-    interp_temp_param_names_hat:
-      - add_lfo
-      - env
-    synth_hat: synth__ase__sm_4_1024.yml
+    synth_hat: synth__s__sm.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
 #    loss_func: mss_prime.yml
@@ -74,7 +68,5 @@ model:
 
 #    synth_opt: ../opt/adam_w__lr_1e-2.yml
 #    model_opt: ../opt/adam_w__lr_1e-3.yml
-    synth_opt: ../opt/sf_adam_w__lr_5e-2.yml
+#    synth_opt: ../opt/sf_adam_w__lr_5e-2.yml
     model_opt: ../opt/sf_adam_w__lr_5e-3.yml
-
-#optimizer: ../opt/adam_w__lr_1e-3.yml

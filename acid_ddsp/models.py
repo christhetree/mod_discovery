@@ -4,16 +4,16 @@ from dataclasses import dataclass
 from typing import Optional, List, Tuple, Dict
 
 import librosa as li
+import numpy as np
 import torch as tr
 from torch import Tensor as T
 from torch import nn
 from torch.nn import functional as F
 from torchaudio.transforms import AmplitudeToDB
 
-from curves import PiecewiseBezier, PiecewiseBezierDiffSeg
-from feature_extraction import LogMelSpecFeatureExtractor
 import util
-from models_transformers import ASTWithProjectionHead, AudioSpectrogramTransformer
+from curves import PiecewiseBezier
+from feature_extraction import LogMelSpecFeatureExtractor
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -59,6 +59,47 @@ class TempParam:
             assert self.is_spline
             assert not self.is_bounded
             assert self.degree >= 3
+
+
+class SineLayer(nn.Module):
+    # See paper sec. 3.2, final paragraph, and supplement Sec. 1.5 for discussion of omega_0.
+
+    # If is_first=True, omega_0 is a frequency factor which simply multiplies the activations before the
+    # nonlinearity. Different signals may require different omega_0 in the first layer - this is a
+    # hyperparameter.
+
+    # If is_first=False, then the weights will be divided by omega_0 so as to keep the magnitude of
+    # activations constant, but boost gradients to the weight matrix (see supplement Sec. 1.5)
+
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        bias: bool = True,
+        is_first: bool = False,
+        omega_0: float = 30,
+    ):
+        super().__init__()
+        self.omega_0 = omega_0
+        self.is_first = is_first
+
+        self.in_features = in_features
+        self.linear = nn.Linear(in_features, out_features, bias=bias)
+
+        self.init_weights()
+
+    def init_weights(self) -> None:
+        with tr.no_grad():
+            if self.is_first:
+                self.linear.weight.uniform_(-1 / self.in_features, 1 / self.in_features)
+            else:
+                self.linear.weight.uniform_(
+                    -np.sqrt(6 / self.in_features) / self.omega_0,
+                    np.sqrt(6 / self.in_features) / self.omega_0,
+                )
+
+    def forward(self, input: T) -> T:
+        return tr.sin(self.omega_0 * self.linear(input))
 
 
 class BidirectionalLSTM(nn.Module):
@@ -118,7 +159,6 @@ class Spectral2DCNNBlock(nn.Module):
         n_bin = x.size(2)
         n_frame = x.size(3)
         if self.use_ln:
-            # TODO(cm): parameterize eps
             x = F.layer_norm(x, [n_bin, n_frame])
         x = self.conv(x)
         x = self.pool(x)
@@ -143,7 +183,7 @@ class Spectral2DCNN(nn.Module):
         global_param_names: Optional[List[str]] = None,
         dropout: float = 0.25,
         n_frames: int = 188,
-        eps: float = 1e-8,
+        spline_eps: float = 1e-3,
     ) -> None:
         super().__init__()
         self.fe = fe
@@ -154,7 +194,7 @@ class Spectral2DCNN(nn.Module):
         self.use_ln = use_ln
         self.dropout = dropout
         self.n_frames = n_frames
-        self.eps = eps
+        self.spline_eps = spline_eps
 
         # Define default params
         if out_channels is None:
@@ -216,20 +256,21 @@ class Spectral2DCNN(nn.Module):
 
         for name, tp in self.temp_params.items():
             # Make frame by frame spline params or features
+            in_dim = self.latent_dim
+            # in_dim = self.latent_dim + 1
             out_dim = tp.dim
             if tp.is_spline:
                 out_dim = tp.dim * (tp.degree + 1)  # For PiecewiseBezierDiffSeg
             n_hidden = (self.latent_dim + out_dim) // 2
             self.out_temp[name] = nn.Sequential(
-                BidirectionalLSTM(self.latent_dim, self.latent_dim // 2, unroll=True),
-                nn.Linear(self.latent_dim, n_hidden),
+                BidirectionalLSTM(in_dim, in_dim // 2, unroll=True),
+                nn.Linear(in_dim, n_hidden),
                 nn.Dropout(p=dropout),
                 nn.PReLU(),
                 nn.Linear(n_hidden, n_hidden),
                 nn.Dropout(p=dropout),
                 nn.PReLU(),
                 nn.Linear(n_hidden, out_dim),
-
                 # nn.LayerNorm([n_embed_tokens, self.latent_dim]),
                 # nn.Linear(self.latent_dim, n_hidden),
                 # nn.Dropout(p=dropout),
@@ -242,9 +283,10 @@ class Spectral2DCNN(nn.Module):
             self.out_temp_acts[name] = get_activation(tp.act)
             # Make adapters (changes dimensions of mod sig from N to M)
             if tp.adapt_dim:
-                adapt_in_dim = tp.dim
+                # adapt_in_dim = tp.dim
+                adapt_in_dim = tp.dim + 1
                 if tp.adapt_use_latent:
-                    adapt_in_dim = tp.dim + self.latent_dim
+                    adapt_in_dim += self.latent_dim
                 n_hidden = (adapt_in_dim + tp.adapt_dim) // 2
                 if tp.adapt_use_separate:
                     for dim_idx in range(tp.adapt_dim):
@@ -252,12 +294,12 @@ class Spectral2DCNN(nn.Module):
                             nn.Linear(adapt_in_dim, n_hidden),
                             nn.Dropout(p=dropout),
                             nn.PReLU(),
+                            # SineLayer(adapt_in_dim, n_hidden, is_first=True, omega_0=20.0),
                             nn.Linear(n_hidden, n_hidden),
                             nn.Dropout(p=dropout),
                             nn.PReLU(),
                             nn.Linear(n_hidden, 1),
                             get_activation(tp.adapt_act),
-
                             # nn.Linear(adapt_in_dim, n_hidden),
                             # nn.Dropout(p=dropout),
                             # nn.GELU(),
@@ -272,12 +314,14 @@ class Spectral2DCNN(nn.Module):
                         nn.Linear(adapt_in_dim, n_hidden),
                         nn.Dropout(p=dropout),
                         nn.PReLU(),
+                        # SineLayer(
+                        #     adapt_in_dim, n_hidden, is_first=True, omega_0=20.0
+                        # ),
                         nn.Linear(n_hidden, n_hidden),
                         nn.Dropout(p=dropout),
                         nn.PReLU(),
                         nn.Linear(n_hidden, tp.adapt_dim),
                         get_activation(tp.adapt_act),
-
                         # nn.Linear(adapt_in_dim, n_hidden),
                         # nn.Dropout(p=dropout),
                         # nn.GELU(),
@@ -291,7 +335,11 @@ class Spectral2DCNN(nn.Module):
                 # Make splines
                 # For PiecewiseBezier
                 self.splines[name] = PiecewiseBezier(
-                    n_frames, tp.n_segments, tp.degree, is_c1_cont=tp.is_c1_cont
+                    n_frames,
+                    tp.n_segments,
+                    tp.degree,
+                    is_c1_cont=tp.is_c1_cont,
+                    eps=self.spline_eps,
                 )
                 # self.splines[name] = PiecewiseBezier(n_frames, n_segments, degree, is_c1_cont=True)
 
@@ -323,6 +371,8 @@ class Spectral2DCNN(nn.Module):
                 nn.Linear(n_hidden, out_features=1),
                 nn.Sigmoid(),
             )
+
+        self.register_buffer("pos_enc", tr.linspace(0, 1, self.n_frames).view(1, -1, 1))
 
     def forward(
         self,
@@ -373,6 +423,8 @@ class Spectral2DCNN(nn.Module):
             # out_dict[f"{name}_seg_indices"] = seg_end_indices
             si_logits = None
             x = latent
+            pos_enc = self.pos_enc.expand(x.size(0), x.size(1), -1)
+            # x = tr.cat([x, pos_enc], dim=-1)
 
             # x_s = []
             # seg_end_indices_all = []
@@ -422,14 +474,15 @@ class Spectral2DCNN(nn.Module):
                     cp_are_logits = True
                 else:
                     cp_are_logits = False
-                x = self.splines[name](cp, cp_are_logits, si_logits)
+                x = self.splines[name](
+                    cp=cp, cp_are_logits=cp_are_logits, si_logits=si_logits
+                )
                 x = tr.swapaxes(x, 1, 2)
 
-                # if tp.is_bounded:
-                #     x_min = tr.min(x, dim=1, keepdim=True).values
-                #     x_max = tr.max(x, dim=1, keepdim=True).values
-                #     x_range = x_max - x_min
-                #     x = (x - x_min) / (x_range + self.eps)
+                # x_min = tr.min(x, dim=1, keepdim=True).values
+                # x_max = tr.max(x, dim=1, keepdim=True).values
+                # x_range = x_max - x_min
+                # x = (x - x_min) / (x_range + self.eps)
 
                 # # For PiecewiseBezierDiffSeg
                 # hop_len = self.n_frames // self.n_segments
@@ -461,7 +514,8 @@ class Spectral2DCNN(nn.Module):
             out_dict[name] = x.squeeze(-1)
 
             if tp.adapt_dim:
-                adapt_in = x
+                # adapt_in = x
+                adapt_in = tr.cat([x, pos_enc], dim=-1)
                 if tp.adapt_use_latent:
                     assert chunks is not None
                     # TODO(cm): look into this
@@ -496,7 +550,6 @@ class Spectral2DCNN(nn.Module):
         for dil in dilations[1:]:
             rf = rf + ((kernel_size - 1) * dil)
         return rf
-
 
 
 # Baselines models below here ==========================================================

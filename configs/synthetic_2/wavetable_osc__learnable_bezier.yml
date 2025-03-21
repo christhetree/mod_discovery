@@ -1,0 +1,9 @@
+class_path: acid_ddsp.synth_modules.BezierWavetableOsc
+init_args:
+  sr: 16000
+  n_pos: 4
+  n_wt_samples: 1024
+  n_segments: 12
+  degree: 3
+  aa_filter_n: 129
+  is_trainable: true

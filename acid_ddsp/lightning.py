@@ -167,12 +167,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
     def load_state_dict(self, state_dict: Mapping[str, Any], **kwargs):
         return super().load_state_dict(state_dict, strict=False)
 
-    def on_train_start(self) -> None:
+    def on_fit_start(self) -> None:
         self.global_n = 0
-        if tr.cuda.is_available():
-            self.model = tr.compile(self.model)
-            # self.synth = tr.compile(self.synth)
-            # self.synth_hat = tr.compile(self.synth_hat)
+        # if tr.cuda.is_available():
+        #     self.model = tr.compile(self.model)
+        #     self.synth = tr.compile(self.synth)
+        #     self.synth_hat = tr.compile(self.synth_hat)
 
     def preprocess_batch(self, batch: Dict[str, T]) -> Dict[str, T | Dict[str, T]]:
         f0_hz = batch["f0_hz"]
@@ -463,28 +463,40 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     tp_hat, tp.size(2), dim=1, align_corners=True
                 )
                 tp_hat_s.append(tp_hat)
-            tp_hat = tr.stack(tp_hat_s, dim=1)
-            tp_pred = AcidDDSPLightingModule.compute_lstsq_with_bias(tp_hat, tp)
-            assert tp_pred.size(1) == len(self.temp_param_names)
-            for idx, p_name in enumerate(self.temp_param_names):
-                curr_tp = tp[:, idx, :]
-                curr_tp_pred = tp_pred[:, idx, :]
-                temp_params_hat_inv[f"{p_name}_hat_inv_all"] = curr_tp_pred
-                with tr.no_grad():
-                    l1 = self.l1(curr_tp_pred, curr_tp)
-                    esr = self.esr(curr_tp_pred, curr_tp)
-                    mse = self.mse(curr_tp_pred, curr_tp)
-                    fft_mag_dist = AcidDDSPLightingModule.calc_fft_mag_dist(
-                        curr_tp_pred, curr_tp
-                    )
-                self.log(f"{stage}/{p_name}_l1_inv_all", l1, prog_bar=False)
-                self.log(f"{stage}/{p_name}_esr_inv_all", esr, prog_bar=False)
-                self.log(f"{stage}/{p_name}_mse_inv_all", mse, prog_bar=False)
-                self.log(f"{stage}/{p_name}_fft_inv_all", fft_mag_dist, prog_bar=False)
-                temp_param_metrics[f"{p_name}_l1_inv_all"] = l1
-                temp_param_metrics[f"{p_name}_esr_inv_all"] = esr
-                temp_param_metrics[f"{p_name}_mse_inv_all"] = mse
-                temp_param_metrics[f"{p_name}_fft_inv_all"] = fft_mag_dist
+                if name == "add_lfo":
+                    lfo_max = tp_hat.max(dim=1).values
+                    lfo_min = tp_hat.min(dim=1).values
+                    lfo_range = lfo_max - lfo_min
+                    max_range = lfo_range.max()
+                    self.log(f"{stage}/add_lfo_max_range", max_range, prog_bar=False)
+                    max_max = lfo_max.max()
+                    self.log(f"{stage}/add_lfo_max", max_max, prog_bar=False)
+                    min_min = lfo_min.min()
+                    self.log(f"{stage}/add_lfo_min", min_min, prog_bar=False)
+
+            if tp_hat_s:
+                tp_hat = tr.stack(tp_hat_s, dim=1)
+                tp_pred = AcidDDSPLightingModule.compute_lstsq_with_bias(tp_hat, tp)
+                assert tp_pred.size(1) == len(self.temp_param_names)
+                for idx, p_name in enumerate(self.temp_param_names):
+                    curr_tp = tp[:, idx, :]
+                    curr_tp_pred = tp_pred[:, idx, :]
+                    temp_params_hat_inv[f"{p_name}_hat_inv_all"] = curr_tp_pred
+                    with tr.no_grad():
+                        l1 = self.l1(curr_tp_pred, curr_tp)
+                        esr = self.esr(curr_tp_pred, curr_tp)
+                        mse = self.mse(curr_tp_pred, curr_tp)
+                        fft_mag_dist = AcidDDSPLightingModule.calc_fft_mag_dist(
+                            curr_tp_pred, curr_tp
+                        )
+                    self.log(f"{stage}/{p_name}_l1_inv_all", l1, prog_bar=False)
+                    self.log(f"{stage}/{p_name}_esr_inv_all", esr, prog_bar=False)
+                    self.log(f"{stage}/{p_name}_mse_inv_all", mse, prog_bar=False)
+                    self.log(f"{stage}/{p_name}_fft_inv_all", fft_mag_dist, prog_bar=False)
+                    temp_param_metrics[f"{p_name}_l1_inv_all"] = l1
+                    temp_param_metrics[f"{p_name}_esr_inv_all"] = esr
+                    temp_param_metrics[f"{p_name}_mse_inv_all"] = mse
+                    temp_param_metrics[f"{p_name}_fft_inv_all"] = fft_mag_dist
         else:
             for p_name in self.temp_param_names:
                 temp_param_metrics[f"{p_name}_l1_inv_all"] = tr.tensor(-1)
@@ -722,7 +734,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         return dist
 
     @staticmethod
-    def compute_lstsq_with_bias(x_hat: T, x: T) -> T:
+    def compute_lstsq_with_bias(x_hat: T, x: T, n_segments: int = 1) -> T:
         """
         Given x and x_hat of shape (bs, n_signals, n_samples), compute the best
         linear combination matrix W and bias vector b (per batch) such that:
@@ -741,10 +753,39 @@ class AcidDDSPLightingModule(pl.LightningModule):
         assert x.size(0) == bs
         assert x.size(2) == n_samples
 
+        # # Create a segmented version of x_hat if needed.
+        # if n_segments > 1:
+        #     seg_len = n_samples // n_segments
+        #     segmented_list = []
+        #     for idx in range(n_segments):
+        #         # Compute start and end indices for the segment.
+        #         start_idx = idx * seg_len
+        #         # Ensure the last segment includes any leftover samples.
+        #         end_idx = (idx + 1) * seg_len if idx < n_segments - 1 else n_samples
+        #
+        #         # Create a mask that is 1 on the segment and 0 elsewhere.
+        #         mask = tr.zeros(n_samples, device=x_hat.device, dtype=x_hat.dtype)
+        #         mask[start_idx:end_idx] = 1.0
+        #         mask = mask.view(1, 1, n_samples)  # shape: (1, 1, n_samples)
+        #
+        #         # Apply the mask to x_hat (broadcasting over batch and signals).
+        #         segmented_snippet = x_hat * mask  # shape: (bs, n_signals, n_samples)
+        #         segmented_list.append(segmented_snippet)
+        #
+        #     # Concatenate along the signals dimension.
+        #     x_hat_seg = tr.cat(
+        #         segmented_list, dim=1
+        #     )  # shape: (bs, n_signals * n_segments, n_samples)
+        # else:
+        #     x_hat_seg = x_hat
+        #
+        # x_hat = x_hat_seg
+
         # Augment x_hat with a row of ones to account for the bias term.
         # ones shape: (bs, 1, n_samples)
         ones = tr.ones(bs, 1, n_samples, device=x_hat.device, dtype=x_hat.dtype)
         x_hat_aug = tr.cat([x_hat, ones], dim=1)  # shape: (bs, n_signals+1, n_samples)
+        # x_hat_aug = x_hat
 
         # Transpose the last two dimensions so that we set up the least-squares problem as:
         # A @ (solution) ≈ B
@@ -759,6 +800,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # The first n_signals rows correspond to the weight matrix (transposed), and the last row is the bias.
         W_t = solution[:, :-1, :]  # shape: (bs, n_signals, n_signals)
         bias_t = solution[:, -1:, :]  # shape: (bs, 1, n_signals)
+        # W_t = solution  # shape: (bs, n_signals+1, n_signals)
 
         # Transpose to obtain the weight matrix in the right orientation.
         W = W_t.transpose(1, 2)  # shape: (bs, n_signals, n_signals)
@@ -767,6 +809,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # Compute the predicted x using the estimated weights and bias.
         # Note: bias is added to each sample in the time dimension.
         x_pred = tr.bmm(W, x_hat) + bias  # shape: (bs, n_signals, n_samples)
+        # x_pred = tr.bmm(W, x_hat)  # shape: (bs, n_signals, n_samples)
         return x_pred
 
     # def on_test_epoch_end(self) -> None:
@@ -912,6 +955,8 @@ class PreprocLightningModule(AcidDDSPLightingModule):
 
 
 if __name__ == "__main__":
+    tr.manual_seed(71)
+
     n_signals: int = 3
     n_samples: int = 1000
     mod_gen_x = ModSignalGenRandomBezier()
@@ -920,7 +965,7 @@ if __name__ == "__main__":
         max_n_seg=12,
         min_degree=3,
         max_degree=3,
-        min_seg_interval_frac=0.99,
+        min_seg_interval_frac=1.0,
     )
     x_s = []
     x_hat_s = []
@@ -933,23 +978,31 @@ if __name__ == "__main__":
         x_hat_s.append(x_hat)
     x = tr.stack(x_s, dim=0).unsqueeze(0)
     x_hat = tr.stack(x_hat_s, dim=0).unsqueeze(0)
-    l1, x_pred = AcidDDSPLightingModule.compute_lstsq_with_bias(x, x_hat)
+    # Calc finite difference
+    x = x[:, :, 1:] - x[:, :, :-1]
+    x_hat = x_hat[:, :, 1:] - x_hat[:, :, :-1]
+    x_pred = AcidDDSPLightingModule.compute_lstsq_with_bias(x_hat, x, n_segments=3)
+    x = tr.cumsum(x, dim=2)
+    x_hat = tr.cumsum(x_hat, dim=2)
+    x_pred = tr.cumsum(x_pred, dim=2)
+
+    x_pred_2 = AcidDDSPLightingModule.compute_lstsq_with_bias(x_pred, x, n_segments=1)
+    x_pred = x_pred_2
 
     from matplotlib import pyplot as plt
 
     for idx in range(n_signals):
         plt.plot(x_hat[0, idx, :])
     plt.title("x_hat")
-    plt.ylim(-0.1, 1.1)
+    # plt.ylim(-0.1, 1.1)
     plt.show()
 
     for idx in range(n_signals):
-        curr_l1 = l1[0, idx]
         plt.plot(x[0, idx, :], label="x", color="black")
         plt.plot(x_pred[0, idx, :], label="x_pred", color="orange")
         plt.legend()
-        plt.title(f"x, x_pred, l1 = {curr_l1:.4f}")
-        plt.ylim(-0.1, 1.1)
+        plt.title(f"x, x_pred")
+        # plt.ylim(-0.1, 1.1)
         plt.show()
 
     exit()

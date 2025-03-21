@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from torch import Tensor as T, nn
 
 import util
+from curves import PiecewiseBezier
 from filters import (
     TimeVaryingBiquad,
     calc_logits_to_biquad_a_coeff_triangle,
@@ -117,6 +118,8 @@ class WavetableOsc(SynthModule):
         wt: Optional[T] = None,
         aa_filter_n: Optional[int] = None,
         is_trainable: bool = True,
+        use_guassian: bool = False,
+        use_interp: bool = False,
     ):
         super().__init__()
         self.sr = sr
@@ -125,6 +128,9 @@ class WavetableOsc(SynthModule):
             assert n_pos is not None
             wt = tr.empty(n_pos, n_wt_samples).normal_(mean=0.0, std=0.01)
             # wt = tr.empty(n_pos, n_wt_samples).uniform_() * 2.0 - 1.0
+            # wt = tr.empty(n_wt_samples, 2).normal_(mean=0.0, std=0.01)
+            # wt = util.interpolate_dim(wt, n=n_pos, dim=1, align_corners=True)
+            # wt = tr.swapaxes(wt, 0, 1)
             is_wt_provided = False
         else:
             assert wt.ndim == 2
@@ -143,6 +149,8 @@ class WavetableOsc(SynthModule):
         assert aa_filter_n % 2 == 1
         self.aa_filter_n = aa_filter_n
         self.is_trainable = is_trainable
+        self.use_guassian = use_guassian
+        self.use_interp = use_interp
 
         if is_trainable:
             self.wt = nn.Parameter(wt)
@@ -163,6 +171,9 @@ class WavetableOsc(SynthModule):
         )
         # TODO(cm): check whether this is correct or not
         self.wt_pitch_hz = sr / n_wt_samples
+
+        support = tr.linspace(-1.0, 1.0, n_pos).view(1, -1, 1)
+        self.register_buffer("support", support)
 
     def get_wt(self) -> T:
         return self.wt
@@ -260,7 +271,20 @@ class WavetableOsc(SynthModule):
 
         max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
         wt = self.get_anti_aliased_maybe_bounded_wt(max_f0_hz)
-        wt = wt.unsqueeze(1)
+        # wt = wt.unsqueeze(1)
+
+        if self.use_interp:
+            wt = util.interpolate_dim(wt, n=3, dim=1, align_corners=True)
+
+            # wt = wt.unsqueeze(0)
+            # wt = F.interpolate(wt, size=(3, wt.size(1)), mode="bilinear", align_corners=True)
+            # wt = wt.squeeze(0)
+
+        if self.use_guassian:
+            wt = wt.unsqueeze(2)
+            flow_field[:, :, :, 1] = 0.0  # TODO(cm): Replace with padding
+        else:
+            wt = wt.unsqueeze(1)
 
         audio = F.grid_sample(
             wt,
@@ -269,10 +293,79 @@ class WavetableOsc(SynthModule):
             padding_mode="border",
             align_corners=True,
         )
-        audio = audio.squeeze(1).squeeze(1)
+        # wt_pos = tr.linspace(-1, 1, flow_field.size(2)).view(1, -1)
+        # wt_pos = wt_pos.repeat(flow_field.size(0), 1)
+
+        if self.use_guassian:
+            support = self.support.repeat(audio.size(0), 1, audio.size(-1))
+            sigma = 0.3
+            mu = wt_pos.unsqueeze(1)
+            windows = tr.exp(-((support - mu) ** 2) / (2 * sigma ** 2))
+            window_sums = windows.sum(dim=1, keepdim=True)
+            windows_norm = windows / window_sums * self.n_pos
+            # windows_norm = windows_norm / self.n_pos
+            audio = audio.squeeze(2)
+            audio = audio * windows_norm
+            audio = audio.sum(dim=1)
+
+            # from matplotlib import pyplot as plt
+            # for idx in range(0, windows_norm.size(-1), 4800):
+            #     curr_support = support[0, :, idx]
+            #     curr_window = windows_norm[0, :, idx]
+            #     curr_window_area = curr_window.sum()
+            #     curr_mu = mu[0, :, idx].item()
+            #     plt.plot(curr_support, curr_window)
+            #     plt.title(f"idx = {idx}, mu = {curr_mu:.4f}, area = {curr_window_area:.4f}")
+            #     plt.show()
+        else:
+            audio = audio.squeeze(1).squeeze(1)
+
+        # audio = audio.squeeze(1).squeeze(1)
         bs = f0_hz.size(0)
         assert audio.shape == (bs, n_samples)
         return audio
+
+
+class BezierWavetableOsc(WavetableOsc):
+    def __init__(
+        self,
+        sr: int,
+        n_pos: int,
+        n_wt_samples: int,
+        n_segments: int,
+        degree: int,
+        aa_filter_n: Optional[int] = None,
+        is_trainable: bool = True,
+    ):
+        super().__init__(
+            sr,
+            n_pos,
+            n_wt_samples,
+            wt=None,
+            aa_filter_n=aa_filter_n,
+            is_trainable=is_trainable,
+        )
+        self.n_segments = n_segments
+        self.degree = degree
+
+        self.bezier = PiecewiseBezier(n_wt_samples, n_segments, degree)
+        # cp = tr.rand(n_pos, n_segments * degree + 1) * 2.0 - 1.0
+        cp = tr.empty(n_pos, n_segments * degree + 1).normal_(mean=0.0, std=0.01)
+        # cp = tr.rand(n_segments * degree + 1, 2) * 2.0 - 1.0
+        # cp = tr.empty(n_segments * degree + 1, 2).normal_(mean=0.0, std=0.01)
+        # cp = util.interpolate_dim(cp, n=n_pos, dim=1, align_corners=True)
+        # cp = tr.swapaxes(cp, 0, 1)
+
+        if is_trainable:
+            self.cp = nn.Parameter(cp)
+        else:
+            self.register_buffer("cp", cp)
+        self.wt = None
+
+    def get_wt(self) -> T:
+        cp = self.cp.unfold(dimension=1, size=self.degree + 1, step=self.degree)
+        wt = self.bezier.make_bezier(cp, cp_are_logits=False)
+        return wt
 
 
 class WavetableOscShan(WavetableOsc):

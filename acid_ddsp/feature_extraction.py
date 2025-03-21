@@ -28,7 +28,7 @@ class LogMelSpecFeatureExtractor(nn.Module):
         use_delta_delta: bool = False,
         delta_win_ms: int = 50,
         freq_mask_amount: float = 0.0,
-        eps: float = 1e-8,
+        eps: float = 1e-4,
     ) -> None:
         super().__init__()
         self.sr = sr
@@ -81,8 +81,7 @@ class LogMelSpecFeatureExtractor(nn.Module):
             if self.freq_mask_amount > 0:
                 x = self.freq_masking(x)
 
-        x = tr.clip(x, min=self.eps)
-        x = tr.log(x)
+        x = tr.log1p(x / self.eps)
 
         # time_averaged = x.mean(dim=-1, keepdim=True)
         # x = x - time_averaged
