@@ -53,7 +53,8 @@ if __name__ == "__main__":
             continue
         if not wt_name.startswith("basics__"):
             continue
-        if not "galactica" in wt_name:
+        # if not "galactica" in wt_name:
+        if not "fm_fold" in wt_name:
         # if not "basic_shapes" in wt_name:
             continue
         filtered_wt_names.append(wt_name)

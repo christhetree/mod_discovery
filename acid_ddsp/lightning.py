@@ -292,8 +292,11 @@ class AcidDDSPLightingModule(pl.LightningModule):
         if self.use_model:
             curr_epoch = self.current_epoch
             total_epochs = self.trainer.max_epochs
-            nonlinear_frac = curr_epoch / total_epochs
-            model_out = self.model(model_in_dict, nonlinear_frac=nonlinear_frac)
+            alpha_noise = curr_epoch / total_epochs
+            alpha_linear = alpha_noise
+            model_out = self.model(
+                model_in_dict, alpha_noise=alpha_noise, alpha_linear=alpha_linear
+            )
             # model_out = {}
             # add_in = {"audio": x}
             # add_model_out = self.model(add_in, tp_name="add_lfo")
@@ -458,7 +461,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             tp_hat_s = []
             for name in self.temp_param_names_hat:
                 tp_hat = temp_params_hat[name]
-                assert tp_hat.ndim == 2
+                if tp_hat.ndim != 2:
+                    continue
                 tp_hat = util.interpolate_dim(
                     tp_hat, tp.size(2), dim=1, align_corners=True
                 )
@@ -492,7 +496,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     self.log(f"{stage}/{p_name}_l1_inv_all", l1, prog_bar=False)
                     self.log(f"{stage}/{p_name}_esr_inv_all", esr, prog_bar=False)
                     self.log(f"{stage}/{p_name}_mse_inv_all", mse, prog_bar=False)
-                    self.log(f"{stage}/{p_name}_fft_inv_all", fft_mag_dist, prog_bar=False)
+                    self.log(
+                        f"{stage}/{p_name}_fft_inv_all", fft_mag_dist, prog_bar=False
+                    )
                     temp_param_metrics[f"{p_name}_l1_inv_all"] = l1
                     temp_param_metrics[f"{p_name}_esr_inv_all"] = esr
                     temp_param_metrics[f"{p_name}_mse_inv_all"] = mse

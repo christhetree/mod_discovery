@@ -1,5 +1,6 @@
 class_path: synths.ComposableSynth
 init_args:
   ac: audio_config.yml
-  add_synth_module: wavetable_osc__learnable_4_1024.yml
-#  add_synth_module: wavetable_osc__learnable_bezier.yml
+  add_synth_module: wavetable_osc__learnable.yml
+#  add_synth_module: wavetable_osc__learnable_shan.yml
+#  add_lfo_name: add_lfo_adapted

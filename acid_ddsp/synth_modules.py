@@ -118,19 +118,17 @@ class WavetableOsc(SynthModule):
         wt: Optional[T] = None,
         aa_filter_n: Optional[int] = None,
         is_trainable: bool = True,
-        use_guassian: bool = False,
-        use_interp: bool = False,
+        init_noise_std: float = 0.01,
+        cf_factor: float = 0.9,
+        use_tanh: bool = False,
+        use_aa: bool = True,
     ):
         super().__init__()
         self.sr = sr
         if wt is None:
             assert n_wt_samples is not None
             assert n_pos is not None
-            wt = tr.empty(n_pos, n_wt_samples).normal_(mean=0.0, std=0.01)
-            # wt = tr.empty(n_pos, n_wt_samples).uniform_() * 2.0 - 1.0
-            # wt = tr.empty(n_wt_samples, 2).normal_(mean=0.0, std=0.01)
-            # wt = util.interpolate_dim(wt, n=n_pos, dim=1, align_corners=True)
-            # wt = tr.swapaxes(wt, 0, 1)
+            wt = tr.empty(n_pos, n_wt_samples).normal_(mean=0.0, std=init_noise_std)
             is_wt_provided = False
         else:
             assert wt.ndim == 2
@@ -149,8 +147,10 @@ class WavetableOsc(SynthModule):
         assert aa_filter_n % 2 == 1
         self.aa_filter_n = aa_filter_n
         self.is_trainable = is_trainable
-        self.use_guassian = use_guassian
-        self.use_interp = use_interp
+        self.init_noise_std = init_noise_std
+        self.use_tanh = use_tanh
+        self.use_aa = use_aa
+        self.cf_factor = cf_factor
 
         if is_trainable:
             self.wt = nn.Parameter(wt)
@@ -171,9 +171,6 @@ class WavetableOsc(SynthModule):
         )
         # TODO(cm): check whether this is correct or not
         self.wt_pitch_hz = sr / n_wt_samples
-
-        support = tr.linspace(-1.0, 1.0, n_pos).view(1, -1, 1)
-        self.register_buffer("support", support)
 
     def get_wt(self) -> T:
         return self.wt
@@ -199,32 +196,38 @@ class WavetableOsc(SynthModule):
         assert new_wt.min() >= -1.0, f"new_wt.min() = {new_wt.min()}"
         assert new_wt.max() <= 1.0, f"new_wt.max() = {new_wt.max()}"
         self.wt[:, :] = new_wt[:, :]
-        # self.wt = nn.Parameter(new_wt)
 
     def calc_lp_sinc_blackman_coeff(self, cf_hz: T) -> T:
         assert cf_hz.ndim == 2
-        # Compute sinc filter.
+        # Compute sinc filter
         bs = cf_hz.size(0)
         support = self.aa_filter_support.expand(bs, -1)
         h = tr.sinc(cf_hz * support)
-        # Apply window.
+        # Apply window
         window = self.window.expand(bs, -1)
         h *= window
-        # Normalize to get unity gain.
+        # Normalize to get unity gain
         summed = tr.sum(h, dim=1, keepdim=True)
         h /= summed
         return h
 
-    def get_anti_aliased_maybe_bounded_wt(self, max_f0_hz: T) -> T:
+    def get_maybe_aa_maybe_bounded_wt(self, max_f0_hz: T) -> T:
         wt = self.get_wt()
-        if self.is_trainable:
+        # Maybe bound wavetable
+        if self.use_tanh:
+            assert self.is_trainable, "Using tanh on non-trainable wavetable"
             maybe_bounded_wt = tr.tanh(wt)
         else:
             maybe_bounded_wt = wt
+
+        # Maybe apply anti-aliasing
+        if not self.use_aa:
+            return maybe_bounded_wt
+
         pitch_ratio = max_f0_hz / self.wt_pitch_hz
-        # Make the center frequency a bit lower than the new nyquist
+        # Make the cutoff frequency a bit lower than the new nyquist
         # TODO(cm): add roll-off factor to config
-        cf_hz = (self.sr / pitch_ratio / 2.0) * 0.9
+        cf_hz = (self.sr / pitch_ratio / 2.0) * self.cf_factor
         aa_filters = self.calc_lp_sinc_blackman_coeff(cf_hz)
         bs = aa_filters.size(0)
         aa_filters = aa_filters.unsqueeze(1).unsqueeze(1)
@@ -270,21 +273,8 @@ class WavetableOsc(SynthModule):
         flow_field = tr.stack([temp_coords, wt_pos], dim=2).unsqueeze(1)
 
         max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
-        wt = self.get_anti_aliased_maybe_bounded_wt(max_f0_hz)
-        # wt = wt.unsqueeze(1)
-
-        if self.use_interp:
-            wt = util.interpolate_dim(wt, n=3, dim=1, align_corners=True)
-
-            # wt = wt.unsqueeze(0)
-            # wt = F.interpolate(wt, size=(3, wt.size(1)), mode="bilinear", align_corners=True)
-            # wt = wt.squeeze(0)
-
-        if self.use_guassian:
-            wt = wt.unsqueeze(2)
-            flow_field[:, :, :, 1] = 0.0  # TODO(cm): Replace with padding
-        else:
-            wt = wt.unsqueeze(1)
+        wt = self.get_maybe_aa_maybe_bounded_wt(max_f0_hz)
+        wt = wt.unsqueeze(1)
 
         audio = F.grid_sample(
             wt,
@@ -293,34 +283,7 @@ class WavetableOsc(SynthModule):
             padding_mode="border",
             align_corners=True,
         )
-        # wt_pos = tr.linspace(-1, 1, flow_field.size(2)).view(1, -1)
-        # wt_pos = wt_pos.repeat(flow_field.size(0), 1)
-
-        if self.use_guassian:
-            support = self.support.repeat(audio.size(0), 1, audio.size(-1))
-            sigma = 0.3
-            mu = wt_pos.unsqueeze(1)
-            windows = tr.exp(-((support - mu) ** 2) / (2 * sigma ** 2))
-            window_sums = windows.sum(dim=1, keepdim=True)
-            windows_norm = windows / window_sums * self.n_pos
-            # windows_norm = windows_norm / self.n_pos
-            audio = audio.squeeze(2)
-            audio = audio * windows_norm
-            audio = audio.sum(dim=1)
-
-            # from matplotlib import pyplot as plt
-            # for idx in range(0, windows_norm.size(-1), 4800):
-            #     curr_support = support[0, :, idx]
-            #     curr_window = windows_norm[0, :, idx]
-            #     curr_window_area = curr_window.sum()
-            #     curr_mu = mu[0, :, idx].item()
-            #     plt.plot(curr_support, curr_window)
-            #     plt.title(f"idx = {idx}, mu = {curr_mu:.4f}, area = {curr_window_area:.4f}")
-            #     plt.show()
-        else:
-            audio = audio.squeeze(1).squeeze(1)
-
-        # audio = audio.squeeze(1).squeeze(1)
+        audio = audio.squeeze(1).squeeze(1)
         bs = f0_hz.size(0)
         assert audio.shape == (bs, n_samples)
         return audio
@@ -348,9 +311,12 @@ class BezierWavetableOsc(WavetableOsc):
         self.n_segments = n_segments
         self.degree = degree
 
-        self.bezier = PiecewiseBezier(n_wt_samples, n_segments, degree)
+        # self.bezier = PiecewiseBezier(n_wt_samples, n_segments, degree)
+        self.bezier = PiecewiseBezier(n_pos, n_segments, degree)
         # cp = tr.rand(n_pos, n_segments * degree + 1) * 2.0 - 1.0
-        cp = tr.empty(n_pos, n_segments * degree + 1).normal_(mean=0.0, std=0.01)
+        # cp = tr.empty(n_pos, n_segments * degree + 1).normal_(mean=0.0, std=0.01)
+        cp = tr.empty(n_wt_samples, n_segments * degree + 1).normal_(mean=0.0, std=0.01)
+        # cp = tr.rand(n_wt_samples, n_segments * degree + 1) * 2.0 - 1.0
         # cp = tr.rand(n_segments * degree + 1, 2) * 2.0 - 1.0
         # cp = tr.empty(n_segments * degree + 1, 2).normal_(mean=0.0, std=0.01)
         # cp = util.interpolate_dim(cp, n=n_pos, dim=1, align_corners=True)
@@ -365,6 +331,7 @@ class BezierWavetableOsc(WavetableOsc):
     def get_wt(self) -> T:
         cp = self.cp.unfold(dimension=1, size=self.degree + 1, step=self.degree)
         wt = self.bezier.make_bezier(cp, cp_are_logits=False)
+        wt = tr.swapaxes(wt, 0, 1)
         return wt
 
 
@@ -374,17 +341,7 @@ class WavetableOscShan(WavetableOsc):
     that uses weighted sum instead of grid_sample.
     """
 
-    def __init__(
-        self,
-        sr: int,
-        n_pos: Optional[int] = None,
-        n_wt_samples: Optional[int] = None,
-        wt: Optional[T] = None,
-        aa_filter_n: Optional[int] = None,
-        is_trainable: bool = True,
-    ):
-        super().__init__(sr, n_pos, n_wt_samples, wt, aa_filter_n, is_trainable)
-
+    @staticmethod
     def _wavetable_osc_shan(
         wavetable: T,
         freq: T,
@@ -402,69 +359,94 @@ class WavetableOscShan(WavetableOsc):
             signal: (batch_size, n_wavetable, n_samples)
 
         """
-        bs, n_wavetable, wt_len = wavetable.shape
         arg = SquareSawVCOLite.calc_osc_arg(sr, freq, n_samples, phase)
         arg = arg % (2 * tr.pi)
-        index = arg / (2 * tr.pi) * wt_len
+        temp_coords = arg / tr.pi - 1.0  # Normalize to [-1, 1] for grid_sample
+        assert temp_coords.min() >= -1.0
+        assert temp_coords.max() <= 1.0
+        flow_field = tr.stack(
+            [temp_coords, tr.zeros_like(temp_coords)], dim=2
+        ).unsqueeze(1)
+        wt = wavetable.unsqueeze(2)
+        signal = F.grid_sample(
+            wt,
+            flow_field,
+            mode="bilinear",
+            padding_mode="border",
+            align_corners=True,
+        ).squeeze(2)
 
-        # batch linear interpolation implementation
-        index_low = tr.floor(index.clone())  # (bs, n_samples)
-        index_high = tr.ceil(index.clone())  # (bs, n_samples)
-        alpha = index - index_low  # (bs, n_samples)
-        index_low = index_low.long()
-        index_high = index_high.long()
+        # # batch linear interpolation implementation
+        # bs, n_wavetable, wt_len = wavetable.shape
+        # index = arg / (2 * tr.pi) * wt_len
+        # index_low = tr.floor(index.clone())  # (bs, n_samples)
+        # index_high = tr.ceil(index.clone())  # (bs, n_samples)
+        # alpha = index - index_low  # (bs, n_samples)
+        # index_low = index_low.long()
+        # index_high = index_high.long()
+        #
+        # index_low = index_low.unsqueeze(1).expand(
+        #     -1, n_wavetable, -1
+        # )  # (bs, n_wavetable, n_samples)
+        # index_high = index_high.unsqueeze(1).expand(
+        #     -1, n_wavetable, -1
+        # )  # (bs, n_wavetable, n_samples)
+        # index_high = index_high % wt_len
+        # alpha = alpha.unsqueeze(1).expand(
+        #     -1, n_wavetable, -1
+        # )  # (bs, n_wavetable, n_samples)
+        #
+        # indexed_wavetables_low = tr.gather(
+        #     wavetable, 2, index_low
+        # )  # (bs, n_wavetable, n_samples)
+        # indexed_wavetables_high = tr.gather(
+        #     wavetable, 2, index_high
+        # )  # (bs, n_wavetable, n_samples)
+        #
+        # signal = indexed_wavetables_low + alpha * (
+        #     indexed_wavetables_high - indexed_wavetables_low
+        # )
 
-        index_low = index_low.unsqueeze(1).expand(
-            -1, n_wavetable, -1
-        )  # (bs, n_wavetable, n_samples)
-        index_high = index_high.unsqueeze(1).expand(
-            -1, n_wavetable, -1
-        )  # (bs, n_wavetable, n_samples)
-        index_high = index_high % wt_len
-        alpha = alpha.unsqueeze(1).expand(
-            -1, n_wavetable, -1
-        )  # (bs, n_wavetable, n_samples)
-
-        indexed_wavetables_low = tr.gather(
-            wavetable, 2, index_low
-        )  # (bs, n_wavetable, n_samples)
-        indexed_wavetables_high = tr.gather(
-            wavetable, 2, index_high
-        )  # (bs, n_wavetable, n_samples)
-
-        signal = indexed_wavetables_low + alpha * (
-            indexed_wavetables_high - indexed_wavetables_low
-        )
+        # tr.set_printoptions(precision=3)
+        # log.info(f"\nsignal1: {signal[0, :, :-5]}")
+        # log.info(f"\nsignal2: {signal2[0, :, :-5]}")
+        # exit()
         return signal
 
     def forward(
         self,
         f0_hz: T,
-        attention_matrix: Optional[T] = None,
+        wt_pos_0to1: Optional[T] = None,  # TODO(cm): consolidate naming
         n_samples: Optional[int] = None,
         phase: Optional[T] = None,
+        wt: Optional[T] = None,
     ) -> T:
+        attention_matrix = wt_pos_0to1
         assert 1 <= f0_hz.ndim <= 2
         if f0_hz.ndim == 1:
             assert n_samples is not None
             f0_hz = f0_hz.unsqueeze(1)
             f0_hz = f0_hz.expand(-1, n_samples)
+        if wt is not None:
+            self.set_wt(wt)
 
         max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
-        wt = self.get_anti_aliased_maybe_bounded_wt(max_f0_hz)
+        wt = self.get_maybe_aa_maybe_bounded_wt(max_f0_hz)
 
         audio = WavetableOscShan._wavetable_osc_shan(
             wt, f0_hz, self.sr, n_samples, phase
         )
         if attention_matrix is not None:
-            # if attention matrix is provided, it must be of shape (bs, n_wavetables, n_samples)
+            # If attention matrix is provided, it must have shape (bs, n_samples, n_pos)
             assert attention_matrix.ndim == 3
+            attention_matrix = tr.swapaxes(attention_matrix, 1, 2)
             assert (
                 attention_matrix.shape == audio.shape
-            ), f"Attention matrix must be the same as audio shape, given attention matrix: {attention_matrix.shape}, audio: {audio.shape}"
+            ), (f"Attention matrix must be the same as audio shape, given attention "
+                f"matrix: {attention_matrix.shape}, audio: {audio.shape}")
             audio = tr.einsum("bns,bns->bs", audio, attention_matrix)
         else:
-            # if not attention matrix is provided, we simply take the mean of the wavetables
+            # If no attention matrix is provided, we simply take the mean
             audio = audio.mean(dim=1)
 
         return audio
