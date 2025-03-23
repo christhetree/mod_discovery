@@ -480,7 +480,7 @@ class Spectral2DCNN(nn.Module):
                     x_linear = util.interpolate_dim(
                         x_linear, x.size(2), dim=2, align_corners=True
                     )
-                    x = (alpha_linear * x) + ((1.0 - alpha_linear) * x_linear)
+                    x = (alpha_linear * x_linear) + ((1.0 - alpha_linear) * x)
 
                 # TODO(cm): check whether this is required,
                 #  I'm trying to prevent flattening occurring along the temporal axis

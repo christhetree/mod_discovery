@@ -1,7 +1,18 @@
 custom:
   project_name: acid_ddsp_2
-  model_name: mss__s12d3_lin__sm_4_1024__no_latent_no_do_pos_enc
-  dataset_name: ableton__ase
+#  model_name: mss__s12d3_lin__sm_32_1024__no_latent_no_do_pos_enc
+#  model_name: mss__s12d3_lin__sm_32_1024_bezier_pos_s1d8
+  model_name: mss__s12d3__sm_16_1024_no_tanh_noise_0.33_lin_alpha
+#  model_name: mss__s12d3__sm_16_1024_no_tanh_noise_0.25_prelu
+#  model_name: mss__frame__sm_16_1024_shan_16_no_tanh
+#  model_name: mss__s12d3__sm_32_1024_shan
+#  model_name: mss__s12d3_adapt__sm_32_1024_bezier_pos_s1d8
+#  model_name: mss__s12d3_adapt__sm_256_1024_bezier_pos_s1d8
+#  model_name: mss__s12d3_lin_no_bound_not_sep__sm_3_1024_shan_no_tanh
+#  model_name: mss__s12d3_lin__sm_32_1024_sigma0.3_n_pos_mult
+#  model_name: mss__s12d3_lin__sm_bezier_s12d3_norm_init
+#  model_name: mss__s12d3_lin__sm_32_1024_sigma0.3__no_latent_no_do_pos_enc
+  dataset_name: ableton__a__fm_fold
   cpu_batch_size: 5  # For now must be >= n_examples
   use_wandb_cpu: false
   use_wandb_gpu: true
@@ -9,8 +20,8 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [2]
-  max_epochs: 50
+  devices: [5]
+  max_epochs: 20
   num_sanity_val_steps: 1
   accumulate_grad_batches: 1
   gradient_clip_val: 0.5
@@ -33,12 +44,8 @@ data:
           softmax_tau: 0.25
           normalize: false
 #          normalize: true
-    global_param_names:
-      - q
     temp_param_names:
       - add_lfo
-      - sub_lfo
-      - env
     num_workers: 4
 
 model:
@@ -47,22 +54,17 @@ model:
     ac: audio_config.yml
     spectral_visualizer: log_mel_spec.yml
 
-    synth: synth__ase.yml
+    synth: synth__a.yml
     temp_param_names:
       - add_lfo
-      - sub_lfo
-      - env
 
     use_model: true
-    model: spectral_2dcnn_dd50__ase__sm.yml
+    model: spectral_2dcnn_dd50__a__sm.yml
     temp_param_names_hat:
       - add_lfo
-      - sub_lfo
-      - env
     interp_temp_param_names_hat:
       - add_lfo
-      - env
-    synth_hat: synth__ase__sm_4_1024.yml
+    synth_hat: synth__a__sm.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
 #    loss_func: mss_prime.yml

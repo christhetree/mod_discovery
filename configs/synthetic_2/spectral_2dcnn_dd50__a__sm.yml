@@ -23,5 +23,8 @@ init_args:
   dropout: 0.0
   n_frames: 1501
   cnn_act: prelu
+#  cnn_act: gelu
   fc_act: prelu
-  noise_std: 0.25
+#  fc_act: gelu
+#  noise_std: 0.25
+  noise_std: 0.33

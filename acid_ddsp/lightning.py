@@ -115,6 +115,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         self.global_n = 0
         self.test_out_dicts = []
+        self.curr_training_step = 0
+        self.total_n_training_steps = None
 
         # TSV logging
         self.wt_name = None
@@ -169,6 +171,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
     def on_fit_start(self) -> None:
         self.global_n = 0
+        self.curr_training_step = 0
+        n_batches_per_epoch = len(self.trainer.datamodule.train_dataloader())
+        n_epochs = self.trainer.max_epochs
+        self.total_n_training_steps = n_batches_per_epoch * n_epochs
         # if tr.cuda.is_available():
         #     self.model = tr.compile(self.model)
         #     self.synth = tr.compile(self.synth)
@@ -290,10 +296,18 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # Perform model forward pass
         if self.use_model:
-            curr_epoch = self.current_epoch
-            total_epochs = self.trainer.max_epochs
-            alpha_noise = curr_epoch / total_epochs
-            alpha_linear = alpha_noise
+            alpha_linear = None
+            alpha_noise = None
+            # Use alpha_linear and alpha_noise for train and val, but not test
+            if stage != "test":
+                assert self.total_n_training_steps
+                # alpha_noise = self.beta ** self.curr_training_step
+                alpha_noise = 1.0 - self.curr_training_step / self.total_n_training_steps
+                self.log(f"{stage}/alpha_noise", alpha_noise, prog_bar=False)
+                alpha_linear = 1.0 - self.curr_training_step / self.total_n_training_steps
+                assert alpha_linear >= 0.0
+                self.log(f"{stage}/alpha_linear", alpha_linear, prog_bar=False)
+                # log.info(f"alpha_noise: {alpha_noise}, alpha_linear: {alpha_linear}")
             model_out = self.model(
                 model_in_dict, alpha_noise=alpha_noise, alpha_linear=alpha_linear
             )
@@ -675,7 +689,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
         return out_dict
 
     def training_step(self, batch: Dict[str, T], batch_idx: int) -> Dict[str, T]:
-        return self.step(batch, stage="train")
+        result = self.step(batch, stage="train")
+        self.curr_training_step += 1
+        return result
 
     def validation_step(self, batch: Dict[str, T], stage: str) -> Dict[str, T]:
         return self.step(batch, stage="val")
