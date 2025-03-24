@@ -1,16 +1,17 @@
 custom:
   project_name: acid_ddsp_2
   model_name: mss__s12d3__sm_16_1024_noise_0.33
-  dataset_name: ableton__ase
-  cpu_batch_size: 5  # For now must be >= n_examples
+  dataset_name: ableton__ase__fm_fold
+  cpu_batch_size: 5
   use_wandb_cpu: false
-  use_wandb_gpu: true
+  use_wandb_gpu: false
 
 trainer:
   accelerator: gpu
   benchmark: false
   devices: [5]
-  max_epochs: 30
+#  max_epochs: 30
+  max_epochs: 1
   num_sanity_val_steps: 1
   accumulate_grad_batches: 1
   gradient_clip_val: 0.5
@@ -21,7 +22,8 @@ data:
     batch_size: 32
 #    batch_size: 16
     ac: audio_config.yml
-    n_seeds: 1024
+#    n_seeds: 1024
+    n_seeds: 160
     mod_sig_gens:
       - class_path: modulations.ModSignalGenRandomBezier
         init_args:
@@ -70,11 +72,16 @@ model:
 #    use_p_loss: true
 #    loss_func: torch.nn.MSELoss
 
-#    run_name: mss__s12d3__ableton__ase__sm_4_1024_sf
+#    run_name: mss__s12d3__sm_16_1024_noise_0.33__ableton__ase__fm_fold
+    run_name: testing
 
-#    synth_opt: ../opt/adam_w__lr_1e-2.yml
-#    model_opt: ../opt/adam_w__lr_1e-3.yml
     synth_opt: ../opt/sf_adam_w__lr_5e-2.yml
     model_opt: ../opt/sf_adam_w__lr_5e-3.yml
 
-#optimizer: ../opt/adam_w__lr_1e-3.yml
+    fad_model_names:
+      - clap-2023
+      - encodec-emb-24k
+      - encodec-emb-48k
+      - panns-cnn14-16k
+      - panns-cnn14-32k
+      - panns-wavegram-logmel

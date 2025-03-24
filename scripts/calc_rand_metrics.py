@@ -25,8 +25,8 @@ if __name__ == "__main__":
     x_n_signals = 1
     x_hat_n_signals = 1
     # x_hat_n_signals = 3
-    # x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier.yml")
-    x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier_norm.yml")
+    x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier.yml")
+    # x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier_norm.yml")
     x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__model.yml")
     # x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__model_norm.yml")
     metric_fn_s = {
@@ -47,7 +47,9 @@ if __name__ == "__main__":
             x_s.append(x_mod_gen(n_frames))
         x = tr.stack(x_s, dim=0).view(bs, x_n_signals, n_frames)
         for _ in range(bs * x_hat_n_signals):
-            x_hat_s.append(x_hat_mod_gen(n_frames))
+            x_hat = x_hat_mod_gen(n_frames)
+            # x_hat.fill_(0.5)
+            x_hat_s.append(x_hat)
         x_hat = tr.stack(x_hat_s, dim=0).view(bs, x_hat_n_signals, n_frames)
 
         if x_n_signals == x_hat_n_signals == 1:

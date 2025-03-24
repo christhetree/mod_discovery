@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 from datetime import datetime
 from typing import Dict, Any, Optional, List, Mapping, Tuple
 
@@ -13,6 +14,7 @@ from torch import nn
 
 import util
 from audio_config import AudioConfig
+from fad import save_and_concat_fad_audio, calc_fad
 from feature_extraction import LogMelSpecFeatureExtractor
 from losses import MFCCL1
 from modulations import ModSignalGenRandomBezier
@@ -33,7 +35,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         model: Optional[nn.Module] = None,
         synth: Optional[SynthBase] = None,
         synth_hat: Optional[SynthBase] = None,
-        synth_eval: Optional[SynthBase] = None,
         temp_param_names: Optional[List[str]] = None,
         temp_param_names_hat: Optional[List[str]] = None,
         interp_temp_param_names_hat: Optional[List[str]] = None,
@@ -78,7 +79,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.spectral_visualizer = spectral_visualizer
         self.synth = synth
         self.synth_hat = synth_hat
-        self.synth_eval = synth_eval
         self.temp_param_names = temp_param_names
         self.temp_param_names_hat = temp_param_names_hat
         self.interp_temp_param_names_hat = interp_temp_param_names_hat
@@ -114,7 +114,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         )
 
         self.global_n = 0
-        self.test_out_dicts = []
         self.curr_training_step = 0
         self.total_n_training_steps = None
 
@@ -145,6 +144,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             tsv_cols.append(f"l1__{p_name}")
         for metric_name in self.audio_metrics:
             tsv_cols.append(f"audio__{metric_name}")
+        for fad_model_name in self.fad_model_names:
+            tsv_cols.append(f"fad__{fad_model_name}")
+        self.tsv_cols = tsv_cols
         if run_name:
             self.tsv_path = os.path.join(OUT_DIR, f"{self.run_name}.tsv")
             if not os.path.exists(self.tsv_path):
@@ -175,8 +177,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         n_batches_per_epoch = len(self.trainer.datamodule.train_dataloader())
         n_epochs = self.trainer.max_epochs
         self.total_n_training_steps = n_batches_per_epoch * n_epochs
-        # if tr.cuda.is_available():
-        #     self.model = tr.compile(self.model)
+        if tr.cuda.is_available():
+            self.model = tr.compile(self.model)
         #     self.synth = tr.compile(self.synth)
         #     self.synth_hat = tr.compile(self.synth_hat)
 
@@ -587,32 +589,11 @@ class AcidDDSPLightingModule(pl.LightningModule):
             audio_metrics_hat[metric_name] = audio_metric
             self.log(f"{stage}/audio_{metric_name}", audio_metric, prog_bar=False)
 
-        # Log eval synth metrics if applicable
-        x_eval = None
-        audio_metrics_eval = {}
-        if stage != "train" and self.synth_eval is not None:
-            # Generate audio x_eval
-            try:
-                synth_out_eval = self.synth_eval(
-                    self.ac.n_samples,
-                    f0_hz,
-                    phase_hat,
-                    temp_params_hat,
-                    global_params_hat,
-                    other_params,
-                )
-                x_eval = synth_out_eval["env_audio"].unsqueeze(1)
-                for metric_name, metric in self.audio_metrics.items():
-                    with tr.no_grad():
-                        audio_metric = metric(x_eval, x)
-                    audio_metrics_eval[metric_name] = audio_metric
-                    self.log(
-                        f"{stage}/audio_{metric_name}_eval",
-                        audio_metric,
-                        prog_bar=False,
-                    )
-            except Exception as e:
-                log.error(f"Error in eval synth: {e}")
+        # Calc FAD metrics
+        fad_metrics = {}
+        if stage == "test":
+            n_workers = min(1, self.datamodule.num_workers)
+            fad_metrics = self.calc_fad_metrics(x, x_hat, n_workers)
 
         # TSV logging
         if self.tsv_path:
@@ -643,6 +624,11 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     tsv_row.append(global_param_metrics[f"{p_name}_l1"].item())
                 for metric_name in self.audio_metrics:
                     tsv_row.append(audio_metrics_hat[metric_name].item())
+                for fad_model_name in self.fad_model_names:
+                    fad_metric = fad_metrics.get(fad_model_name, -1)
+                    tsv_row.append(fad_metric)
+
+                assert len(tsv_row) == len(self.tsv_cols)
                 f.write("\t".join(str(v) for v in tsv_row) + "\n")
 
         temp_params_hat = {f"{k}_hat": v for k, v in temp_params_hat.items()}
@@ -656,13 +642,11 @@ class AcidDDSPLightingModule(pl.LightningModule):
         }
         global_params_hat = {f"{k}_hat": v for k, v in global_params_hat.items()}
         audio_metrics_hat = {f"{k}_hat": v for k, v in audio_metrics_hat.items()}
-        audio_metrics_eval = {f"{k}_eval": v for k, v in audio_metrics_eval.items()}
         out_dict = {
             "loss": loss,
             "add_audio": add_audio,
             "x": x,
             "x_hat": x_hat,
-            "x_eval": x_eval,
             "log_spec_x": log_spec_x,
             # TODO(cm): tmp
             # "add_lfo_seg_indices_hat": model_out["add_lfo_seg_indices"],
@@ -676,7 +660,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         assert all(k not in out_dict for k in global_params_hat)
         assert all(k not in out_dict for k in global_param_metrics)
         assert all(k not in out_dict for k in audio_metrics_hat)
-        assert all(k not in out_dict for k in audio_metrics_eval)
+        assert all(k not in out_dict for k in fad_metrics)
         out_dict.update(temp_params)
         out_dict.update(temp_params_hat)
         out_dict.update(temp_params_hat_inv)
@@ -685,7 +669,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         out_dict.update(global_params_hat)
         out_dict.update(global_param_metrics)
         out_dict.update(audio_metrics_hat)
-        out_dict.update(audio_metrics_eval)
+        out_dict.update(fad_metrics)
         return out_dict
 
     def training_step(self, batch: Dict[str, T], batch_idx: int) -> Dict[str, T]:
@@ -697,9 +681,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         return self.step(batch, stage="val")
 
     def test_step(self, batch: Dict[str, T], stage: str) -> Dict[str, T]:
-        out = self.step(batch, stage="test")
-        self.test_out_dicts.append(out)
-        return out
+        return self.step(batch, stage="test")
 
     def configure_optimizers(self) -> Tuple[tr.optim.Optimizer, ...]:
         if self.model_opt is None or self.synth_opt is None:
@@ -756,7 +738,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         return dist
 
     @staticmethod
-    def compute_lstsq_with_bias(x_hat: T, x: T, n_segments: int = 1) -> T:
+    def compute_lstsq_with_bias(x_hat: T, x: T) -> T:
         """
         Given x and x_hat of shape (bs, n_signals, n_samples), compute the best
         linear combination matrix W and bias vector b (per batch) such that:
@@ -775,39 +757,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
         assert x.size(0) == bs
         assert x.size(2) == n_samples
 
-        # # Create a segmented version of x_hat if needed.
-        # if n_segments > 1:
-        #     seg_len = n_samples // n_segments
-        #     segmented_list = []
-        #     for idx in range(n_segments):
-        #         # Compute start and end indices for the segment.
-        #         start_idx = idx * seg_len
-        #         # Ensure the last segment includes any leftover samples.
-        #         end_idx = (idx + 1) * seg_len if idx < n_segments - 1 else n_samples
-        #
-        #         # Create a mask that is 1 on the segment and 0 elsewhere.
-        #         mask = tr.zeros(n_samples, device=x_hat.device, dtype=x_hat.dtype)
-        #         mask[start_idx:end_idx] = 1.0
-        #         mask = mask.view(1, 1, n_samples)  # shape: (1, 1, n_samples)
-        #
-        #         # Apply the mask to x_hat (broadcasting over batch and signals).
-        #         segmented_snippet = x_hat * mask  # shape: (bs, n_signals, n_samples)
-        #         segmented_list.append(segmented_snippet)
-        #
-        #     # Concatenate along the signals dimension.
-        #     x_hat_seg = tr.cat(
-        #         segmented_list, dim=1
-        #     )  # shape: (bs, n_signals * n_segments, n_samples)
-        # else:
-        #     x_hat_seg = x_hat
-        #
-        # x_hat = x_hat_seg
-
         # Augment x_hat with a row of ones to account for the bias term.
         # ones shape: (bs, 1, n_samples)
         ones = tr.ones(bs, 1, n_samples, device=x_hat.device, dtype=x_hat.dtype)
         x_hat_aug = tr.cat([x_hat, ones], dim=1)  # shape: (bs, n_signals+1, n_samples)
-        # x_hat_aug = x_hat
 
         # Transpose the last two dimensions so that we set up the least-squares problem as:
         # A @ (solution) ≈ B
@@ -822,7 +775,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # The first n_signals rows correspond to the weight matrix (transposed), and the last row is the bias.
         W_t = solution[:, :-1, :]  # shape: (bs, n_signals, n_signals)
         bias_t = solution[:, -1:, :]  # shape: (bs, 1, n_signals)
-        # W_t = solution  # shape: (bs, n_signals+1, n_signals)
 
         # Transpose to obtain the weight matrix in the right orientation.
         W = W_t.transpose(1, 2)  # shape: (bs, n_signals, n_signals)
@@ -831,136 +783,37 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # Compute the predicted x using the estimated weights and bias.
         # Note: bias is added to each sample in the time dimension.
         x_pred = tr.bmm(W, x_hat) + bias  # shape: (bs, n_signals, n_samples)
-        # x_pred = tr.bmm(W, x_hat)  # shape: (bs, n_signals, n_samples)
         return x_pred
 
-    # def on_test_epoch_end(self) -> None:
-    #     tsv_rows = []
-    #
-    #     test_metrics = ["loss"]
-    #     for metric_name in self.audio_metrics:
-    #         test_metrics.append(f"{metric_name}_hat")
-    #         test_metrics.append(f"{metric_name}_eval")
-    #
-    #     for metric_name in test_metrics:
-    #         metric_values = [d.get(metric_name) for d in self.test_out_dicts]
-    #         if any(v is None for v in metric_values):
-    #             log.warning(f"Skipping test metric: {metric_name}")
-    #             continue
-    #         metric_values = tr.stack(metric_values, dim=0)
-    #         assert metric_values.ndim == 1
-    #         metric_mean = metric_values.mean()
-    #         metric_std = metric_values.std()
-    #         metric_ci95 = 1.96 * scipy.stats.sem(metric_values.numpy())
-    #         self.log(f"test/{metric_name}", metric_mean, prog_bar=False)
-    #         tsv_rows.append(
-    #             [
-    #                 metric_name,
-    #                 metric_mean.item(),
-    #                 metric_std.item(),
-    #                 metric_ci95,
-    #                 metric_values.size(0),
-    #                 metric_values.numpy(),
-    #             ]
-    #         )
-    #
-    #     for fad_model_name in self.fad_model_names:
-    #         fad_hat_values = []
-    #         fad_eval_values = []
-    #         for out in self.test_out_dicts:
-    #             wet = out["wet"]
-    #             wet_hat = out["wet_hat"]
-    #             wet_eval = out.get("wet_eval")
-    #
-    #             fad_wet_dir = os.path.join(OUT_DIR, f"{self.run_name}__fad_wet")
-    #             fad_wet_hat_dir = os.path.join(OUT_DIR, f"{self.run_name}__fad_wet_hat")
-    #             save_and_concat_fad_audio(
-    #                 self.ac.sr,
-    #                 wet,
-    #                 fad_wet_dir,
-    #                 fade_n_samples=self.spectral_visualizer.hop_len,
-    #             )
-    #             save_and_concat_fad_audio(
-    #                 self.ac.sr,
-    #                 wet_hat,
-    #                 fad_wet_hat_dir,
-    #                 fade_n_samples=self.spectral_visualizer.hop_len,
-    #             )
-    #             clean_up_baseline = True
-    #             if wet_eval is not None:
-    #                 clean_up_baseline = False
-    #             fad_hat = calc_fad(
-    #                 fad_model_name,
-    #                 baseline_dir=fad_wet_dir,
-    #                 eval_dir=fad_wet_hat_dir,
-    #                 clean_up_baseline=clean_up_baseline,
-    #                 clean_up_eval=True,
-    #             )
-    #             fad_hat_values.append(fad_hat)
-    #             if wet_eval is not None:
-    #                 fad_wet_eval_dir = os.path.join(
-    #                     OUT_DIR, f"{self.run_name}__fad_wet_eval"
-    #                 )
-    #                 save_and_concat_fad_audio(
-    #                     self.ac.sr,
-    #                     wet_eval,
-    #                     fad_wet_eval_dir,
-    #                     fade_n_samples=self.spectral_visualizer.hop_len,
-    #                 )
-    #                 fad_eval = calc_fad(
-    #                     fad_model_name,
-    #                     baseline_dir=fad_wet_dir,
-    #                     eval_dir=fad_wet_eval_dir,
-    #                     clean_up_baseline=True,
-    #                     clean_up_eval=True,
-    #                 )
-    #                 fad_eval_values.append(fad_eval)
-    #
-    #         fad_hat_mean = np.mean(fad_hat_values)
-    #         fad_hat_std = np.std(fad_hat_values)
-    #         fad_hat_ci95 = 1.96 * scipy.stats.sem(fad_hat_values)
-    #         self.log(f"test/fad_{fad_model_name}_hat", fad_hat_mean, prog_bar=False)
-    #         tsv_rows.append(
-    #             [
-    #                 f"fad_{fad_model_name}_hat",
-    #                 fad_hat_mean,
-    #                 fad_hat_std,
-    #                 fad_hat_ci95,
-    #                 len(fad_hat_values),
-    #                 fad_hat_values,
-    #             ]
-    #         )
-    #         if fad_eval_values:
-    #             fad_eval_mean = np.mean(fad_eval_values)
-    #             fad_eval_std = np.std(fad_eval_values)
-    #             fad_eval_ci95 = 1.96 * scipy.stats.sem(fad_eval_values)
-    #             self.log(
-    #                 f"test/fad_{fad_model_name}_eval", fad_eval_mean, prog_bar=False
-    #             )
-    #             tsv_rows.append(
-    #                 [
-    #                     f"fad_{fad_model_name}_eval",
-    #                     fad_eval_mean,
-    #                     fad_eval_std,
-    #                     fad_eval_ci95,
-    #                     len(fad_eval_values),
-    #                     fad_eval_values,
-    #                 ]
-    #             )
-    #
-    #     tsv_path = os.path.join(OUT_DIR, f"{self.run_name}__test.tsv")
-    #     if os.path.exists(tsv_path):
-    #         log.warning(f"Overwriting existing TSV file: {tsv_path}")
-    #     df = pd.DataFrame(
-    #         tsv_rows, columns=["metric_name", "mean", "std", "ci95", "n", "values"]
-    #     )
-    #     df.to_csv(tsv_path, sep="\t", index=False)
-    #
-    #     # H = tr.cat([out["H"] for out in self.test_outs], dim=0)
-    #     # H = H.detach().cpu()
-    #     # H_path = os.path.join(OUT_DIR, f"{self.run_name}__H.pt")
-    #     # tr.save(H, H_path)
-    #     # log.info(f"Saved H to: {H_path}")
+    def calc_fad_metrics(self, x: T, x_hat: T, n_workers: int = 1) -> Dict[str, float]:
+        x = x.squeeze(1).detach()
+        x_hat = x_hat.squeeze(1).detach()
+        fad_dir_x = os.path.join(OUT_DIR, f"{self.run_name}__fad_x")
+        fad_dir_x_hat = os.path.join(OUT_DIR, f"{self.run_name}__fad_x_hat")
+        save_and_concat_fad_audio(
+            self.ac.sr,
+            x,
+            fad_dir_x,
+            fade_n_samples=None,
+        )
+        save_and_concat_fad_audio(
+            self.ac.sr,
+            x_hat,
+            fad_dir_x_hat,
+            fade_n_samples=None,
+        )
+        fad_metrics = {}
+        for fad_model_name in self.fad_model_names:
+            fad_val = calc_fad(
+                fad_model_name,
+                baseline_dir=fad_dir_x,
+                eval_dir=fad_dir_x_hat,
+                workers=n_workers,
+            )
+            fad_metrics[f"{fad_model_name}"] = fad_val
+        shutil.rmtree(fad_dir_x)
+        shutil.rmtree(fad_dir_x_hat)
+        return fad_metrics
 
 
 class PreprocLightningModule(AcidDDSPLightingModule):

@@ -29,6 +29,7 @@ init_args:
       is_c1_cont: false
       is_bounded: false
       use_alpha_noise: false
+#      use_alpha_noise: true
       use_alpha_linear: true
       adapt_dim: 5
       adapt_act: none
@@ -43,6 +44,7 @@ init_args:
       is_c1_cont: false
       is_bounded: true
       use_alpha_noise: false
+#      use_alpha_noise: true
       use_alpha_linear: true
       adapt_dim: 0
   global_param_names: []

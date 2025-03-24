@@ -1,6 +1,5 @@
 import logging
 import os
-import shutil
 from typing import Optional
 
 import torch as tr
@@ -12,6 +11,22 @@ import fadtk
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
+
+
+def get_fad_model(model_name: str) -> fadtk.ModelLoader:
+    fad_models = {
+        "vggish": fadtk.VGGishModel("2023"),
+        "clap-2023": fadtk.CLAPModel("2023"),
+        # "clap-laion-audio": fadtk.CLAPLaionModel("audio"),
+        # "clap-laion-music": fadtk.CLAPLaionModel("music"),
+        "encodec-emb-24k": fadtk.EncodecEmbModel("24k"),
+        "encodec-emb-48k": fadtk.EncodecEmbModel("48k"),
+        "panns-cnn14-16k": fadtk.PANNsModel("cnn14-16k"),
+        "panns-cnn14-32k": fadtk.PANNsModel("cnn14-32k"),
+        "panns-wavegram-logmel": fadtk.PANNsModel("wavegram-logmel"),
+    }
+    assert model_name in fad_models
+    return fad_models[model_name]
 
 
 def save_and_concat_fad_audio(
@@ -35,15 +50,13 @@ def calc_fad(
     fad_model_name: str,
     baseline_dir: str,
     eval_dir: str,
-    clean_up_baseline: bool = False,
-    clean_up_eval: bool = False,
-    workers: int = 0,
+    workers: int = 1,
 ) -> float:
     assert os.path.isdir(baseline_dir)
     assert os.path.isdir(eval_dir)
+    assert workers > 0
 
-    fad_models = {m.name: m for m in fadtk.get_all_models()}
-    fad_model = fad_models[fad_model_name]
+    fad_model = get_fad_model(fad_model_name)
     fadtk.cache_embedding_files(baseline_dir, fad_model, workers)
     fadtk.cache_embedding_files(eval_dir, fad_model, workers)
 
@@ -51,8 +64,4 @@ def calc_fad(
         fad_model, audio_load_worker=workers, load_model=False
     )
     score = fad.score(baseline_dir, eval_dir)
-    if clean_up_baseline:
-        shutil.rmtree(baseline_dir)
-    if clean_up_eval:
-        shutil.rmtree(eval_dir)
     return score

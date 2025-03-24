@@ -284,19 +284,21 @@ if __name__ == "__main__":
         #     continue
         filtered_wt_names.append(wt_name)
 
-    wt_names = filtered_wt_names
-    # wt_names = [None]
-    # filtered_wt_names = None
+    # wt_names = filtered_wt_names
+    wt_names = [None]
+    filtered_wt_names = None
 
     tsv_names_and_paths = [
+        ("ase", os.path.join(OUT_DIR, f"out/mss__s12d3__sm_16_1024_noise_0.33__ableton__ase__fm_fold.tsv")),
+
         # ("add", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__add_lfo.tsv")),
         # ("ae", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__add_env.tsv")),
         # ("ae_frame", os.path.join(OUT_DIR, f"out/mss__frame__ableton__add_env.tsv")),
         # ("ae_dd50", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ae.tsv")),
-        ("ase", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase.tsv")),
-        ("ase_sm_4", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase__sm_4_1024.tsv")),
-        ("ase_sm_4_sf", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase__sm_4_1024_sf.tsv")),
-        ("ase_sm_8_sf", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase__sm_8_1024_sf.tsv")),
+        # ("ase", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase.tsv")),
+        # ("ase_sm_4", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase__sm_4_1024.tsv")),
+        # ("ase_sm_4_sf", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase__sm_4_1024_sf.tsv")),
+        # ("ase_sm_8_sf", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase__sm_8_1024_sf.tsv")),
         # ("ase_fr", os.path.join(OUT_DIR, f"out/mss__frame__ableton__ase.tsv")),
         # ("ase_bi", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__ase_biquad.tsv")),
         # ("ae_p2", os.path.join(OUT_DIR, f"out/mss__s12d3_mss_p2__ableton__add_env.tsv")),
@@ -310,18 +312,28 @@ if __name__ == "__main__":
     # stage = "test"
     x_col = "step"
     # x_col = "global_n"
-    # y_col = "l1__add_lfo"
-    # y_col = "l1__sub_lfo"
-    # y_col = "l1__env"
-    y_col = "esr__add_lfo"
-    # y_col = "esr__sub_lfo"
-    # y_col = "esr__env"
+
+    # metric = "l1"
+    metric = "esr"
+    # metric = "mse"
+    # inv = ""
+    inv = "_inv"
+    # inv = "_inv_all"
+    # lfo = "add_lfo"
+    # lfo = "sub_lfo"
+    lfo = "env"
+
+    y_col = f"{metric}{inv}__{lfo}"
     # y_col = "audio__mss"
     # y_col = "audio__mel_stft"
     # y_col = "audio__mfcc"
+
     y_con_val = 0.1
-    # trial_col = "seed"
-    trial_col = "wt_name"
+    trial_col = "seed"
+    # trial_col = "wt_name"
+
+    allow_var_n = False
+    # allow_var_n = True
 
     df_rows = []
     df_cols = []
@@ -346,8 +358,7 @@ if __name__ == "__main__":
                 trial_col=trial_col,
                 filter_col="wt_name",
                 filter_vals=filter_vals,
-                allow_var_n=False,
-                # allow_var_n=True,
+                allow_var_n=allow_var_n,
             )
             if not data:
                 continue
@@ -368,6 +379,7 @@ if __name__ == "__main__":
         if stage != "test":
             ax.set_ylim(bottom=None, top=None)
             # ax.set_ylim(bottom=0.0, top=None)
+            # ax.set_ylim(bottom=0.0, top=0.12)
             plt.show()
             plt.pause(0.20)
 

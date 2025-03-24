@@ -189,9 +189,9 @@ class CustomLightningCLI(LightningCLI):
                     save_top_k=1,
                     verbose=False,
                 ),
-                LogModSigAndSpecCallback(),
-                LogAudioCallback(),
-                LogWavetablesCallback(),
+                # LogModSigAndSpecCallback(),
+                # LogAudioCallback(),
+                # LogWavetablesCallback(),
             ],
             "logger": {
                 "class_path": "pytorch_lightning.loggers.TensorBoardLogger",
