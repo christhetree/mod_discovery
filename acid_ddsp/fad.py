@@ -1,5 +1,6 @@
 import logging
 import os
+import shutil
 from typing import Optional
 
 import torch as tr
@@ -36,6 +37,9 @@ def save_and_concat_fad_audio(
     fade_n_samples: Optional[int] = None,
 ) -> None:
     assert audio.ndim == 2
+    if os.path.exists(dir_path):
+        log.warning(f"Directory '{dir_path}' already exists; removing")
+        shutil.rmtree(dir_path)
     os.makedirs(dir_path, exist_ok=False)
     if fade_n_samples is not None:
         assert fade_n_samples > 0
@@ -54,7 +58,6 @@ def calc_fad(
 ) -> float:
     assert os.path.isdir(baseline_dir)
     assert os.path.isdir(eval_dir)
-    assert workers > 0
 
     fad_model = get_fad_model(fad_model_name)
     fadtk.cache_embedding_files(baseline_dir, fad_model, workers)

@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List, Mapping, Tuple
 
 import auraloss
+import numpy as np
 import pytorch_lightning as pl
 import torch as tr
 from auraloss.time import ESRLoss
@@ -177,8 +178,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         n_batches_per_epoch = len(self.trainer.datamodule.train_dataloader())
         n_epochs = self.trainer.max_epochs
         self.total_n_training_steps = n_batches_per_epoch * n_epochs
-        if tr.cuda.is_available():
-            self.model = tr.compile(self.model)
+        # if tr.cuda.is_available():
+        #     self.model = tr.compile(self.model)
         #     self.synth = tr.compile(self.synth)
         #     self.synth_hat = tr.compile(self.synth_hat)
 
@@ -592,8 +593,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # Calc FAD metrics
         fad_metrics = {}
         if stage == "test":
-            n_workers = min(1, self.datamodule.num_workers)
-            fad_metrics = self.calc_fad_metrics(x, x_hat, n_workers)
+            fad_metrics = self.calc_fad_metrics(x, x_hat)
 
         # TSV logging
         if self.tsv_path:
@@ -785,9 +785,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
         x_pred = tr.bmm(W, x_hat) + bias  # shape: (bs, n_signals, n_samples)
         return x_pred
 
-    def calc_fad_metrics(self, x: T, x_hat: T, n_workers: int = 1) -> Dict[str, float]:
-        x = x.squeeze(1).detach()
-        x_hat = x_hat.squeeze(1).detach()
+    def calc_fad_metrics(self, x: T, x_hat: T, n_workers: int = 0) -> Dict[str, float]:
+        x = x.squeeze(1).detach().cpu()
+        x_hat = x_hat.squeeze(1).detach().cpu()
         fad_dir_x = os.path.join(OUT_DIR, f"{self.run_name}__fad_x")
         fad_dir_x_hat = os.path.join(OUT_DIR, f"{self.run_name}__fad_x_hat")
         save_and_concat_fad_audio(
@@ -804,6 +804,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         )
         fad_metrics = {}
         for fad_model_name in self.fad_model_names:
+            log.info(f"Calculating FAD for {fad_model_name}")
             fad_val = calc_fad(
                 fad_model_name,
                 baseline_dir=fad_dir_x,

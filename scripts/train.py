@@ -3,24 +3,23 @@ import logging
 import os
 import warnings
 
-import torch as tr
-
-from synth_modules import WavetableOsc
-from wavetables import BAD_ABLETON_WTS
-
 # Prevents a bug with PyTorch and CUDA_VISIBLE_DEVICES
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+# Prevent FADTK from going crazy with CPU usage
+os.environ["OMP_NUM_THREADS"] = "4"
 
-import torch
+import torch as tr
 
 from acid_ddsp.cli import CustomLightningCLI
 from acid_ddsp.paths import CONFIGS_DIR, WAVETABLES_DIR
+from acid_ddsp.synth_modules import WavetableOsc
+from acid_ddsp.wavetables import BAD_ABLETON_WTS
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
-torch.set_float32_matmul_precision("high")
+tr.set_float32_matmul_precision("high")
 # warnings.filterwarnings(
 #     "ignore", message="does not have a deterministic", category=UserWarning
 # )
@@ -44,9 +43,7 @@ if __name__ == "__main__":
     wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
     # wt_dir = os.path.join(WAVETABLES_DIR, "waveedit")
 
-    wt_names = [
-        f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")
-    ]
+    wt_names = [f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")]
     filtered_wt_names = []
     for wt_name in wt_names:
         if any(bad_wt_name in wt_name for bad_wt_name in BAD_ABLETON_WTS):
@@ -55,7 +52,7 @@ if __name__ == "__main__":
             continue
         # if not "galactica" in wt_name:
         if not "fm_fold" in wt_name:
-        # if not "basic_shapes" in wt_name:
+            # if not "basic_shapes" in wt_name:
             continue
         filtered_wt_names.append(wt_name)
     wt_paths = [os.path.join(wt_dir, f"{wt_name}.pt") for wt_name in filtered_wt_names]
@@ -67,6 +64,11 @@ if __name__ == "__main__":
     # basic_shapes_wt = tr.load(basic_shapes_wt_path, weights_only=True)
 
     config_path = os.path.join(CONFIGS_DIR, config_name)
+
+    # # We extract devices for FADTK
+    # with open(config_path, "r") as in_f:
+    #     config = yaml.safe_load(in_f)
+    # devices = config["trainer"]["devices"]
 
     for seed, wt_path in itertools.product(seeds, wt_paths):
         log.info(f"Current seed: {seed} and wavetable: {wt_path}")
@@ -96,4 +98,11 @@ if __name__ == "__main__":
 
         cli.before_fit()
         cli.trainer.fit(model=cli.model, datamodule=cli.datamodule)
+
+        # Set CUDA_VISIBLE_DEVICES again for FADTK
+        # if isinstance(devices, list):
+        #     cuda_flag = f'{",".join([str(d) for d in devices])}'
+        #     log.info(f"setting CUDA_VISIBLE_DEVICES = {cuda_flag}")
+        #     os.environ["CUDA_VISIBLE_DEVICES"] = f"{cuda_flag}"
+
         cli.trainer.test(model=cli.model, datamodule=cli.datamodule, ckpt_path="best")
