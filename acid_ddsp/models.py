@@ -62,6 +62,7 @@ class TempParam:
         else:
             assert not self.adapt_use_latent, "Using the latent dim is not supported"
             assert not self.is_bounded, "is_bounded has no meaning for non-splines"
+            assert not self.use_alpha_linear, "use_alpha_linear is only for splines"
         if self.is_c1_cont:
             assert self.is_spline, "C1 continuity only makes sense for splines"
             assert not self.is_bounded, "is_bounded has no meaning for C1 splines"

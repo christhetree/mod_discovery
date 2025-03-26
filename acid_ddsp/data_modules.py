@@ -9,17 +9,15 @@ import torch as tr
 from torch import Tensor as T
 from torch.utils.data import DataLoader
 
-from audio_config import AudioConfig
-from datasets import (
-    AcidSynthDataset,
+from acid_ddsp.datasets import (
     PreprocDataset,
-    SynthDataset,
     NSynthDataset,
     SerumDataset,
     WavetableDataset,
     SeedDataset,
 )
-from modulations import ModSignalGenerator
+from acid_ddsp.modulations import ModSignalGenerator
+from audio_config import AudioConfig
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -28,17 +26,17 @@ log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 class SeedDataModule(pl.LightningDataModule):
     def __init__(
-            self,
-            batch_size: int,
-            ac: AudioConfig,
-            n_seeds: int,
-            mod_sig_gens: List[ModSignalGenerator],
-            global_param_names: Optional[List[str]] = None,
-            temp_param_names: Optional[List[str]] = None,
-            val_split: float = 0.2,
-            test_split: float = 0.2,
-            randomize_train_seed: bool = False,
-            num_workers: int = 0,
+        self,
+        batch_size: int,
+        ac: AudioConfig,
+        n_seeds: int,
+        mod_sig_gens: List[ModSignalGenerator],
+        global_param_names: Optional[List[str]] = None,
+        temp_param_names: Optional[List[str]] = None,
+        val_split: float = 0.2,
+        test_split: float = 0.2,
+        randomize_train_seed: bool = False,
+        num_workers: int = 0,
     ):
         super().__init__()
         self.batch_size = batch_size
@@ -248,7 +246,6 @@ class WavetableDataModule(pl.LightningDataModule):
             self.val_ds,
             batch_size=self.batch_size,
             shuffle=False,
-            # shuffle=True,  # For more diversity in visualization callbacks
             num_workers=self.num_workers,
             drop_last=True,
         )
@@ -260,121 +257,6 @@ class WavetableDataModule(pl.LightningDataModule):
             shuffle=False,
             num_workers=self.num_workers,
             drop_last=True,
-        )
-
-
-# TODO(cm): refactor these two into one class
-class SynthDataModule(pl.LightningDataModule):
-    def __init__(
-        self,
-        batch_size: int,
-        ac: AudioConfig,
-        mod_sig_gen: ModSignalGenerator,
-        temp_params_name: str,
-        train_n_per_epoch: int,
-        val_n_per_epoch: int,
-        test_n_per_epoch: Optional[int] = None,
-        num_workers: int = 0,
-    ):
-        super().__init__()
-        if test_n_per_epoch is None:
-            test_n_per_epoch = val_n_per_epoch
-
-        self.batch_size = batch_size
-        self.ac = ac
-        self.mod_sig_gen = mod_sig_gen
-        self.temp_params_name = temp_params_name
-        self.train_n_per_epoch = train_n_per_epoch
-        self.val_n_per_epoch = val_n_per_epoch
-        self.test_n_per_epoch = test_n_per_epoch
-        self.num_workers = num_workers
-
-        self.train_ds = SynthDataset(
-            ac,
-            mod_sig_gen,
-            train_n_per_epoch,
-            temp_params_name,
-        )
-        self.val_ds = SynthDataset(
-            ac,
-            mod_sig_gen,
-            val_n_per_epoch,
-            temp_params_name,
-        )
-        self.test_ds = SynthDataset(
-            ac,
-            mod_sig_gen,
-            test_n_per_epoch,
-            temp_params_name,
-        )
-
-    def train_dataloader(self) -> DataLoader:
-        return DataLoader(
-            self.train_ds,
-            batch_size=self.batch_size,
-            shuffle=True,
-            num_workers=self.num_workers,
-            drop_last=False,
-        )
-
-    def val_dataloader(self) -> DataLoader:
-        return DataLoader(
-            self.val_ds,
-            batch_size=self.batch_size,
-            shuffle=True,  # To ensure different visualizations
-            num_workers=self.num_workers,
-            drop_last=False,
-        )
-
-    def test_dataloader(self) -> DataLoader:
-        return DataLoader(
-            self.test_ds,
-            batch_size=self.batch_size,
-            shuffle=False,
-            num_workers=self.num_workers,
-            drop_last=False,
-        )
-
-
-class AcidDDSPDataModule(SynthDataModule):
-    def __init__(
-        self,
-        batch_size: int,
-        ac: AudioConfig,
-        mod_sig_gen: ModSignalGenerator,
-        temp_params_name: str,
-        train_n_per_epoch: int,
-        val_n_per_epoch: int,
-        test_n_per_epoch: Optional[int] = None,
-        num_workers: int = 0,
-    ):
-        super().__init__(
-            batch_size,
-            ac,
-            mod_sig_gen,
-            temp_params_name,
-            train_n_per_epoch,
-            val_n_per_epoch,
-            test_n_per_epoch,
-            num_workers,
-        )
-        self.train_ds = AcidSynthDataset(
-            ac,
-            mod_sig_gen,
-            train_n_per_epoch,
-            temp_params_name,
-        )
-        self.val_ds = AcidSynthDataset(
-            ac,
-            mod_sig_gen,
-            val_n_per_epoch,
-            temp_params_name,
-        )
-        self.test_ds = AcidSynthDataset(
-            ac,
-            mod_sig_gen,
-            test_n_per_epoch,
-            temp_params_name,
         )
 
 
@@ -478,17 +360,21 @@ class NSynthDataModule(pl.LightningDataModule):
         data_dir: str,
         ext: str = "wav",
         max_n_files: Optional[int] = None,
-        fname_keyword: Optional[str] = None,
+        fname_keywords: Optional[List[str]] = None,
+        split_train: float = 0.6,
+        split_val: float = 0.2,
         num_workers: int = 0,
     ):
         super().__init__()
-        assert os.path.exists(data_dir)
+        assert os.path.exists(data_dir), f"Data directory {data_dir} does not exist."
         self.batch_size = batch_size
         self.ac = ac
         self.data_dir = data_dir
-        self.max_n_files = max_n_files
-        self.fname_keyword = fname_keyword
         self.ext = ext
+        self.max_n_files = max_n_files
+        self.fname_keywords = fname_keywords
+        self.split_train = split_train
+        self.split_val = split_val
         self.num_workers = num_workers
 
         self.train_ds = NSynthDataset(
@@ -496,24 +382,30 @@ class NSynthDataModule(pl.LightningDataModule):
             data_dir,
             ext,
             max_n_files,
-            fname_keyword,
-            split="train",
+            fname_keywords,
+            split_name="train",
+            split_train=split_train,
+            split_val=split_val,
         )
         self.val_ds = NSynthDataset(
             ac,
             data_dir,
             ext,
             max_n_files,
-            fname_keyword,
-            split="val",
+            fname_keywords,
+            split_name="val",
+            split_train=split_train,
+            split_val=split_val,
         )
         self.test_ds = NSynthDataset(
             ac,
             data_dir,
             ext,
             max_n_files,
-            fname_keyword,
-            split="test",
+            fname_keywords,
+            split_name="test",
+            split_train=split_train,
+            split_val=split_val,
         )
 
     def train_dataloader(self) -> DataLoader:
@@ -522,14 +414,14 @@ class NSynthDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
-            drop_last=False,
+            drop_last=True,
         )
 
     def val_dataloader(self) -> DataLoader:
         return DataLoader(
             self.train_ds,
             batch_size=self.batch_size,
-            shuffle=True,  # To ensure different visualizations
+            shuffle=False,
             num_workers=self.num_workers,
             drop_last=False,
         )
@@ -553,18 +445,22 @@ class SerumDataModule(pl.LightningDataModule):
         preset_params_path: str,
         ext: str = "wav",
         max_n_files: Optional[int] = None,
-        fname_keyword: Optional[str] = None,
+        fname_keywords: Optional[List[str]] = None,
+        split_train: float = 0.6,
+        split_val: float = 0.2,
         num_workers: int = 0,
     ):
         super().__init__()
-        assert os.path.exists(data_dir)
+        assert os.path.exists(data_dir), f"Data directory {data_dir} does not exist."
         self.batch_size = batch_size
         self.ac = ac
         self.data_dir = data_dir
         self.preset_params_path = preset_params_path
         self.ext = ext
         self.max_n_files = max_n_files
-        self.fname_keyword = fname_keyword
+        self.fname_keywords = fname_keywords
+        self.split_train = split_train
+        self.split_val = split_val
         self.num_workers = num_workers
 
         self.train_ds = SerumDataset(
@@ -573,8 +469,10 @@ class SerumDataModule(pl.LightningDataModule):
             preset_params_path,
             ext,
             max_n_files,
-            fname_keyword,
-            split="train",
+            fname_keywords,
+            split_name="train",
+            split_train=split_train,
+            split_val=split_val,
         )
         self.val_ds = SerumDataset(
             ac,
@@ -582,15 +480,21 @@ class SerumDataModule(pl.LightningDataModule):
             preset_params_path,
             ext,
             max_n_files,
-            fname_keyword,
-            split="val",
+            fname_keywords,
+            split_name="val",
+            split_train=split_train,
+            split_val=split_val,
         )
         self.test_ds = SerumDataset(
             ac,
             data_dir,
             preset_params_path,
             ext,
-            split="test",
+            max_n_files,
+            fname_keywords,
+            split_name="test",
+            split_train=split_train,
+            split_val=split_val,
         )
 
     def train_dataloader(self) -> DataLoader:
@@ -599,16 +503,16 @@ class SerumDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
-            drop_last=False,
+            drop_last=True,
         )
 
     def val_dataloader(self) -> DataLoader:
         return DataLoader(
             self.train_ds,
             batch_size=self.batch_size,
-            shuffle=True,  # To ensure different visualizations
+            shuffle=False,
             num_workers=self.num_workers,
-            drop_last=False,
+            drop_last=True,
         )
 
     def test_dataloader(self) -> DataLoader:
@@ -617,5 +521,5 @@ class SerumDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
-            drop_last=False,
+            drop_last=True,
         )

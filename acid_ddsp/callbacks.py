@@ -135,23 +135,31 @@ class LogModSigAndSpecCallback(Callback):
             # TODO(cm): tmp
             temp_params_all = [
                 (out_dict.get("env"), "orchid", None),
-                (out_dict.get("add_lfo"), "lightcoral", None),
-                (out_dict.get("add_lfo_hat"), "orange", None),
-                (out_dict.get("sub_lfo"), "lightblue", None),
                 (out_dict.get("env_hat"), "purple", None),
+                (out_dict.get("env_hat_inv"), "purple", ":"),
                 (out_dict.get("env_hat_inv_all"), "purple", "--"),
-                (out_dict.get("add_lfo_hat_inv"), "red", None),
+                (out_dict.get("add_lfo"), "lightcoral", None),
+                (out_dict.get("add_lfo_hat"), "red", None),
+                (out_dict.get("add_lfo_hat_inv"), "red", ":"),
                 (out_dict.get("add_lfo_hat_inv_all"), "red", "--"),
-                (out_dict.get("sub_lfo_hat_inv"), "blue", None),
+                (out_dict.get("sub_lfo"), "lightblue", None),
+                (out_dict.get("sub_lfo_hat"), "blue", None),
+                (out_dict.get("sub_lfo_hat_inv"), "blue", ":"),
                 (out_dict.get("sub_lfo_hat_inv_all"), "blue", "--"),
             ]
             n_frames = None
 
-            for temp_param, color, linestyle in temp_params_all:
+            for temp_param, color, linestyle, norm in temp_params_all:
                 if temp_param is None:
                     continue
                 if temp_param.ndim != 2:
                     continue
+                if temp_param.min() < 0.0 or temp_param.max() > 1.0:
+                    if linestyle is None:  # Only normalize _hat
+                        tp_min = temp_param.min()
+                        tp_range = temp_param.max() - tp_min
+                        temp_param = (temp_param - tp_min) / tp_range
+                        linestyle = "-."
                 curr_n_frames = temp_param.size(1)
                 if n_frames is None:
                     n_frames = curr_n_frames

@@ -12,7 +12,7 @@ from pandas import DataFrame
 from torch import Tensor as T
 from torch.utils.data import Dataset
 
-import util
+import acid_ddsp.util as util
 from acid_ddsp.audio_config import AudioConfig
 from acid_ddsp.modulations import ModSignalGenerator
 
@@ -43,6 +43,8 @@ class SeedDataset(Dataset):
         self.temp_param_names = temp_param_names
         self.randomize_seed = randomize_seed
 
+        # To ensure it's of type float32
+        self.note_on_duration = tr.tensor(ac.note_on_duration).float()
         self.rand_gen = tr.Generator(device="cpu")
 
     def __len__(self) -> int:
@@ -61,7 +63,7 @@ class SeedDataset(Dataset):
         phase_hat = tr.rand((1,), generator=self.rand_gen).squeeze() * 2 * tr.pi
 
         result = {
-            "note_on_duration": self.ac.note_on_duration,
+            "note_on_duration": self.note_on_duration,
             "f0_hz": f0_hz,
             "phase": phase,
             "phase_hat": phase_hat,
@@ -95,55 +97,6 @@ class WavetableDataset(SeedDataset):
         wt_idx = self.df.iloc[idx]["wt_idx"].item()
         result["wt_idx"] = wt_idx
         return result
-
-
-class SynthDataset(Dataset):
-    def __init__(
-        self,
-        ac: AudioConfig,
-        mod_sig_gen: ModSignalGenerator,
-        n_per_epoch: int,
-        temp_params_name: str,
-    ):
-        super().__init__()
-        self.ac = ac
-        self.note_on_duration = tr.tensor(ac.note_on_duration)
-        self.mod_sig_gen = mod_sig_gen
-        self.n_per_epoch = n_per_epoch
-        self.temp_params_name = temp_params_name
-
-    def __len__(self) -> int:
-        return self.n_per_epoch
-
-    def __getitem__(self, idx: int) -> Dict[str, T]:
-        f0_hz = util.sample_log_uniform(self.ac.min_f0_hz, self.ac.max_f0_hz)
-        f0_hz = tr.tensor(f0_hz)
-        phase = tr.rand((1,)) * 2 * tr.pi
-        phase_hat = tr.rand((1,)) * 2 * tr.pi
-        mod_sig = self.mod_sig_gen(self.ac.n_samples).unsqueeze(-1)
-        return {
-            "f0_hz": f0_hz,
-            "note_on_duration": self.note_on_duration,
-            "phase": phase,
-            "phase_hat": phase_hat,
-            self.temp_params_name: mod_sig,
-        }
-
-
-class AcidSynthDataset(SynthDataset):
-    def __getitem__(self, idx: int) -> Dict[str, T]:
-        out = super().__getitem__(idx)
-        q_0to1 = tr.rand((1,)).squeeze(0)
-        dist_gain_0to1 = tr.rand((1,)).squeeze(0)
-        osc_shape_0to1 = tr.rand((1,)).squeeze(0)
-        osc_gain_0to1 = tr.rand((1,)).squeeze(0)
-        learned_alpha_0to1 = tr.rand((1,)).squeeze(0)
-        out["q_0to1"] = q_0to1
-        out["dist_gain_0to1"] = dist_gain_0to1
-        out["osc_shape_0to1"] = osc_shape_0to1
-        out["osc_gain_0to1"] = osc_gain_0to1
-        out["learned_alpha_0to1"] = learned_alpha_0to1
-        return out
 
 
 class PreprocDataset(Dataset):
@@ -201,17 +154,22 @@ class NSynthDataset(Dataset):
         data_dir: str,
         ext: str = "wav",
         max_n_files: Optional[int] = None,
-        fname_keyword: Optional[str] = None,
-        split: str = "train",
+        fname_keywords: Optional[List[str]] = None,
+        split_name: str = "train",
+        split_train: float = 0.6,
+        split_val: float = 0.2,
         shuffle_seed: int = 42,
     ):
         super().__init__()
         assert os.path.exists(data_dir)
+        self.ac = ac
+        self.shuffle_seed = shuffle_seed
+
         fnames = sorted(glob.glob(f"{data_dir}/*.{ext}"))
         log.info(f"Found {len(fnames)} files")
-        if fname_keyword is not None:
-            log.info(f"Filtering filenames with keyword: '{fname_keyword}'")
-            fnames = [f for f in fnames if fname_keyword in f]
+        if fname_keywords:
+            log.info(f"Filtering filenames with keywords: '{fname_keywords}'")
+            fnames = [f for f in fnames if any(k in f for k in fname_keywords)]
             log.info(f"Filtered down to {len(fnames)} files")
 
         rand = random.Random(shuffle_seed)
@@ -219,25 +177,30 @@ class NSynthDataset(Dataset):
         if max_n_files is not None:
             log.info(f"Limiting number of files to {max_n_files}")
             fnames = fnames[:max_n_files]
-        self.fnames = fnames
+        seeds = list(range(len(fnames)))
 
-        if split == "train":
-            log.info(f"Found {len(self.fnames)} files")
-            self.fnames = self.fnames[: int(0.7 * len(self.fnames))]
-        elif split == "val":
-            self.fnames = self.fnames[
-                int(0.7 * len(self.fnames)) : int(0.9 * len(self.fnames))
-            ]
+        n_files = len(fnames)
+        if split_name == "train":
+            start_idx = 0
+            end_idx = int(split_train * n_files)
+        elif split_name == "val":
+            start_idx = int(split_train * n_files)
+            end_idx = int((split_train + split_val) * n_files)
         else:
-            self.fnames = self.fnames[int(0.9 * len(self.fnames)) :]
+            start_idx = int((split_train + split_val) * n_files)
+            end_idx = n_files
 
-        self.ac = ac
-        self.shuffle_seed = shuffle_seed
-        self.note_on_duration = tr.tensor(ac.note_on_duration)
+        self.fnames = fnames[start_idx:end_idx]
+        log.info(f"{split_name}: found {n_files} files, using {len(self.fnames)}")
+        self.seeds = seeds[start_idx:end_idx]
+
+        # To ensure it's of type float32
+        self.note_on_duration = tr.tensor(ac.note_on_duration).float()
+        self.rand_gen = tr.Generator(device="cpu")
 
     def get_f0_hz(self, fname: str) -> float:
         midi_note = int(os.path.basename(fname).split("-")[-2].split("_")[-1])
-        f0_hz = librosa.midi_to_hz(midi_note)
+        f0_hz = float(librosa.midi_to_hz(midi_note))
         return f0_hz
 
     def __len__(self) -> int:
@@ -245,6 +208,8 @@ class NSynthDataset(Dataset):
 
     def __getitem__(self, idx: int) -> Dict[str, T]:
         fname = self.fnames[idx]
+        seed = self.seeds[idx]
+
         audio, sr = torchaudio.load(fname)
         assert sr == self.ac.sr
         audio = audio.squeeze(0)
@@ -262,13 +227,13 @@ class NSynthDataset(Dataset):
         # "<inst_name>_<inst_type>_<inst_str>-<pitch>-<velocity>"
         # midi_note = int(os.path.basename(fname).split("-")[1])
         f0_hz = self.get_f0_hz(fname)
-
-        # gudgud96: I am not too sure why phase_hat is needed yet...
-        phase_hat = tr.rand((1,)) * 2 * tr.pi
+        f0_hz = tr.tensor(f0_hz).float()
+        self.rand_gen.manual_seed(seed)
+        phase_hat = tr.rand((1,), generator=self.rand_gen).squeeze() * 2 * tr.pi
         return {
-            "wet": audio,
-            "f0_hz": tr.tensor(f0_hz).float(),
+            "audio": audio,
             "note_on_duration": self.note_on_duration,
+            "f0_hz": f0_hz,
             "phase_hat": phase_hat,
         }
 
@@ -282,9 +247,22 @@ class SerumDataset(NSynthDataset):
         ext: str = "wav",
         max_n_files: Optional[int] = None,
         fname_keyword: Optional[str] = None,
-        split: str = "train",
+        split_name: str = "train",
+        split_train: float = 0.6,
+        split_val: float = 0.2,
+        shuffle_seed: int = 42,
     ):
-        super().__init__(ac, data_dir, ext, max_n_files, fname_keyword, split)
+        super().__init__(
+            ac,
+            data_dir,
+            ext,
+            max_n_files,
+            fname_keyword,
+            split_name,
+            split_train,
+            split_val,
+            shuffle_seed,
+        )
         with open(preset_params_path, "r") as f:
             self.preset_params = json.load(f)
         # TODO(cm): cleanup

@@ -1,0 +1,78 @@
+custom:
+  project_name: acid_ddsp_2
+  model_name: mss__s36d3__sm_16_1024_hs_512
+#  model_name: mss__s36d3__sm_16_1024_frame
+#  model_name: mss__s36d3__sm_16_1024_shan_16_frame
+#  model_name: mss__s36d3__sm_16_1024_shan
+  dataset_name: serum__BA_both_lfo_10
+  cpu_batch_size: 5
+  use_wandb_cpu: false
+  use_wandb_gpu: true
+
+trainer:
+  accelerator: gpu
+  benchmark: false
+  devices: [4]
+  max_epochs: 30
+  num_sanity_val_steps: 1
+  accumulate_grad_batches: 1
+  gradient_clip_val: 0.5
+
+data:
+  class_path: acid_ddsp.data_modules.SerumDataModule
+  init_args:
+    batch_size: 16
+    ac: audio_config.yml
+#    data_dir: ../data/serum-nsynth-v1
+    data_dir: data/serum-nsynth-v1
+#    preset_params_path: ../data/preset_params_v2.json
+    preset_params_path: data/preset_params_v2.json
+    split_train: 0.6
+    split_val: 0.2
+    num_workers: 4
+    fname_keywords:
+      - BA Access 2 Mthrshp Denied
+      - BA BitterBot
+      - BA Deth reece
+      - BA Gritter
+      - BA Hoo
+      - BA Le Gigante
+      - BA Modulated Chomper
+      - BA SCREAM Wobble 01
+      - BA Sludgecrank
+      - BA Wide Eyed Reese
+
+model:
+  class_path: acid_ddsp.lightning.PreprocLightningModule
+  init_args:
+    ac: audio_config.yml
+    spectral_visualizer: log_mel_spec.yml
+    use_model: true
+    model: spectral_2dcnn_dd50__ase__sm.yml
+#    model: spectral_2dcnn_dd50__ase__sm_frame.yml
+#    model: spectral_2dcnn_dd50__ase__sm_shan_16_frame.yml
+#    model: spectral_2dcnn_dd50__ase__sm_shan.yml
+    temp_param_names_hat:
+      - add_lfo
+      - sub_lfo
+      - env
+    interp_temp_param_names_hat:
+      - add_lfo
+      - env
+    synth_hat: synth__ase__sm.yml
+    loss_func: auraloss.freq.MultiResolutionSTFTLoss
+    synth_opt: ../opt/sf_adam_w__lr_5e-2.yml
+    model_opt: ../opt/sf_adam_w__lr_5e-3.yml
+    fad_model_names:
+#      - vggish
+      - clap-2023
+#      - encodec-emb-24k
+      - encodec-emb-48k
+#      - panns-cnn14-16k
+      - panns-cnn14-32k
+      - panns-wavegram-logmel
+
+    run_name: mss__s36d3__sm_16_1024_hs_512__serum__BA_both_lfo_10
+#    run_name: mss__s36d3__sm_16_1024__serum_frame__BA_both_lfo_10
+#    run_name: mss__s36d3__sm_16_1024_shan_16_frame__serum__BA_both_lfo_10
+#    run_name: mss__s36d3__sm_16_1024_shan__serum__BA_both_lfo_10

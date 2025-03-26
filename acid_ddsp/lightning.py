@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List, Mapping, Tuple
 
 import auraloss
-import numpy as np
 import pytorch_lightning as pl
 import torch as tr
 from auraloss.time import ESRLoss
@@ -210,29 +209,23 @@ class AcidDDSPLightingModule(pl.LightningModule):
         }
 
         other_params = {}
-        if "add_lfo" in temp_params:
-            other_params["add_lfo"] = temp_params["add_lfo"]
-        else:
-            other_mod_sig = list(temp_params.values())[0]
-            add_mod_sig = tr.zeros_like(other_mod_sig)
-            # add_mod_sig = tr.ones_like(other_mod_sig)
-            other_params["add_lfo"] = add_mod_sig
-        if "wt" in batch:
-            other_params["wt"] = batch["wt"]
+        # if "add_lfo" in temp_params:
+        #     other_params["add_lfo"] = temp_params["add_lfo"]
+        # else:
+        #     other_mod_sig = list(temp_params.values())[0]
+        #     add_mod_sig = tr.zeros_like(other_mod_sig)
+        #     # add_mod_sig = tr.ones_like(other_mod_sig)
+        #     other_params["add_lfo"] = add_mod_sig
+        # if "wt" in batch:
+        #     other_params["wt"] = batch["wt"]
         if "q_0to1" in batch:
             other_params["q_mod_sig"] = batch["q_0to1"]
-        filter_types = ["lp", "hp", "bp", "no"]
-        if "filter_type_0to1" in batch:
-            filter_type_0to1 = batch["filter_type_0to1"][0]
-            filter_type_idx = int(filter_type_0to1 * len(filter_types))
-            filter_type = filter_types[filter_type_idx]
-            other_params["filter_type"] = filter_type
-
-        # Postprocess q_hat TODO(cm): generalize
-        # if "q" in self.global_param_names:
-        #     q_0to1 = batch["q_0to1"]
-        #     q_mod_sig = q_0to1.unsqueeze(-1)
-        #     temp_params["q_mod_sig"] = q_mod_sig
+        # filter_types = ["lp", "hp", "bp", "no"]
+        # if "filter_type_0to1" in batch:
+        #     filter_type_0to1 = batch["filter_type_0to1"][0]
+        #     filter_type_idx = int(filter_type_0to1 * len(filter_types))
+        #     filter_type = filter_types[filter_type_idx]
+        #     other_params["filter_type"] = filter_type
 
         # Generate ground truth wet audio
         with tr.no_grad():
@@ -274,10 +267,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
         f0_hz = batch["f0_hz"]
         x = batch["x"]
         phase_hat = batch["phase_hat"]
-        temp_params = batch["temp_params"]
-        global_params_0to1 = batch["global_params_0to1"]
-        global_params = batch["global_params"]
-        other_params = batch["other_params"]
+        temp_params = batch.get("temp_params", {})
+        global_params_0to1 = batch.get("global_params_0to1", {})
+        global_params = batch.get("global_params", {})
+        other_params = batch.get("other_params", {})
 
         # Get optional params
         add_audio = batch.get("add_audio")
@@ -295,8 +288,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         temp_param_metrics = {}
         global_param_metrics = {}
 
-        # synth_out_hat = {}
-
         # Perform model forward pass
         if self.use_model:
             alpha_linear = None
@@ -305,59 +296,19 @@ class AcidDDSPLightingModule(pl.LightningModule):
             if stage != "test":
                 assert self.total_n_training_steps
                 # alpha_noise = self.beta ** self.curr_training_step
-                alpha_noise = 1.0 - self.curr_training_step / self.total_n_training_steps
+                alpha_noise = (
+                    1.0 - self.curr_training_step / self.total_n_training_steps
+                )
                 self.log(f"{stage}/alpha_noise", alpha_noise, prog_bar=False)
-                alpha_linear = 1.0 - self.curr_training_step / self.total_n_training_steps
+                alpha_linear = (
+                    1.0 - self.curr_training_step / self.total_n_training_steps
+                )
                 assert alpha_linear >= 0.0
                 self.log(f"{stage}/alpha_linear", alpha_linear, prog_bar=False)
                 # log.info(f"alpha_noise: {alpha_noise}, alpha_linear: {alpha_linear}")
             model_out = self.model(
                 model_in_dict, alpha_noise=alpha_noise, alpha_linear=alpha_linear
             )
-            # model_out = {}
-            # add_in = {"audio": x}
-            # add_model_out = self.model(add_in, tp_name="add_lfo")
-            # model_out.update(add_model_out)
-            # add_lfo = add_model_out["add_lfo"]
-            # if "add_lfo" in self.interp_temp_param_names_hat:
-            #     add_lfo = util.interpolate_dim(
-            #         add_lfo, self.ac.n_samples, dim=1, align_corners=True
-            #     )
-            # add_temp_params_hat = {"add_lfo": add_lfo}
-            # add_audio_hat, _ = self.synth_hat.additive_synthesis(
-            #     self.ac.n_samples,
-            #     f0_hz,
-            #     phase_hat,
-            #     add_temp_params_hat,
-            #     global_params_hat,
-            #     other_params,
-            # )
-            # sub_in = {"audio": x, "dry_audio": add_audio_hat.unsqueeze(1)}
-            # sub_model_out = self.model(sub_in, tp_name="sub_lfo")
-            # model_out.update(sub_model_out)
-            # sub_lfo = sub_model_out["sub_lfo_adapted"]
-            # if "sub_lfo_adapted" in self.interp_temp_param_names_hat:
-            #     sub_lfo = util.interpolate_dim(
-            #         sub_lfo, self.ac.n_samples, dim=1, align_corners=True
-            #     )
-            # sub_temp_params_hat = {"sub_lfo_adapted": sub_lfo}
-            # sub_audio_hat, _ = self.synth_hat.subtractive_synthesis(
-            #     add_audio_hat, sub_temp_params_hat, global_params_hat, other_params
-            # )
-            # env_in = {"audio": x, "dry_audio": sub_audio_hat.unsqueeze(1)}
-            # env_model_out = self.model(env_in, tp_name="env")
-            # model_out.update(env_model_out)
-            # env_hat = env_model_out["env"]
-            # if "env" in self.interp_temp_param_names_hat:
-            #     env_hat = util.interpolate_dim(
-            #         env_hat, self.ac.n_samples, dim=1, align_corners=True
-            #     )
-            # env_audio_hat = sub_audio_hat * env_hat
-            # synth_out_hat = {
-            #     "add_audio": add_audio_hat,
-            #     "sub_audio": sub_audio_hat,
-            #     "env_audio": env_audio_hat,
-            # }
 
             # Postprocess temp_params_hat
             for p_name in self.temp_param_names_hat:
@@ -427,26 +378,31 @@ class AcidDDSPLightingModule(pl.LightningModule):
                             temp_param_metrics[f"{p_name}_fft_inv"] = tr.tensor(-1)
 
                 # Config decides which temp params are interpolated for synth_hat
-                if (
-                    p_name in self.interp_temp_param_names_hat
-                    and p_hat_interp is not None
-                ):
-                    temp_params_hat[p_name] = p_hat_interp
+                if p_name in self.interp_temp_param_names_hat:
+                    if p_hat_interp is None:
+                        p_hat_interp = util.interpolate_dim(
+                            p_hat, self.ac.n_samples, dim=1, align_corners=True
+                        )
+                        temp_params_hat[p_name] = p_hat_interp
+                    else:
+                        temp_params_hat[p_name] = p_hat_interp
                 else:
                     temp_params_hat[p_name] = p_hat
                 if f"{p_name}_adapted" in model_out:
                     p_hat = model_out[f"{p_name}_adapted"]
                     # Config decides which temp params are interpolated for synth_hat
-                    if (
-                        p_name in temp_params
-                        and p_name in self.interp_temp_param_names_hat
-                    ):
-                        p_hat = util.interpolate_dim(
-                            p_hat,
-                            temp_params[p_name].size(1),
-                            dim=1,
-                            align_corners=True,
-                        )
+                    if p_name in self.interp_temp_param_names_hat:
+                        if p_name in temp_params:
+                            p_hat = util.interpolate_dim(
+                                p_hat,
+                                temp_params[p_name].size(1),
+                                dim=1,
+                                align_corners=True,
+                            )
+                        else:
+                            p_hat = util.interpolate_dim(
+                                p_hat, self.ac.n_samples, dim=1, align_corners=True
+                            )
                     temp_params_hat[f"{p_name}_adapted"] = p_hat
 
             # Postprocess global_params_hat
@@ -472,7 +428,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             #     temp_params_hat["q_mod_sig"] = q_mod_sig_hat
 
         # Compute invariant all metrics
-        if stage != "train":
+        if stage != "train" and self.temp_param_names:
             tp = [temp_params[name] for name in self.temp_param_names]
             tp = tr.stack(tp, dim=1)
             tp_hat_s = []
@@ -812,6 +768,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 workers=n_workers,
             )
             fad_metrics[f"{fad_model_name}"] = fad_val
+            self.log(f"test/fad__{fad_model_name}", fad_val, prog_bar=False)
         shutil.rmtree(fad_dir_x)
         shutil.rmtree(fad_dir_x_hat)
         return fad_metrics
@@ -819,14 +776,26 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
 class PreprocLightningModule(AcidDDSPLightingModule):
     def preprocess_batch(self, batch: Dict[str, T]) -> Dict[str, T]:
-        wet = batch["wet"]
+        audio = batch["audio"]
         f0_hz = batch["f0_hz"]
         note_on_duration = batch["note_on_duration"]
-        assert wet.ndim == 2
-        assert wet.size(1) == self.ac.n_samples, f"{wet.size(1)}, {self.ac.n_samples}"
-        batch_size = wet.size(0)
-        assert f0_hz.shape == (batch_size,)
-        assert note_on_duration.shape == (batch_size,)
+        phase_hat = batch["phase_hat"]
+
+        assert audio.ndim == 2
+        assert (
+            audio.size(1) == self.ac.n_samples
+        ), f"{audio.size(1)}, {self.ac.n_samples}"
+        bs = audio.size(0)
+        assert f0_hz.shape == (bs,)
+        assert note_on_duration.shape == (bs,)
+        assert phase_hat.shape == (bs,)
+
+        batch = {
+            "x": audio.unsqueeze(1),
+            "f0_hz": f0_hz,
+            "note_on_duration": note_on_duration,
+            "phase_hat": phase_hat,
+        }
         return batch
 
 

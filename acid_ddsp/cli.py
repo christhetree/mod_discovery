@@ -98,7 +98,7 @@ class CustomLightningCLI(LightningCLI):
             config.trainer.devices = len(devices)
 
         if config.trainer.devices < 2:
-            log.info("Disabling strategy")
+            log.debug("Disabling strategy")
             config.trainer.strategy = "auto"
 
         if config.custom.is_deterministic:
@@ -189,9 +189,9 @@ class CustomLightningCLI(LightningCLI):
                     save_top_k=1,
                     verbose=False,
                 ),
-                # LogModSigAndSpecCallback(),
-                # LogAudioCallback(),
-                # LogWavetablesCallback(),
+                LogModSigAndSpecCallback(),
+                LogAudioCallback(),
+                LogWavetablesCallback(),
             ],
             "logger": {
                 "class_path": "pytorch_lightning.loggers.TensorBoardLogger",
