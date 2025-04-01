@@ -149,7 +149,7 @@ class LogModSigAndSpecCallback(Callback):
             ]
             n_frames = None
 
-            for temp_param, color, linestyle, norm in temp_params_all:
+            for temp_param, color, linestyle in temp_params_all:
                 if temp_param is None:
                     continue
                 if temp_param.ndim != 2:

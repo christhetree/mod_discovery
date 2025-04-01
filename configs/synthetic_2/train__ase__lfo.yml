@@ -1,10 +1,14 @@
 custom:
   project_name: acid_ddsp_2
-  model_name: mss__s12d3_nn__sm_16_512
+#  model_name: mss__s12d5__lfo
+  model_name: mss__frame_cf_4__lfo
+#  model_name: mss__frame_32__lfo
+#  model_name: mss__frame_256__lfo
+#  model_name: mss__frame_lin_interp_36__lfo
   dataset_name: ableton__ase__fm_fold
   cpu_batch_size: 5
   use_wandb_cpu: false
-  use_wandb_gpu: false
+  use_wandb_gpu: true
 
 trainer:
   accelerator: gpu
@@ -12,6 +16,7 @@ trainer:
   devices: [3]
   max_epochs: 30
   num_sanity_val_steps: 1
+  accumulate_grad_batches: 1
   gradient_clip_val: 0.5
 
 data:
@@ -43,6 +48,7 @@ model:
   init_args:
     ac: audio_config.yml
     spectral_visualizer: log_mel_spec.yml
+#    spectral_visualizer: log_mel_spec_hs_256.yml
 
     synth: synth__ase.yml
     temp_param_names:
@@ -51,26 +57,32 @@ model:
       - env
 
     use_model: true
-    model: spectral_2dcnn_dd50__ase__sm.yml
+#    model: spectral_2dcnn_dd50__ase__lfo.yml
+    model: spectral_2dcnn_dd50__ase__lfo_frame_cf_4.yml
+#    model: spectral_2dcnn_dd50__ase__lfo_frame_32.yml
+#    model: spectral_2dcnn_dd50__ase__lfo_frame_256.yml
     temp_param_names_hat:
       - add_lfo
       - sub_lfo
       - env
     interp_temp_param_names_hat:
       - add_lfo
+      - sub_lfo
       - env
-    synth_hat: synth__ase__sm.yml
+    synth_hat: synth__ase.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
     use_p_loss: false
 
-    run_name: mss__s12d3_nn__sm_16_512__ableton__ase__fm_fold
+#    run_name: mss__s12d3__sm_16_1024_noise_0.33__ableton__ase__fm_fold
 
-    synth_opt: ../opt/sf_adam_w__lr_5e-2.yml
     model_opt: ../opt/sf_adam_w__lr_5e-3.yml
 
     fad_model_names:
+#      - vggish
       - clap-2023
       - encodec-emb-24k
+#      - encodec-emb-48k
       - panns-cnn14-16k
+#      - panns-cnn14-32k
       - panns-wavegram-logmel

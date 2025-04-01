@@ -289,7 +289,15 @@ if __name__ == "__main__":
     filtered_wt_names = None
 
     tsv_names_and_paths = [
-        ("ase", os.path.join(OUT_DIR, f"out/mss__s12d3__sm_16_1024_noise_0.33__ableton__ase__fm_fold.tsv")),
+        # ("ase", os.path.join(OUT_DIR, f"out/mss__s12d3__sm_16_1024_noise_0.33__ableton__ase__fm_fold.tsv")),
+        ("ase", os.path.join(OUT_DIR, f"out/mss__s12d3__sm_16_1024__ableton__ase__fm_fold.tsv")),
+        ("frame_cf_4", os.path.join(OUT_DIR, f"out/mss__frame_cf_4__sm_16_1024__ableton__ase__fm_fold.tsv")),
+        # ("ase_nn", os.path.join(OUT_DIR, f"out/mss__s12d3_no_noise__sm_16_1024__ableton__ase__fm_fold.tsv")),
+        # ("ase_nn_pos_aa", os.path.join(OUT_DIR, f"out/mss__s12d3_nn_pos_aa_9n_10hz__sm_16_1024__ableton__ase__fm_fold.tsv")),
+        # ("ase_nn_512", os.path.join(OUT_DIR, f"out/mss__s12d3_nn__sm_16_512__ableton__ase__fm_fold.tsv")),
+        # ("frame_cf_4_nn", os.path.join(OUT_DIR, f"out/mss__frame_cf_4_no_noise__sm_16_1024__ableton__ase__fm_fold.tsv")),
+        # ("frame_36", os.path.join(OUT_DIR, f"out/mss__frame_32_interp_36__sm_16_1024__ableton__ase__fm_fold.tsv")),
+        # ("frame", os.path.join(OUT_DIR, f"out/mss__frame_32__sm_16_1024__ableton__ase__fm_fold.tsv")),
 
         # ("add", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__add_lfo.tsv")),
         # ("ae", os.path.join(OUT_DIR, f"out/mss__s12d3__ableton__add_env.tsv")),
@@ -320,13 +328,19 @@ if __name__ == "__main__":
     inv = "_inv"
     # inv = "_inv_all"
     # lfo = "add_lfo"
-    # lfo = "sub_lfo"
-    lfo = "env"
+    lfo = "sub_lfo"
+    # lfo = "env"
 
-    y_col = f"{metric}{inv}__{lfo}"
-    # y_col = "audio__mss"
+    # y_col = f"{metric}{inv}__{lfo}"
+    y_col = "audio__mss"
     # y_col = "audio__mel_stft"
     # y_col = "audio__mfcc"
+    # y_col = "audio__rms_coss"
+
+    # y_col = "fad__clap-2023"
+    # y_col = "fad__encodec-emb-24k"
+    # y_col = "fad__panns-cnn14-16k"
+    # y_col = "fad__panns-wavegram-logmel"
 
     y_con_val = 0.1
     trial_col = "seed"

@@ -172,6 +172,20 @@ class WavetableOsc(SynthModule):
         # TODO(cm): check whether this is correct or not
         self.wt_pitch_hz = sr / n_wt_samples
 
+        # pos_sr = 20.0
+        # pos_cf_hz = 10.0
+        # pos_filter_n = n_pos // 2 + 1
+        # pos_filter_support = 2 * (tr.arange(pos_filter_n) - (pos_filter_n - 1) / 2) / pos_sr
+        # pos_filter_window = tr.blackman_window(pos_filter_n, periodic=False)
+        # pos_filter = tr.sinc(pos_cf_hz * pos_filter_support) * pos_filter_window
+        # pos_filter /= tr.sum(pos_filter)
+        # pos_filter = pos_filter.view(1, 1, -1)
+        # pos_filter = pos_filter.expand(self.n_wt_samples, -1, -1)
+        # self.register_buffer(
+        #     "pos_filter", pos_filter, persistent=False
+        # )
+        # self.pos_filter_n = pos_filter_n
+
     def get_wt(self) -> T:
         return self.wt
 
@@ -223,6 +237,15 @@ class WavetableOsc(SynthModule):
         # Maybe apply anti-aliasing
         if not self.use_aa:
             return maybe_bounded_wt
+
+        # if self.is_trainable:
+        #     wt = maybe_bounded_wt.unsqueeze(0)
+        #     wt = tr.swapaxes(wt, 1, 2)
+        #     n_pad = self.pos_filter_n // 2
+        #     wt = F.pad(wt, (n_pad, n_pad, 0, 0), mode="circular")
+        #     wt = F.conv1d(wt, self.pos_filter, padding="valid", groups=self.n_wt_samples)
+        #     wt = tr.swapaxes(wt, 1, 2)
+        #     maybe_bounded_wt = wt.squeeze(0)
 
         pitch_ratio = max_f0_hz / self.wt_pitch_hz
         # Make the cutoff frequency a bit lower than the new nyquist

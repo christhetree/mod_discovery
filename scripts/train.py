@@ -6,7 +6,7 @@ import warnings
 # Prevents a bug with PyTorch and CUDA_VISIBLE_DEVICES
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 # Prevent FADTK from going crazy with CPU usage
-os.environ["OMP_NUM_THREADS"] = "4"
+os.environ["OMP_NUM_THREADS"] = "8"
 
 import torch as tr
 
@@ -30,38 +30,46 @@ os.makedirs("wandb_logs", exist_ok=True)
 
 
 if __name__ == "__main__":
+    config_name = "synthetic_2/train.yml"
+
+    # config_name = "synthetic_2/train__ase__lfo.yml"
+
     # config_name = "synthetic_2/train__ase__sm.yml"
+    # config_name = "synthetic_2/train__ase__sm_frame_32.yml"
+    # config_name = "synthetic_2/train__ase__sm_frame_cf_4.yml"
+    # config_name = "synthetic_2/train__ase__sm_frame_32_interp_36.yml"
+
     # config_name = "synthetic_2/train__a__sm.yml"
     # config_name = "synthetic_2/train__s__sm.yml"
 
-    config_name = "serum_2/train__ase__sm.yml"
+    # config_name = "serum_2/train__ase__sm.yml"
 
     seeds = [42]
     # seeds = [42, 42, 3, 42]
-    # seeds = list(range(20))
+    # seeds = list(range(10))
     log.info(f"Running with seeds: {seeds}")
 
     # wt_dir = os.path.join(WAVETABLES_DIR, "testing")
     # wt_dir = os.path.join(WAVETABLES_DIR, "ableton_basic_shapes")
-    # wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
+    wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
     # wt_dir = os.path.join(WAVETABLES_DIR, "waveedit")
 
-    # wt_names = [f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")]
-    # filtered_wt_names = []
-    # for wt_name in wt_names:
-    #     if any(bad_wt_name in wt_name for bad_wt_name in BAD_ABLETON_WTS):
-    #         continue
-    #     if not wt_name.startswith("basics__"):
-    #         continue
-    #     # if not "galactica" in wt_name:
-    #     if not "fm_fold" in wt_name:
-    #         # if not "basic_shapes" in wt_name:
-    #         continue
-    #     filtered_wt_names.append(wt_name)
-    # wt_paths = [os.path.join(wt_dir, f"{wt_name}.pt") for wt_name in filtered_wt_names]
-    # wt_paths = sorted(wt_paths)
-    # log.info(f"\nWavetable directory: {wt_dir}\nFound {len(wt_paths)} wavetables")
-    wt_paths = [None]
+    wt_names = [f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")]
+    filtered_wt_names = []
+    for wt_name in wt_names:
+        if any(bad_wt_name in wt_name for bad_wt_name in BAD_ABLETON_WTS):
+            continue
+        if not wt_name.startswith("basics__"):
+            continue
+        # if not "galactica" in wt_name:
+        if not "fm_fold" in wt_name:
+            # if not "basic_shapes" in wt_name:
+            continue
+        filtered_wt_names.append(wt_name)
+    wt_paths = [os.path.join(wt_dir, f"{wt_name}.pt") for wt_name in filtered_wt_names]
+    wt_paths = sorted(wt_paths)
+    log.info(f"\nWavetable directory: {wt_dir}\nFound {len(wt_paths)} wavetables")
+    # wt_paths = [None]
 
     # basic_shapes_wt_path = os.path.join(WAVETABLES_DIR, "ableton_basic_shapes", "basics__basic_shapes__4_1024.pt")
     # basic_shapes_wt = tr.load(basic_shapes_wt_path, weights_only=True)
@@ -73,7 +81,7 @@ if __name__ == "__main__":
     #     config = yaml.safe_load(in_f)
     # devices = config["trainer"]["devices"]
 
-    for seed, wt_path in itertools.product(seeds, wt_paths):
+    for idx, (seed, wt_path) in enumerate(itertools.product(seeds, wt_paths)):
         log.info(f"Current seed: {seed} and wavetable: {wt_path}")
 
         cli = CustomLightningCLI(
@@ -99,7 +107,9 @@ if __name__ == "__main__":
                 wt_module_hat = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
                 synth_hat.register_module("add_synth_module", wt_module_hat)
 
-        cli.before_fit()
+        # use_wandb = idx == 0 and tr.cuda.is_available()
+        use_wandb = None
+        cli.before_fit(use_wandb=use_wandb)
         cli.trainer.fit(model=cli.model, datamodule=cli.datamodule)
 
         # Set CUDA_VISIBLE_DEVICES again for FADTK

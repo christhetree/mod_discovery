@@ -195,6 +195,101 @@ class PiecewiseBezier(nn.Module):
         return si
 
 
+class PiecewiseBezier2D(PiecewiseBezier):
+    def __init__(
+        self,
+        n_frames: int,
+        n_segments: int,
+        degree: int,
+        is_c1_cont: bool = False,
+        eps: float = 1e-3,
+    ):
+        super().__init__(
+            n_frames, n_segments, degree, modes=None, is_c1_cont=is_c1_cont, eps=eps
+        )
+        if self.mask is not None:
+            self.register_buffer(
+                "mask", self.mask.unsqueeze(-1).repeat(1, 1, 1, 2), persistent=False
+            )
+
+    def _logits_to_control_points(self, logits: T) -> T:
+        # p = tr.tanh(logits) * (1.0 - self.eps)
+        # p = p * 0.5 + 0.5
+        # return p
+        pass
+
+    def make_bezier(
+        self,
+        cp: T,
+        cp_are_logits: bool = False,
+    ) -> (T, T, T):
+        # Process control points and make a Bezier curve for each segment
+        assert cp.ndim == 4
+        assert cp.size(1) == self.n_segments
+        assert cp.size(2) == self.degree + 1
+        assert cp.size(3) == 2
+        if cp_are_logits:
+            cp = self._logits_to_control_points(cp)
+        bs = cp.size(0)
+        if self.support.size(0) != bs:
+            assert self.support.size(0) == 1
+            support = self.support.repeat(bs, 1, 1)
+        else:
+            support = self.support
+
+        if self.is_c1_cont:
+            p_nm1 = cp[:, :-1, -1, :]
+            p_nm2 = cp[:, :-1, -2, :]
+            q1 = 2 * p_nm1 - p_nm2
+            cp[:, 1:, 1, :] = q1
+
+        bezier = self.create_bezier(support, cp, self.bin_coeff, self.exp)
+        if self.mask is not None:
+            bezier *= self.mask
+        bezier = bezier.sum(dim=1, keepdim=True)
+        bezier_x = bezier[..., 0]
+
+        grid_x = bezier_x
+        grid_y = tr.zeros_like(grid_x)
+        grid = tr.stack([grid_x, grid_y], dim=-1)
+        assert grid.min() >= 0.0
+        assert grid.max() <= 1.0
+        grid = grid * 2.0 - 1.0
+
+        bezier_y = bezier[..., 1]
+        bez_img = tr.swapaxes(bezier_y.unsqueeze(-1), 2, 3)
+
+        sampled = F.grid_sample(
+            bez_img,
+            grid,
+            mode="bilinear",
+            padding_mode="border",
+            align_corners=True,
+        )
+        sampled = sampled.view(bs, self.n_frames)
+        bezier_x = bezier_x.view(bs, self.n_frames)
+        bezier_y = bezier_y.view(bs, self.n_frames)
+        return sampled, bezier_x, bezier_y
+
+    def forward(
+        self,
+        cp: T,
+        cp_are_logits: bool = False,
+    ) -> T:
+        bs = cp.size(0)
+        n_dim = cp.ndim
+        n_ch = 1
+        if n_dim == 5:
+            n_ch = cp.size(1)
+            cp = tr.flatten(cp, start_dim=0, end_dim=1)
+        x, _, _ = self.make_bezier(cp, cp_are_logits=cp_are_logits)
+        # assert x.min() >= 0.0, f"x.min(): {x.min()}"
+        # assert x.max() <= 1.0, f"x.max(): {x.max()}"
+        if n_dim == 5:
+            x = x.view(bs, n_ch, x.size(1))
+        return x
+
+
 class PiecewiseBezierDiffSeg(PiecewiseBezier):
     def __init__(
         self,
@@ -351,7 +446,89 @@ class FourierSignal(nn.Module):
 if __name__ == "__main__":
     from matplotlib import pyplot as plt
 
+    # cp_x_1 = tr.tensor([0.0, 0.5, 1.0])
+    # cp_x_2 = tr.tensor([0.0, 0.5, 1.0])
+    cp_x_1 = tr.tensor([0.0, 0.25, 0.5])
+    cp_x_2 = tr.tensor([0.5, 0.95, 1.0])
+    cp_y_1 = tr.tensor([1.0, -1.0, 1.0])
+    cp_y_2 = tr.tensor([1.0, -1.0, 1.0])
+    cp_x = tr.stack([cp_x_1, cp_y_1], dim=1)
+    cp_y = tr.stack([cp_x_2, cp_y_2], dim=1)
+    cp = tr.stack([cp_x, cp_y], dim=0)
+    cp = cp.unsqueeze(0)
+
+    n_frames = 1000
+    n_segments = 2
+    degree = 2
+    bez = PiecewiseBezier2D(n_frames, n_segments, degree)
+
+    # splines = bez.create_bezier(bez.support, cp, bez.bin_coeff, bez.exp)
+    # mask = bez.mask.unsqueeze(-1).expand(-1, -1, -1, 2)
+    # splines *= mask
+    # splines = splines.sum(dim=1, keepdim=True)
+    #
+    # x_spline = splines[..., 0:1]
+    # grid = x_spline.repeat(1, 1, 1, 2) * 2.0 - 1.0
+    # grid[..., 1] = 0.0
+    #
+    # y_spline = splines[..., 1:2]
+    # img = tr.swapaxes(y_spline, 2, 3)
+    #
+    # sampled = F.grid_sample(
+    #     img,
+    #     grid,
+    #     mode="bilinear",
+    #     padding_mode="border",
+    #     align_corners=True,
+    # )
+
+    sampled, x_spline, y_spline = bez.make_bezier(cp, cp_are_logits=False)
+
+    plt.plot(x_spline.squeeze(), label="x")
+    plt.plot(y_spline.squeeze(), label="y")
+    plt.plot(sampled.squeeze(), label="sampled")
+    plt.legend()
+    plt.show()
+    exit()
+
     tr.manual_seed(42)
+
+    n_samples = 48000
+    n_frames = 1501
+    n_interp_frames = 37
+    sinusoid_hz = 4.0
+    noise_std = 0.33
+
+    filter_sr = 500
+    n_filter = 129
+    filter_cf_hz = 4.0
+
+    filter_support = 2 * (tr.arange(n_filter) - (n_filter - 1) / 2) / filter_sr
+    filter_window = tr.blackman_window(n_filter, periodic=False)
+    h = tr.sinc(filter_cf_hz * filter_support) * filter_window
+    h /= h.sum()
+
+    sinusoid = tr.sin(tr.linspace(0.0, 2 * tr.pi * sinusoid_hz, n_frames))
+    noise = tr.empty_like(sinusoid).normal_(std=noise_std)
+    signal = sinusoid + noise
+    # signal.uniform_()
+    interp_signal = util.interpolate_dim(signal, n_interp_frames, dim=0)
+
+    n_pad = n_filter // 2
+    padded = F.pad(signal.view(1, 1, -1), (n_pad, n_pad, 0, 0), mode="circular")
+    filtered = F.conv1d(padded, h.view(1, 1, -1), padding="valid").view(-1)
+
+    signal = util.interpolate_dim(signal, n_samples, dim=0)
+    interp_signal = util.interpolate_dim(interp_signal, n_samples, dim=0)
+    filtered = util.interpolate_dim(filtered, n_samples, dim=0)
+
+    plt.plot(signal)
+    plt.plot(interp_signal)
+    plt.plot(filtered)
+    plt.plot(h)
+    plt.show()
+
+    exit()
 
     n_iter = 1000
     lr_acc = 1.01

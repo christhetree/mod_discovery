@@ -17,6 +17,7 @@ from audio_config import AudioConfig
 from fad import save_and_concat_fad_audio, calc_fad
 from feature_extraction import LogMelSpecFeatureExtractor
 from losses import MFCCL1
+from metrics import RMSCosineSimilarity
 from modulations import ModSignalGenRandomBezier
 from paths import OUT_DIR
 from synths import SynthBase
@@ -98,21 +99,26 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         self.audio_metrics = nn.ModuleDict()
         self.audio_metrics["mss"] = auraloss.freq.MultiResolutionSTFTLoss()
+        metrics_win_len = int(0.0500 * self.ac.sr)  # 50 milliseconds
+        metrics_hop_len = int(0.0125 * self.ac.sr)  # 25% overlap
+        metrics_n_mels = 128
         self.audio_metrics["mel_stft"] = auraloss.freq.MelSTFTLoss(
             sample_rate=self.ac.sr,
-            fft_size=spectral_visualizer.n_fft,
-            hop_size=spectral_visualizer.hop_len,
-            win_length=spectral_visualizer.n_fft,
-            n_mels=spectral_visualizer.n_mels,
+            fft_size=metrics_win_len,
+            hop_size=metrics_hop_len,
+            win_length=metrics_win_len,
+            n_mels=metrics_n_mels,
         )
         self.audio_metrics["mfcc"] = MFCCL1(
             sr=self.ac.sr,
             log_mels=True,
-            n_fft=spectral_visualizer.n_fft,
-            hop_len=spectral_visualizer.hop_len,
-            n_mels=spectral_visualizer.n_mels,
+            n_fft=metrics_win_len,
+            hop_len=metrics_hop_len,
+            n_mels=metrics_n_mels,
         )
-
+        self.audio_metrics["rms_coss"] = RMSCosineSimilarity(
+            win_len=metrics_win_len, hop_len=metrics_hop_len, collapse_channels=True
+        )
         self.global_n = 0
         self.curr_training_step = 0
         self.total_n_training_steps = None

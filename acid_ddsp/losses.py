@@ -34,8 +34,10 @@ class MFCCL1(nn.Module):
         )
         self.l1 = nn.L1Loss()
 
-    def forward(self, x_hat: T, x: T) -> T:
-        return self.l1(self.mfcc(x_hat), self.mfcc(x))
+    def forward(self, x: T, x_target: T) -> T:
+        assert x.ndim == 3
+        assert x.shape == x_target.shape
+        return self.l1(self.mfcc(x), self.mfcc(x_target))
 
 
 class Scat1DLoss(nn.Module):

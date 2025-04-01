@@ -16,8 +16,7 @@ init_args:
       degree: 3
       is_c1_cont: false
       is_bounded: true
-#      use_alpha_noise: true
-      use_alpha_noise: false
+      use_alpha_noise: true
       use_alpha_linear: true
       adapt_dim: 0
     sub_lfo:
@@ -27,13 +26,10 @@ init_args:
       n_segments: 12
       degree: 3
       is_c1_cont: false
-      is_bounded: false
+      is_bounded: true
       use_alpha_noise: false
       use_alpha_linear: true
-      adapt_dim: 5
-      adapt_act: none
-      adapt_use_latent: false
-      adapt_use_separate: true
+      adapt_dim: 0
     env:
       dim: 1
       act: none

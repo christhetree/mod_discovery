@@ -4,12 +4,12 @@ custom:
   dataset_name: ableton__ase__fm_fold
   cpu_batch_size: 5
   use_wandb_cpu: false
-  use_wandb_gpu: false
+  use_wandb_gpu: true
 
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [3]
+  devices: [2]
   max_epochs: 30
   num_sanity_val_steps: 1
   gradient_clip_val: 0.5
@@ -63,8 +63,6 @@ model:
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
     use_p_loss: false
-
-    run_name: mss__s12d3_nn__sm_16_512__ableton__ase__fm_fold
 
     synth_opt: ../opt/sf_adam_w__lr_5e-2.yml
     model_opt: ../opt/sf_adam_w__lr_5e-3.yml

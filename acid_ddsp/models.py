@@ -197,8 +197,10 @@ class Spectral2DCNN(nn.Module):
         n_frames: int = 1501,
         cnn_act: str = "prelu",
         fc_act: str = "prelu",
-        noise_std: float = 0.25,
+        noise_std: float = 0.33,
         spline_eps: float = 1e-3,
+        interp_n_frames: Optional[int] = None,
+        filter_cf_hz: Optional[float] = None,
     ) -> None:
         super().__init__()
         self.fe = fe
@@ -213,6 +215,19 @@ class Spectral2DCNN(nn.Module):
         self.fc_act = fc_act
         self.noise_std = noise_std
         self.spline_eps = spline_eps
+        self.interp_n_frames = interp_n_frames
+        self.filter_cf_hz = filter_cf_hz
+
+        # n_filter = 129
+        # filter_sr = n_frames // 3
+        # assert filter_sr == 500
+        # filter_support = 2 * (tr.arange(n_filter) - (n_filter - 1) / 2) / filter_sr
+        # filter_window = tr.blackman_window(n_filter, periodic=False)
+        # if filter_cf_hz is not None:
+        #     h = tr.sinc(filter_cf_hz * filter_support) * filter_window
+        #     h /= h.sum()
+        #     self.register_buffer("filter", h.view(1, 1, -1))
+        #     self.n_pad = n_filter // 2
 
         # Define default params
         if out_channels is None:
@@ -380,7 +395,14 @@ class Spectral2DCNN(nn.Module):
                 nn.Sigmoid(),
             )
 
-        self.register_buffer("pos_enc", tr.linspace(0, 1, self.n_frames).view(1, -1, 1))
+        if self.interp_n_frames is None:
+            self.register_buffer(
+                "pos_enc", tr.linspace(0, 1, self.n_frames).view(1, -1, 1)
+            )
+        else:
+            self.register_buffer(
+                "pos_enc", tr.linspace(0, 1, self.interp_n_frames).view(1, -1, 1)
+            )
 
     def forward(
         self,
@@ -437,7 +459,6 @@ class Spectral2DCNN(nn.Module):
             # out_dict[f"{name}_seg_indices"] = seg_end_indices
             si_logits = None
             x = latent
-            pos_enc = self.pos_enc.expand(x.size(0), x.size(1), -1)
             # x = tr.cat([x, pos_enc], dim=-1)
 
             # x_s = []
@@ -471,8 +492,12 @@ class Spectral2DCNN(nn.Module):
 
                 if tp.use_alpha_noise and alpha_noise is not None:
                     sigma = alpha_noise * self.noise_std
-                    noise = tr.empty(x.size(0), tp.n_segments * tp.degree + 1, device=x.device).normal_(std=sigma)
-                    noise = noise.unfold(dimension=1, size=tp.degree + 1, step=tp.degree)
+                    noise = tr.empty(
+                        x.size(0), tp.n_segments * tp.degree + 1, device=x.device
+                    ).normal_(std=sigma)
+                    noise = noise.unfold(
+                        dimension=1, size=tp.degree + 1, step=tp.degree
+                    )
                     x += noise
 
                 if tp.use_alpha_linear and alpha_linear is not None and x.size(2) > 2:
@@ -534,8 +559,22 @@ class Spectral2DCNN(nn.Module):
                 x += noise
 
             x = self.out_temp_acts[name](x)
+
+            if self.filter_cf_hz is not None:
+                assert False
+                h = self.filter
+                x = tr.swapaxes(x, 1, 2)
+                x = F.pad(x, (self.n_pad, self.n_pad, 0, 0), mode="circular")
+                x = F.conv1d(x, h, padding="valid")
+                x = tr.swapaxes(x, 1, 2)
+
+            if self.interp_n_frames is not None:
+                assert False
+                assert self.filter_cf_hz is None
+                x = util.interpolate_dim(x, self.interp_n_frames, dim=1)
             out_dict[name] = x.squeeze(-1)
 
+            pos_enc = self.pos_enc.expand(x.size(0), x.size(1), -1)
             if tp.adapt_dim:
                 # adapt_in = x
                 adapt_in = tr.cat([x, pos_enc], dim=-1)

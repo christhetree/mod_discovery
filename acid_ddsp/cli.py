@@ -125,7 +125,7 @@ class CustomLightningCLI(LightningCLI):
             #     del config.data.init_args["train_num_examples_per_epoch"]
             #     del config.data.init_args["val_num_examples_per_epoch"]
 
-    def before_fit(self) -> None:
+    def before_fit(self, use_wandb: Optional[bool] = None) -> None:
         for cb in self.trainer.callbacks:
             if isinstance(cb, ModelCheckpoint):
                 cb.filename = (
@@ -135,7 +135,7 @@ class CustomLightningCLI(LightningCLI):
                 log.info(f"Setting checkpoint name to: {cb.filename}")
 
         use_gpu = tr.cuda.is_available()
-        if (use_gpu and self.config.custom.use_wandb_gpu) or (
+        if use_wandb or (use_gpu and self.config.custom.use_wandb_gpu) or (
             not use_gpu and self.config.custom.use_wandb_cpu
         ):
             # Used directly by the callbacks
