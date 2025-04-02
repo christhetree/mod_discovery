@@ -15,6 +15,24 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
+def get_activation(act_name: str) -> nn.Module:
+    act_name = act_name.lower()
+    if not act_name or act_name == "none":
+        return nn.Identity()
+    elif act_name == "sigmoid":
+        return nn.Sigmoid()
+    elif act_name == "tanh":
+        return nn.Tanh()
+    elif act_name == "softmax":
+        return nn.Softmax(dim=-1)
+    elif act_name == "prelu":
+        return nn.PReLU()
+    elif act_name == "gelu":
+        return nn.GELU()
+    else:
+        raise ValueError(f"Unknown activation: {act_name}")
+
+
 def interpolate_dim(
     x: T,
     n: int,

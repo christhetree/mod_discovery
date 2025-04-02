@@ -13,11 +13,11 @@ init_args:
       act: none
       is_spline: true
       n_segments: 12
-      degree: 3
+      degree: 2
       is_c1_cont: false
       is_bounded: true
-#      use_alpha_noise: true
-      use_alpha_noise: false
+      use_alpha_noise: true
+#      use_alpha_noise: false
       use_alpha_linear: true
       adapt_dim: 0
     sub_lfo:
@@ -25,7 +25,7 @@ init_args:
       act: none
       is_spline: true
       n_segments: 12
-      degree: 3
+      degree: 2
       is_c1_cont: false
       is_bounded: false
       use_alpha_noise: false
@@ -39,7 +39,7 @@ init_args:
       act: none
       is_spline: true
       n_segments: 12
-      degree: 3
+      degree: 2
       is_c1_cont: false
       is_bounded: true
       use_alpha_noise: false

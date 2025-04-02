@@ -1,7 +1,8 @@
 custom:
   project_name: acid_ddsp_2
-#  model_name: mss__s12d5__lfo
-  model_name: mss__frame_cf_4__lfo
+  model_name: mss__s12d3__lfo
+#  model_name: mss__s12d2D__lfo
+#  model_name: mss__frame_cf_4__lfo
 #  model_name: mss__frame_32__lfo
 #  model_name: mss__frame_256__lfo
 #  model_name: mss__frame_lin_interp_36__lfo
@@ -16,7 +17,6 @@ trainer:
   devices: [3]
   max_epochs: 30
   num_sanity_val_steps: 1
-  accumulate_grad_batches: 1
   gradient_clip_val: 0.5
 
 data:
@@ -57,8 +57,8 @@ model:
       - env
 
     use_model: true
-#    model: spectral_2dcnn_dd50__ase__lfo.yml
-    model: spectral_2dcnn_dd50__ase__lfo_frame_cf_4.yml
+    model: spectral_2dcnn_dd50__ase__lfo.yml
+#    model: spectral_2dcnn_dd50__ase__lfo_frame_cf_4.yml
 #    model: spectral_2dcnn_dd50__ase__lfo_frame_32.yml
 #    model: spectral_2dcnn_dd50__ase__lfo_frame_256.yml
     temp_param_names_hat:
@@ -73,8 +73,6 @@ model:
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
     use_p_loss: false
-
-#    run_name: mss__s12d3__sm_16_1024_noise_0.33__ableton__ase__fm_fold
 
     model_opt: ../opt/sf_adam_w__lr_5e-3.yml
 

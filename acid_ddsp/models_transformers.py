@@ -7,6 +7,8 @@ import torch as tr
 from torch import Tensor as T
 from torch import nn
 
+import util
+
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
@@ -148,7 +150,7 @@ class AudioSpectrogramTransformer(nn.Module):
 
         # take just the embed tokens
         if self.n_embed_tokens > 0:
-            x = x[:, : self.embed_tokens.size(1)]
+            x = x[:, : self.n_embed_tokens, :]
 
         x = self.out_proj(x)
         return x
@@ -191,10 +193,108 @@ class ASTWithProjectionHead(AudioSpectrogramTransformer):
         return super().forward(x).squeeze(1)
 
 
+class LatentTransformer(nn.Module):
+    def __init__(
+        self,
+        n_frames: int,
+        latent_dim: int = 128,
+        out_dim: int = 1,
+        ff_dim: int = 64,
+        n_heads: int = 4,
+        n_layers: int = 4,
+        n_embed_tokens: int = 0,
+        trans_act: str = "gelu",
+        fc_act: str = "gelu",
+        dropout: float = 0.0,
+        out_act: str = "none",
+    ):
+        super().__init__()
+        assert n_layers > 0
+        self.n_frames = n_frames
+        self.latent_dim = latent_dim
+        self.out_dim = out_dim
+        self.ff_dim = ff_dim
+        self.n_heads = n_heads
+        self.n_layers = n_layers
+        self.n_embed_tokens = n_embed_tokens
+        self.trans_act = trans_act
+        self.fc_act = fc_act
+        self.dropout = dropout
+        self.out_act = out_act
+
+        self.embed_tokens = None
+        if n_embed_tokens > 0:
+            self.embed_tokens = nn.Parameter(
+                tr.empty(1, n_embed_tokens, latent_dim).normal_(mean=0.0, std=1e-6)
+            )
+
+        self.pos_enc = PositionalEncoding(
+            size=latent_dim,
+            num_pos=n_frames + n_embed_tokens,
+            init="norm0.02",
+        )
+
+        blocks = [
+
+                nn.TransformerEncoderLayer(
+                    d_model=latent_dim,
+                    nhead=n_heads,
+                    dim_feedforward=ff_dim,
+                    dropout=dropout,
+                    activation=trans_act,
+                    batch_first=True,
+                    norm_first=True,
+                ) for _ in range(n_layers)
+        ]
+        self.blocks = nn.Sequential(*blocks)
+
+        n_hidden = (latent_dim + out_dim) // 2
+        self.fc = nn.Sequential(
+            nn.Linear(latent_dim, n_hidden),
+            nn.Dropout(p=dropout),
+            util.get_activation(self.fc_act),
+            nn.Linear(n_hidden, n_hidden),
+            nn.Dropout(p=dropout),
+            util.get_activation(self.fc_act),
+            nn.Linear(n_hidden, out_dim),
+            util.get_activation(self.out_act),
+        )
+
+    def forward(self, x: T) -> T:
+        assert x.ndim == 3
+        if self.n_embed_tokens > 0:
+            embed_tokens = self.embed_tokens.expand(x.size(0), -1, -1)
+            x = tr.cat([embed_tokens, x], dim=1)
+        x = self.pos_enc(x)
+        x = self.blocks(x)
+        if self.n_embed_tokens > 0:
+            x = x[:, :self.n_embed_tokens, :]
+        x = self.fc(x)
+        return x
+
+
 if __name__ == "__main__":
+    n_frames = 1501
+    latent_dim = 64
+    ff_dim = 32
+    out_dim = 1
+    n_embed_tokens = 1
+    model = LatentTransformer(
+        n_frames=n_frames,
+        latent_dim=latent_dim,
+        out_dim=out_dim,
+        ff_dim=ff_dim,
+        n_embed_tokens=n_embed_tokens,
+    )
+
+    latent = tr.randn(3, n_frames, latent_dim)
+    out = model(latent)
+    print(out.shape)
+
+
     # Test ASTWithProjectionHead
-    model = ASTWithProjectionHead(n_embed_tokens=3)
-    x = tr.randn(1, 2, 128, 401)
-    y = model(x)
-    print(y.shape)
+    # model = ASTWithProjectionHead(n_embed_tokens=3)
+    # x = tr.randn(1, 2, 128, 401)
+    # y = model(x)
+    # print(y.shape)
     # torch.Size([1, 16])

@@ -213,10 +213,38 @@ class PiecewiseBezier2D(PiecewiseBezier):
             )
 
     def _logits_to_control_points(self, logits: T) -> T:
+        # logits_x = logits[..., 0]
+        # logits_y = logits[..., 1]
         # p = tr.tanh(logits) * (1.0 - self.eps)
         # p = p * 0.5 + 0.5
         # return p
         pass
+
+    def convert_quadratic_cp_logits(self, logits: T, is_bounded: bool) -> T:
+        if logits.ndim == 3:
+            logits = logits.unsqueeze(1)
+        assert logits.size(2) == self.n_segments
+        assert logits.size(3) == 4
+        logits_y = logits[..., :3]
+        if is_bounded:
+            cp_y = tr.tanh(logits_y) * (1.0 - self.eps)
+            cp_y = cp_y * 0.5 + 0.5
+        else:
+            cp_y = logits_y
+        logits_x = logits[..., 3]
+        cp_x_endpoints = tr.linspace(
+            0.0, 1.0, self.n_segments + 1, device=logits.device
+        )
+        cp_x_endpoints = cp_x_endpoints.view(1, 1, -1).expand(logits.size(0), -1, -1)
+        cp_x_left = cp_x_endpoints[..., :-1]
+        cp_x_right = cp_x_endpoints[..., 1:]
+        cp_x_range = cp_x_right - cp_x_left
+        logits_x = tr.tanh(logits_x) * (1.0 - self.eps)
+        logits_x = logits_x * 0.5 + 0.5
+        cp_x_middle = logits_x * cp_x_range + cp_x_left
+        cp_x = tr.stack([cp_x_left, cp_x_middle, cp_x_right], dim=-1)
+        cp = tr.stack([cp_x, cp_y], dim=-1)
+        return cp
 
     def make_bezier(
         self,
@@ -252,9 +280,9 @@ class PiecewiseBezier2D(PiecewiseBezier):
         grid_x = bezier_x
         grid_y = tr.zeros_like(grid_x)
         grid = tr.stack([grid_x, grid_y], dim=-1)
-        assert grid.min() >= 0.0
-        assert grid.max() <= 1.0
         grid = grid * 2.0 - 1.0
+        assert grid.min() >= -1.0
+        assert grid.max() <= 1.0
 
         bezier_y = bezier[..., 1]
         bez_img = tr.swapaxes(bezier_y.unsqueeze(-1), 2, 3)
@@ -448,10 +476,10 @@ if __name__ == "__main__":
 
     # cp_x_1 = tr.tensor([0.0, 0.5, 1.0])
     # cp_x_2 = tr.tensor([0.0, 0.5, 1.0])
-    cp_x_1 = tr.tensor([0.0, 0.25, 0.5])
-    cp_x_2 = tr.tensor([0.5, 0.95, 1.0])
-    cp_y_1 = tr.tensor([1.0, -1.0, 1.0])
-    cp_y_2 = tr.tensor([1.0, -1.0, 1.0])
+    cp_x_1 = tr.tensor([0.5, 0.0, 0.933, 0.5])
+    cp_x_2 = tr.tensor([0.5, 0.766, 0.833, 1.0])
+    cp_y_1 = tr.tensor([0.5, 0.0, 0.0, 1.0])
+    cp_y_2 = tr.tensor([1.0, 0.0, 0.0, 1.0])
     cp_x = tr.stack([cp_x_1, cp_y_1], dim=1)
     cp_y = tr.stack([cp_x_2, cp_y_2], dim=1)
     cp = tr.stack([cp_x, cp_y], dim=0)
@@ -459,8 +487,8 @@ if __name__ == "__main__":
 
     n_frames = 1000
     n_segments = 2
-    degree = 2
-    bez = PiecewiseBezier2D(n_frames, n_segments, degree)
+    degree = 3
+    bez = PiecewiseBezier2D(n_frames, n_segments, degree, is_c1_cont=False)
 
     # splines = bez.create_bezier(bez.support, cp, bez.bin_coeff, bez.exp)
     # mask = bez.mask.unsqueeze(-1).expand(-1, -1, -1, 2)

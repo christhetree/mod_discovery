@@ -6,7 +6,7 @@ import warnings
 # Prevents a bug with PyTorch and CUDA_VISIBLE_DEVICES
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 # Prevent FADTK from going crazy with CPU usage
-os.environ["OMP_NUM_THREADS"] = "8"
+os.environ["OMP_NUM_THREADS"] = "4"
 
 import torch as tr
 
@@ -30,9 +30,9 @@ os.makedirs("wandb_logs", exist_ok=True)
 
 
 if __name__ == "__main__":
-    config_name = "synthetic_2/train.yml"
+    # config_name = "synthetic_2/train.yml"
 
-    # config_name = "synthetic_2/train__ase__lfo.yml"
+    config_name = "synthetic_2/train__ase__lfo.yml"
 
     # config_name = "synthetic_2/train__ase__sm.yml"
     # config_name = "synthetic_2/train__ase__sm_frame_32.yml"

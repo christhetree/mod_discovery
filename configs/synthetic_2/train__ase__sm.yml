@@ -1,6 +1,7 @@
 custom:
   project_name: acid_ddsp_2
-  model_name: mss__s12d3_nn__sm_16_512
+#  model_name: mss__s12d3_nn__sm_16_512
+  model_name: mss__s12d2D__sm_16_1024
   dataset_name: ableton__ase__fm_fold
   cpu_batch_size: 5
   use_wandb_cpu: false
@@ -64,7 +65,8 @@ model:
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
     use_p_loss: false
 
-    run_name: mss__s12d3_nn__sm_16_512__ableton__ase__fm_fold
+#    run_name: mss__s12d3_nn__sm_16_512__ableton__ase__fm_fold
+    run_name: mss__s12d2D__sm_16_1024__ableton__ase__fm_fold
 
     synth_opt: ../opt/sf_adam_w__lr_5e-2.yml
     model_opt: ../opt/sf_adam_w__lr_5e-3.yml
