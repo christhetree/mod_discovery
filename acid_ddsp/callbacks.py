@@ -5,6 +5,7 @@ from collections import defaultdict
 from contextlib import suppress
 from typing import Any, Dict, List
 
+import numpy as np
 import torch as tr
 import wandb
 from auraloss.time import ESRLoss
@@ -136,16 +137,16 @@ class LogModSigAndSpecCallback(Callback):
             temp_params_all = [
                 (out_dict.get("env"), "orchid", None),
                 (out_dict.get("env_hat"), "purple", None),
-                (out_dict.get("env_hat_inv"), "purple", ":"),
-                (out_dict.get("env_hat_inv_all"), "purple", "--"),
+                # (out_dict.get("env_hat_inv"), "purple", ":"),
+                # (out_dict.get("env_hat_inv_all"), "purple", "--"),
                 (out_dict.get("add_lfo"), "lightcoral", None),
                 (out_dict.get("add_lfo_hat"), "red", None),
-                (out_dict.get("add_lfo_hat_inv"), "red", ":"),
-                (out_dict.get("add_lfo_hat_inv_all"), "red", "--"),
+                # (out_dict.get("add_lfo_hat_inv"), "red", ":"),
+                # (out_dict.get("add_lfo_hat_inv_all"), "red", "--"),
                 (out_dict.get("sub_lfo"), "lightblue", None),
                 (out_dict.get("sub_lfo_hat"), "blue", None),
-                (out_dict.get("sub_lfo_hat_inv"), "blue", ":"),
-                (out_dict.get("sub_lfo_hat_inv_all"), "blue", "--"),
+                # (out_dict.get("sub_lfo_hat_inv"), "blue", ":"),
+                # (out_dict.get("sub_lfo_hat_inv_all"), "blue", "--"),
             ]
             n_frames = None
 
@@ -183,6 +184,15 @@ class LogModSigAndSpecCallback(Callback):
                 # f"og: {osc_gain[0]:.2f}, og': {osc_gain_hat[0]:.2f}"
             )
 
+            v_line_x = np.linspace(0, n_frames, 13)
+            ax[-1].vlines(
+                x=v_line_x,
+                ymin=-0.1,
+                ymax=1.1,
+                color="gray",
+                alpha=0.5,
+                linestyle="--",
+            )
             fig.tight_layout()
             img = fig2img(fig)
             images.append(img)

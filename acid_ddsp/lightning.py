@@ -17,7 +17,7 @@ from audio_config import AudioConfig
 from fad import save_and_concat_fad_audio, calc_fad
 from feature_extraction import LogMelSpecFeatureExtractor
 from losses import MFCCL1
-from metrics import RMSCosineSimilarity
+from metrics import RMSCosineSimilarity, SpectralCentroidCosineSimilarity
 from modulations import ModSignalGenRandomBezier
 from paths import OUT_DIR
 from synths import SynthBase
@@ -118,6 +118,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
         )
         self.audio_metrics["rms_coss"] = RMSCosineSimilarity(
             win_len=metrics_win_len, hop_len=metrics_hop_len, collapse_channels=True
+        )
+        self.audio_metrics["sc_coss"] = SpectralCentroidCosineSimilarity(
+            sr=self.ac.sr,
+            win_len=metrics_win_len,
+            hop_len=metrics_hop_len,
+            collapse_channels=True,
         )
         self.global_n = 0
         self.curr_training_step = 0
@@ -303,12 +309,15 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 assert self.total_n_training_steps
                 # alpha_noise = self.beta ** self.curr_training_step
                 alpha_noise = (
-                    1.0 - self.curr_training_step / self.total_n_training_steps
+                    1.0 - self.curr_training_step / (self.total_n_training_steps / 1.5)
                 )
+                alpha_noise = max(alpha_noise, 0.0)
+                assert alpha_noise >= 0.0
                 self.log(f"{stage}/alpha_noise", alpha_noise, prog_bar=False)
                 alpha_linear = (
-                    1.0 - self.curr_training_step / self.total_n_training_steps
+                    1.0 - self.curr_training_step / (self.total_n_training_steps / 1.5)
                 )
+                alpha_linear = max(alpha_linear, 0.0)
                 assert alpha_linear >= 0.0
                 self.log(f"{stage}/alpha_linear", alpha_linear, prog_bar=False)
                 # log.info(f"alpha_noise: {alpha_noise}, alpha_linear: {alpha_linear}")

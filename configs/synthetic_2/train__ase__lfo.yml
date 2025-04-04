@@ -1,12 +1,17 @@
 custom:
   project_name: acid_ddsp_2
-  model_name: mss__s12d3__lfo
-#  model_name: mss__s12d2D__lfo
-#  model_name: mss__frame_cf_4__lfo
+#  model_name: mss__s12d3_lin_proj__lfo
+#  model_name: mss__s12d3D__lfo
+#  model_name: mss__s12d2D_trans_enc_dec__lfo
+#  model_name: mss__s12d2D_rnn_b4_chunk_25__lfo
+  model_name: mss__s12d3D_rnn_b4_chunk_37__lfo
+#  model_name: mss__s12d3D_att_37_mean_softmax_0.005_rnn__lfo
+#  model_name: mss__s12d2D_att_25_tau_0.25__lfo
+#  model_name: mss__frame_cf_20__lfo
 #  model_name: mss__frame_32__lfo
 #  model_name: mss__frame_256__lfo
 #  model_name: mss__frame_lin_interp_36__lfo
-  dataset_name: ableton__ase__fm_fold
+  dataset_name: lfo_fi__ase__fm_fold
   cpu_batch_size: 5
   use_wandb_cpu: false
   use_wandb_gpu: true
@@ -14,7 +19,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [3]
+  devices: [4]
   max_epochs: 30
   num_sanity_val_steps: 1
   gradient_clip_val: 0.5
@@ -32,7 +37,8 @@ data:
           max_n_seg: 8
           min_degree: 1
           max_degree: 3
-          min_seg_interval_frac: 0.25
+#          min_seg_interval_frac: 0.25
+          min_seg_interval_frac: 1.0
           softmax_tau: 0.25
           normalize: false
     global_param_names:

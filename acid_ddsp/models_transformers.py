@@ -235,16 +235,16 @@ class LatentTransformer(nn.Module):
         )
 
         blocks = [
-
-                nn.TransformerEncoderLayer(
-                    d_model=latent_dim,
-                    nhead=n_heads,
-                    dim_feedforward=ff_dim,
-                    dropout=dropout,
-                    activation=trans_act,
-                    batch_first=True,
-                    norm_first=True,
-                ) for _ in range(n_layers)
+            nn.TransformerEncoderLayer(
+                d_model=latent_dim,
+                nhead=n_heads,
+                dim_feedforward=ff_dim,
+                dropout=dropout,
+                activation=trans_act,
+                batch_first=True,
+                norm_first=True,
+            )
+            for _ in range(n_layers)
         ]
         self.blocks = nn.Sequential(*blocks)
 
@@ -268,12 +268,180 @@ class LatentTransformer(nn.Module):
         x = self.pos_enc(x)
         x = self.blocks(x)
         if self.n_embed_tokens > 0:
-            x = x[:, :self.n_embed_tokens, :]
+            x = x[:, : self.n_embed_tokens, :]
         x = self.fc(x)
         return x
 
 
+class AbsolutePositionalEncoding(nn.Module):
+    def __init__(
+        self,
+        d_model: int,
+        dropout: float = 0.1,
+        max_len: int = 5000,
+    ):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+        pe = tr.zeros(max_len, d_model)
+        position = tr.arange(0, max_len).float().unsqueeze(1)
+        div_term = tr.exp(
+            tr.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model)
+        )
+        pe[:, 0::2] = tr.sin(position * div_term)
+        pe[:, 1::2] = tr.cos(position * div_term)
+        pe = pe.unsqueeze(0)  # shape: [1, max_len, d_model]
+        self.register_buffer("pe", pe)
+
+    def forward(self, x: T) -> T:
+        # x shape: [batch_size, seq_len, d_model]
+        x = x + self.pe[:, : x.size(1)]
+        x = self.dropout(x)
+        return x
+
+
+class EncDecLatentTransformer(nn.Module):
+    def __init__(
+        self,
+        in_dim: int,
+        out_dim: int,
+        out_n_frames: int,
+        ff_dim: int = 64,
+        n_heads: int = 4,
+        n_layers: int = 4,
+        trans_act: str = "gelu",
+        fc_act: str = "gelu",
+        dropout: float = 0.0,
+        out_act: str = "none",
+    ):
+        super().__init__()
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.out_n_frames = out_n_frames
+        self.ff_dim = ff_dim
+        self.n_heads = n_heads
+        self.n_layers = n_layers
+        self.trans_act = trans_act
+        self.fc_act = fc_act
+        self.dropout = dropout
+        self.out_act = out_act
+
+        self.pe = AbsolutePositionalEncoding(
+            d_model=in_dim,
+            dropout=dropout,
+        )
+        self.transformer = nn.Transformer(
+            d_model=in_dim,
+            nhead=n_heads,
+            num_encoder_layers=n_layers,
+            num_decoder_layers=n_layers,
+            dim_feedforward=ff_dim,
+            dropout=dropout,
+            activation=trans_act,
+            batch_first=True,
+            norm_first=True,
+        )
+        self.embed_tokens = nn.Parameter(
+            tr.empty(1, out_n_frames, in_dim).normal_(mean=0.0, std=1e-6)
+        )
+        n_hidden = (in_dim + out_dim) // 2
+        self.fc = nn.Sequential(
+            nn.Linear(in_dim, n_hidden),
+            nn.Dropout(p=dropout),
+            util.get_activation(fc_act),
+            nn.Linear(n_hidden, n_hidden),
+            nn.Dropout(p=dropout),
+            util.get_activation(fc_act),
+            nn.Linear(n_hidden, out_dim),
+            util.get_activation(out_act),
+        )
+
+    def forward(self, x: T) -> T:
+        assert x.ndim == 3
+        bs = x.size(0)
+        target = self.embed_tokens.expand(bs, -1, -1)
+        x = self.pe(x)
+        x = self.transformer(x, target)
+        x = self.fc(x)
+        return x
+
+
+class AttentionProjection(nn.Module):
+    def __init__(self, in_dim: int, out_dim: int, out_n_frames: int, n_heads: int = 4):
+        super().__init__()
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        self.out_n_frames = out_n_frames
+        self.n_heads = n_heads
+
+        self.query = nn.Parameter(tr.empty(1, out_n_frames, out_dim))
+        nn.init.xavier_uniform_(self.query)
+        self.attn = nn.MultiheadAttention(
+            embed_dim=out_dim,
+            num_heads=n_heads,
+            kdim=in_dim,
+            vdim=in_dim,
+            batch_first=True,
+        )
+
+    def forward(self, x: T) -> T:
+        bs = x.size(0)
+        queries = self.query.expand(bs, -1, -1)
+        out, _ = self.attn(queries, x, x)
+        return out
+
+
+class AttentionMatrix(nn.Module):
+    def __init__(
+        self, in_n: int, out_n: int, use_softmax: bool = True, tau: float = 1.0
+    ):
+        super().__init__()
+        self.in_n = in_n
+        self.out_n = out_n
+        self.use_softmax = use_softmax
+        self.tau = tau
+        # if use_softmax:
+        #     fill_val = 0.0
+        # else:
+        #     fill_val = 1 / in_n
+        # self.att_matrix = nn.Parameter(
+        #     tr.full((out_n, in_n), fill_val, dtype=tr.float32)
+        # )
+
+        att_matrix = tr.zeros((out_n, in_n))
+        assert in_n >= out_n
+        n_segment = in_n // out_n
+        for out_idx in range(out_n):
+            start_idx = out_idx * n_segment
+            end_idx = start_idx + n_segment
+            if out_idx == out_n - 1:
+                end_idx = in_n
+            att_matrix[out_idx, start_idx:end_idx] = 1 / (end_idx - start_idx)
+        # self.register_buffer("att_matrix", att_matrix)
+        self.att_matrix = nn.Parameter(att_matrix)
+
+    def forward(self, x: T) -> T:
+        if self.use_softmax:
+            att_matrix = util.stable_softmax(self.att_matrix, tau=self.tau)
+        else:
+            att_matrix = self.att_matrix
+        x = tr.einsum("bie,oi->boe", x, att_matrix)
+        return x
+
+
 if __name__ == "__main__":
+    att = AttentionMatrix(in_n=4, out_n=2, use_softmax=False)
+    bs = 1
+    x = tr.rand(bs, 4, 3)
+    out = att(x)
+    print(out.shape)
+    exit()
+
+    attn = AttentionProjection(in_dim=128, out_dim=64, out_n_frames=16, n_heads=4)
+    x = tr.randn(2, 32, 128)
+    out = attn(x)
+    print(out.shape)
+    exit()
+
     n_frames = 1501
     latent_dim = 64
     ff_dim = 32
@@ -290,7 +458,6 @@ if __name__ == "__main__":
     latent = tr.randn(3, n_frames, latent_dim)
     out = model(latent)
     print(out.shape)
-
 
     # Test ASTWithProjectionHead
     # model = ASTWithProjectionHead(n_embed_tokens=3)

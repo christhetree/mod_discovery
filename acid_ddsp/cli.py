@@ -189,8 +189,8 @@ class CustomLightningCLI(LightningCLI):
                     save_top_k=1,
                     verbose=False,
                 ),
-                # LogModSigAndSpecCallback(),
-                # LogAudioCallback(),
+                LogModSigAndSpecCallback(),
+                LogAudioCallback(),
                 # LogWavetablesCallback(),
             ],
             "logger": {

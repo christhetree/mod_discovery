@@ -3,6 +3,7 @@ import os
 
 import librosa
 import torch as tr
+from numpy import ndarray
 from torch import Tensor as T
 from torch import nn
 
@@ -39,6 +40,43 @@ class RMSCosineSimilarity(nn.Module):
             x_rms = tr.from_numpy(x_rms)
             x_target_rms = tr.from_numpy(x_target_rms)
             cosine_sim = tr.nn.functional.cosine_similarity(x_rms, x_target_rms, dim=-1)
+            cosine_sim = cosine_sim.mean()
+            return cosine_sim
+
+
+class SpectralCentroidCosineSimilarity(nn.Module):
+    def __init__(self, sr: int, win_len: int, hop_len: int, collapse_channels: bool = True):
+        super().__init__()
+        self.sr = sr
+        self.win_len = win_len
+        self.hop_len = hop_len
+        self.collapse_channels = collapse_channels
+
+    def _calc_feature(self, x: ndarray) -> ndarray:
+        spectral_centroid = librosa.feature.spectral_centroid(
+            y=x, sr=self.sr, n_fft=self.win_len, hop_length=self.hop_len
+        ).squeeze(1)
+        return spectral_centroid
+
+    def forward(self, x: T, x_target: T) -> T:
+        assert x.ndim == 3
+        assert x.shape == x_target.shape
+        with tr.no_grad():
+            if self.collapse_channels:
+                x = x.mean(dim=1)
+                x_target = x_target.mean(dim=1)
+            else:
+                x = x.view(-1, x.size(-1))
+                x_target = x_target.view(-1, x_target.size(-1))
+            x = x.cpu().numpy()
+            x_target = x_target.cpu().numpy()
+            sc = self._calc_feature(x)
+            sc_target = self._calc_feature(x_target)
+            spectral_centroid = tr.from_numpy(sc)
+            spectral_centroid_target = tr.from_numpy(sc_target)
+            cosine_sim = tr.nn.functional.cosine_similarity(
+                spectral_centroid, spectral_centroid_target, dim=-1
+            )
             cosine_sim = cosine_sim.mean()
             return cosine_sim
 

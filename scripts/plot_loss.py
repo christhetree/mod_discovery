@@ -292,6 +292,7 @@ if __name__ == "__main__":
         # ("ase", os.path.join(OUT_DIR, f"out/mss__s12d3__sm_16_1024_noise_0.33__ableton__ase__fm_fold.tsv")),
         ("ase", os.path.join(OUT_DIR, f"out/mss__s12d3__sm_16_1024__ableton__ase__fm_fold.tsv")),
         ("frame_cf_4", os.path.join(OUT_DIR, f"out/mss__frame_cf_4__sm_16_1024__ableton__ase__fm_fold.tsv")),
+        ("ase_d2D", os.path.join(OUT_DIR, f"out/mss__s12d2D__sm_16_1024__ableton__ase__fm_fold.tsv")),
         # ("ase_nn", os.path.join(OUT_DIR, f"out/mss__s12d3_no_noise__sm_16_1024__ableton__ase__fm_fold.tsv")),
         # ("ase_nn_pos_aa", os.path.join(OUT_DIR, f"out/mss__s12d3_nn_pos_aa_9n_10hz__sm_16_1024__ableton__ase__fm_fold.tsv")),
         # ("ase_nn_512", os.path.join(OUT_DIR, f"out/mss__s12d3_nn__sm_16_512__ableton__ase__fm_fold.tsv")),

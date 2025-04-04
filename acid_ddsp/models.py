@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Optional, List, Tuple, Dict
 
 import librosa as li
-import numpy as np
 import torch as tr
 from torch import Tensor as T
 from torch import nn
@@ -12,7 +11,7 @@ from torch.nn import functional as F
 from torchaudio.transforms import AmplitudeToDB
 
 import util
-from curves import PiecewiseBezier, PiecewiseBezier2D
+from curves import PiecewiseBezier2D
 from feature_extraction import LogMelSpecFeatureExtractor
 
 logging.basicConfig()
@@ -51,47 +50,6 @@ class TempParam:
             assert self.degree >= 3, "C1 continuity requires degree >= 3"
 
 
-class SineLayer(nn.Module):
-    # See paper sec. 3.2, final paragraph, and supplement Sec. 1.5 for discussion of omega_0.
-
-    # If is_first=True, omega_0 is a frequency factor which simply multiplies the activations before the
-    # nonlinearity. Different signals may require different omega_0 in the first layer - this is a
-    # hyperparameter.
-
-    # If is_first=False, then the weights will be divided by omega_0 so as to keep the magnitude of
-    # activations constant, but boost gradients to the weight matrix (see supplement Sec. 1.5)
-
-    def __init__(
-        self,
-        in_features: int,
-        out_features: int,
-        bias: bool = True,
-        is_first: bool = False,
-        omega_0: float = 30,
-    ):
-        super().__init__()
-        self.omega_0 = omega_0
-        self.is_first = is_first
-
-        self.in_features = in_features
-        self.linear = nn.Linear(in_features, out_features, bias=bias)
-
-        self.init_weights()
-
-    def init_weights(self) -> None:
-        with tr.no_grad():
-            if self.is_first:
-                self.linear.weight.uniform_(-1 / self.in_features, 1 / self.in_features)
-            else:
-                self.linear.weight.uniform_(
-                    -np.sqrt(6 / self.in_features) / self.omega_0,
-                    np.sqrt(6 / self.in_features) / self.omega_0,
-                )
-
-    def forward(self, input: T) -> T:
-        return tr.sin(self.omega_0 * self.linear(input))
-
-
 class BidirectionalLSTM(nn.Module):
     def __init__(
         self,
@@ -116,8 +74,22 @@ class BidirectionalLSTM(nn.Module):
         if self.unroll:
             return output
         else:
-            emb = tr.cat((h_n[0], h_n[1]), dim=-1)
+            emb = tr.cat((h_n[-2], h_n[-1]), dim=-1)
             return emb
+
+
+class MeanPooling(nn.Module):
+    def __init__(self, n_out_frames: int):
+        super().__init__()
+        self.n_out_frames = n_out_frames
+
+    def forward(self, x: T) -> T:
+        assert x.ndim == 3
+        assert x.size(1) >= self.n_out_frames
+        chunks = tr.tensor_split(x, self.n_out_frames, dim=1)
+        chunks = [tr.mean(c, dim=1) for c in chunks]
+        chunks = tr.stack(chunks, dim=1)
+        return chunks
 
 
 class Spectral2DCNNBlock(nn.Module):
@@ -249,39 +221,23 @@ class Spectral2DCNN(nn.Module):
         self.cnn = nn.Sequential(*layers)
         self.latent_dim = out_channels[-1]
 
-        # self.latent_dim = 128
-        # n_embed_tokens = 12
-        # self.transformer = AudioSpectrogramTransformer(
-        #     d_model=self.latent_dim,
-        #     n_heads=8,
-        #     n_layers=16,
-        #     n_embed_tokens=n_embed_tokens,
-        #     patch_size=16,
-        #     patch_stride=8,
-        #     input_channels=in_ch,
-        #     spec_shape=(128, n_frames),
-        # )
-
         # Define temporal params
         self.out_temp = nn.ModuleDict()
         self.out_temp_acts = nn.ModuleDict()
         self.splines = nn.ModuleDict()
         self.adapters = nn.ModuleDict()
         self.adapter_acts = nn.ModuleDict()
-        # self.seg_intervals_mlp = nn.ModuleDict()  # For PiecewiseBezierDiffSeg
 
         for name, tp in self.temp_params.items():
             # Make frame by frame spline params or features
             in_dim = self.latent_dim
-            # in_dim = self.latent_dim + 1
             out_dim = tp.dim
             if tp.is_spline:
-                out_dim = tp.dim * (tp.degree + 1)  # For PiecewiseBezierDiffSeg
-                # For 2D quadratic
-                # out_dim = tp.dim * (tp.degree + 2)
+                out_dim = 2  # For PiecewiseBezier2D
             n_hidden = (self.latent_dim + out_dim) // 2
             self.out_temp[name] = nn.Sequential(
                 BidirectionalLSTM(in_dim, in_dim // 2, unroll=True),
+                MeanPooling(tp.n_segments * tp.degree + 1),
                 nn.Linear(in_dim, n_hidden),
                 nn.Dropout(p=dropout),
                 util.get_activation(self.fc_act),
@@ -289,14 +245,6 @@ class Spectral2DCNN(nn.Module):
                 nn.Dropout(p=dropout),
                 util.get_activation(self.fc_act),
                 nn.Linear(n_hidden, out_dim),
-                # nn.LayerNorm([n_embed_tokens, self.latent_dim]),
-                # nn.Linear(self.latent_dim, n_hidden),
-                # nn.Dropout(p=dropout),
-                # nn.GELU(),
-                # nn.Linear(n_hidden, n_hidden),
-                # nn.Dropout(p=dropout),
-                # nn.GELU(),
-                # nn.Linear(n_hidden, out_dim),
             )
             self.out_temp_acts[name] = util.get_activation(tp.act)
             # Make adapters (changes dimensions of mod sig from N to M)
@@ -312,7 +260,6 @@ class Spectral2DCNN(nn.Module):
                             nn.Linear(adapt_in_dim, n_hidden),
                             nn.Dropout(p=dropout),
                             util.get_activation(self.fc_act),
-                            # SineLayer(adapt_in_dim, n_hidden, is_first=True, omega_0=20.0),
                             nn.Linear(n_hidden, n_hidden),
                             nn.Dropout(p=dropout),
                             util.get_activation(self.fc_act),
@@ -323,51 +270,21 @@ class Spectral2DCNN(nn.Module):
                         nn.Linear(adapt_in_dim, n_hidden),
                         nn.Dropout(p=dropout),
                         util.get_activation(self.fc_act),
-                        # SineLayer(
-                        #     adapt_in_dim, n_hidden, is_first=True, omega_0=20.0
-                        # ),
                         nn.Linear(n_hidden, n_hidden),
                         nn.Dropout(p=dropout),
                         util.get_activation(self.fc_act),
                         nn.Linear(n_hidden, tp.adapt_dim),
-                        # util.get_activation(tp.adapt_act),
-                        # nn.Linear(adapt_in_dim, n_hidden),
-                        # nn.Dropout(p=dropout),
-                        # nn.GELU(),
-                        # nn.Linear(n_hidden, n_hidden),
-                        # nn.Dropout(p=dropout),
-                        # nn.GELU(),
-                        # nn.Linear(n_hidden, tp.adapt_dim),
-                        # util.get_activation(tp.adapt_act),
                     )
                 self.adapter_acts[name] = util.get_activation(tp.adapt_act)
             if tp.is_spline:
                 # Make splines
-
-                # For 2D quadratic
-                # assert tp.degree == 2
-                # self.splines[name] = PiecewiseBezier2D(
-
-                self.splines[name] = PiecewiseBezier(
+                self.splines[name] = PiecewiseBezier2D(
                     n_frames,
                     tp.n_segments,
                     tp.degree,
                     is_c1_cont=tp.is_c1_cont,
                     eps=self.spline_eps,
                 )
-                # # For PiecewiseBezierDiffSeg
-                # self.splines[name] = PiecewiseBezierDiffSeg(n_frames, n_segments, degree)
-                # n_hidden = (out_channels[-1] + n_segments) // 2
-                # self.seg_intervals_mlp[name] = nn.Sequential(
-                #     BidirectionalLSTM(out_channels[-1], out_channels[-1] // 2, unroll=False),
-                #     nn.Linear(out_channels[-1], n_hidden),
-                #     nn.Dropout(p=dropout),
-                #     util.get_activation(self.fc_act),
-                #     nn.Linear(n_hidden, n_hidden),
-                #     nn.Dropout(p=dropout),
-                #     util.get_activation(self.fc_act),
-                #     nn.Linear(n_hidden, n_segments),
-                # )
 
         # Define global params
         self.out_global = nn.ModuleDict()
@@ -405,7 +322,6 @@ class Spectral2DCNN(nn.Module):
         if alpha_linear is not None:
             assert 0.0 <= alpha_linear <= 1.0
 
-        # x_dry = x.get("dry_audio")
         x = x["audio"]
         assert x.ndim == 3
         out_dict = {}
@@ -418,20 +334,10 @@ class Spectral2DCNN(nn.Module):
             n_frames == self.n_frames
         ), f"Expected n_frames: {self.n_frames} but got: {n_frames}"
 
-        # # Extract dry features
-        # if x_dry is None:
-        #     log_spec_dry = tr.zeros_like(log_spec)
-        # else:
-        #     log_spec_dry = self.fe(x_dry)
-        # out_dict["log_spec_x_dry"] = log_spec_dry
-        # log_spec = tr.cat([log_spec, log_spec_dry], dim=1)
-
         # Calc latent
         x = self.cnn(log_spec)
         x = tr.mean(x, dim=-2)
         latent = x.swapaxes(1, 2)
-        # latent = self.transformer(log_spec)
-        # assert not latent.isnan().any(), "NaNs in latent"
         out_dict["latent"] = latent
         global_latent = tr.mean(latent, dim=-2)
 
@@ -439,127 +345,35 @@ class Spectral2DCNN(nn.Module):
         for name, tp in self.temp_params.items():
             if tp_name is not None and name != tp_name:
                 continue
-
-            # # For PiecewiseBezierDiffSeg
-            # si_logits = self.seg_intervals_mlp[name](latent)
-            # si = self.splines[name].logits_to_seg_intervals(si_logits)
-            # seg_end_indices = (tr.cumsum(si, dim=-1)[:, :-1] * self.n_frames).long()
-            # seg_end_indices = tr.clamp(seg_end_indices, min=0, max=self.n_frames - 1)
-            # out_dict[f"{name}_seg_indices"] = seg_end_indices
-            si_logits = None
-            x = latent
-            # x = tr.cat([x, pos_enc], dim=-1)
-
-            # x_s = []
-            # seg_end_indices_all = []
-            # for curr_seg_intervals, curr_x in zip(segment_intervals, x):
-            #     seg_lens = (curr_seg_intervals * self.n_frames).long()
-            #     seg_end_indices = tr.cumsum(seg_lens, dim=0)[:-1]
-            #     seg_end_indices_all.append(seg_end_indices)
-            #     chunks = tr.tensor_split(curr_x, seg_end_indices.tolist(), dim=0)
-            #     chunks = [tr.mean(c, dim=0) for c in chunks]
-            #     chunks = tr.stack(chunks, dim=0)
-            #     x_s.append(chunks)
-            # x = tr.stack(x_s, dim=0)
-            # seg_end_indices_all = tr.stack(seg_end_indices_all, dim=0)
-            # out_dict[f"{name}_seg_indices"] = seg_end_indices_all
-
-            chunks = None
             if tp.is_spline:
-                # For PiecewiseBezier
-                chunks = tr.tensor_split(x, tp.n_segments, dim=1)
-                chunks = [tr.mean(c, dim=1) for c in chunks]
-                chunks = tr.stack(chunks, dim=1)
-                x = self.out_temp[name](chunks)
-
-                # For 2D quadratic
-                # x_x = x[..., 3:]
-                # x = x[..., :3]
-
-                # TODO(cm): is there a better way to do this?
-                # Ensure the spline ends are continuous
-                end_vals = x[:, :-1, -1]
-                start_vals = x[:, 1:, 0]
-                vals = (end_vals + start_vals) / 2
-                x[:, :-1, -1] = vals
-                x[:, 1:, 0] = vals
-
-                if tp.use_alpha_noise and alpha_noise is not None:
-                    sigma = alpha_noise * self.noise_std
-                    noise = tr.empty(
-                        x.size(0), tp.n_segments * tp.degree + 1, device=x.device
-                    ).normal_(std=sigma)
-                    noise = noise.unfold(
-                        dimension=1, size=tp.degree + 1, step=tp.degree
-                    )
-                    x += noise
-
-                    # For 2D quadratic
-                    # noise_x = tr.empty_like(x_x).normal_(std=sigma)
-                    # x_x += noise_x
-
-                if tp.use_alpha_linear and alpha_linear is not None and x.size(2) > 2:
-                    # Start splines linear and become curvy as training progresses
-                    x_linear = x[:, :, [0, -1]]
-                    x_linear = util.interpolate_dim(
-                        x_linear, x.size(2), dim=2, align_corners=True
-                    )
-                    x = (alpha_linear * x_linear) + ((1.0 - alpha_linear) * x)
-
-                # For 2D quadratic
-                # x = tr.cat([x, x_x], dim=-1)
-
-                # TODO(cm): check whether this is required,
-                #  I'm trying to prevent flattening occurring along the temporal axis
+                assert tp.dim == 1
+                x = self.out_temp[name](latent)
+                logits_x = x[:, :, 0]
+                cp_x = self.process_bezier_logits_x(
+                    logits_x,
+                    tp.n_segments,
+                    tp.degree,
+                    alpha_noise=None,
+                    noise_std=self.noise_std,
+                    alpha_linear=alpha_linear if tp.use_alpha_linear else None,
+                    softmax_tau=0.25,
+                )
+                logits_y = x[:, :, 1]
+                cp_y = self.process_bezier_logits_y(
+                    logits_y,
+                    tp.n_segments,
+                    tp.degree,
+                    alpha_noise=None,
+                    noise_std=self.noise_std,
+                    alpha_linear=alpha_linear if tp.use_alpha_linear else None,
+                    is_bounded=tp.is_bounded,
+                    eps=self.spline_eps,
+                )
+                cp = tr.stack([cp_x, cp_y], dim=-1)
+                cp = cp.unsqueeze(1)
+                assert cp.ndim == 5
+                x = self.splines[name](cp=cp, cp_are_logits=False)
                 x = tr.swapaxes(x, 1, 2)
-                x = x.view(x.size(0), tp.dim, tp.degree + 1, x.size(2))
-
-                # For 2D quadratic
-                # x = x.view(x.size(0), tp.dim, tp.degree + 2, x.size(2))
-
-                cp = tr.swapaxes(x, 2, 3)
-                if tp.is_bounded:
-                    cp_are_logits = True
-                else:
-                    cp_are_logits = False
-
-                # For 2D quadratic
-                # cp = self.splines[name].convert_quadratic_cp_logits(
-                #     cp, is_bounded=tp.is_bounded
-                # )
-                # cp_are_logits = False
-
-                x = self.splines[name](cp=cp, cp_are_logits=cp_are_logits)
-                x = tr.swapaxes(x, 1, 2)
-
-                # x_min = tr.min(x, dim=1, keepdim=True).values
-                # x_max = tr.max(x, dim=1, keepdim=True).values
-                # x_range = x_max - x_min
-                # x = (x - x_min) / (x_range + self.eps)
-
-                # # For PiecewiseBezierDiffSeg
-                # hop_len = self.n_frames // self.n_segments
-                # win_len = hop_len * 2
-                # x = F.pad(x, (0, 0, hop_len // 2, hop_len // 2))
-                # x = x.unfold(1, win_len, hop_len)
-                # x = tr.mean(x, dim=-1)
-
-                # x_s = []
-                # for idx in range(self.n_segments):
-                #     chunk = x[:, idx, :, :]
-                #     chunk = tr.swapaxes(chunk, 1, 2)
-                #     curr_x = self.out_temp[name](chunk)
-                #     x_s.append(curr_x)
-                # x = tr.stack(x_s, dim=1)
-                # coeff_logits = self.out_temp[name](global_latent)
-                # coeff_logits = coeff_logits.view(-1, self.n_segments, self.degree + 1)
-                # x = self.splines[name](coeff_logits, si_logits)
-                # x = x.unsqueeze(-1)
-
-                # coeff_logits = self.out_temp[name](x)
-                # coeff_logits = coeff_logits.view(-1, self.n_segments, self.degree + 1)
-                # x = self.splines[name](coeff_logits, si_logits)
-                # x = x.unsqueeze(-1)
             else:
                 x = self.out_temp[name](x)
 
@@ -571,10 +385,9 @@ class Spectral2DCNN(nn.Module):
             x = self.out_temp_acts[name](x)
 
             if self.filter_cf_hz is not None:
-                assert False
                 h = self.filter
                 x = tr.swapaxes(x, 1, 2)
-                x = F.pad(x, (self.n_pad, self.n_pad, 0, 0), mode="circular")
+                x = F.pad(x, (self.n_pad, self.n_pad, 0, 0), mode="replicate")
                 x = F.conv1d(x, h, padding="valid")
                 x = tr.swapaxes(x, 1, 2)
 
@@ -582,18 +395,18 @@ class Spectral2DCNN(nn.Module):
                 assert False
                 assert self.filter_cf_hz is None
                 x = util.interpolate_dim(x, self.interp_n_frames, dim=1)
+
             out_dict[name] = x.squeeze(-1)
 
             pos_enc = self.pos_enc.expand(x.size(0), x.size(1), -1)
             if tp.adapt_dim:
-                # adapt_in = x
                 adapt_in = tr.cat([x, pos_enc], dim=-1)
-                if tp.adapt_use_latent:
-                    assert chunks is not None
-                    # TODO(cm): look into this
-                    adapt_latent = util.interpolate_dim(chunks, self.n_frames, dim=1)
-                    # adapt_latent = util.interpolate_dim(chunks, self.n_frames, dim=1, mode="nearest", align_corners=None)
-                    adapt_in = tr.cat([adapt_in, adapt_latent], dim=-1)
+                # if tp.adapt_use_latent:
+                #     assert chunks is not None
+                #     # TODO(cm): look into this
+                #     adapt_latent = util.interpolate_dim(chunks, self.n_frames, dim=1)
+                #     # adapt_latent = util.interpolate_dim(chunks, self.n_frames, dim=1, mode="nearest", align_corners=None)
+                #     adapt_in = tr.cat([adapt_in, adapt_latent], dim=-1)
                 if tp.adapt_use_separate:
                     adapt_outs = []
                     for dim_idx in range(tp.adapt_dim):
@@ -616,6 +429,80 @@ class Spectral2DCNN(nn.Module):
             out_dict[param_name] = p_val_hat
 
         return out_dict
+
+    @staticmethod
+    def process_bezier_logits_x(
+        x: T,
+        n_segments: int,
+        degree: int,
+        alpha_noise: Optional[float] = None,
+        noise_std: Optional[float] = None,
+        alpha_linear: Optional[float] = None,
+        softmax_tau: float = 0.25,
+    ) -> T:
+        assert x.ndim == 2
+        assert x.size(1) == n_segments * degree + 1
+
+        if alpha_noise is not None:
+            assert noise_std is not None
+            assert 0.0 <= alpha_noise <= 1.0
+            sigma = alpha_noise * noise_std
+            noise = tr.empty_like(x).normal_(std=sigma)
+            x += noise
+
+        x = util.stable_softmax(x, softmax_tau)
+        x = tr.cumsum(x, dim=1)
+        x = F.pad(x, (1, 0), mode="constant", value=0.0)
+        x[:, -1] = 1.0
+
+        x = x.unfold(dimension=1, size=degree + 1, step=degree)
+
+        if alpha_linear is not None and degree > 1:
+            assert 0.0 <= alpha_linear <= 1.0
+            x_linear = x[:, :, [0, -1]]
+            x_linear = util.interpolate_dim(
+                x_linear, degree + 1, dim=2, align_corners=True
+            )
+            x = (alpha_linear * x_linear) + ((1.0 - alpha_linear) * x)
+
+        return x
+
+    @staticmethod
+    def process_bezier_logits_y(
+        x: T,
+        n_segments: int,
+        degree: int,
+        alpha_noise: Optional[float] = None,
+        noise_std: Optional[float] = None,
+        alpha_linear: Optional[float] = None,
+        is_bounded: bool = False,
+        eps: float = 1e-3,
+    ) -> T:
+        assert x.ndim == 2
+        assert x.size(1) == n_segments * degree + 1
+
+        if alpha_noise is not None:
+            assert noise_std is not None
+            assert 0.0 <= alpha_noise <= 1.0
+            sigma = alpha_noise * noise_std
+            noise = tr.empty_like(x).normal_(std=sigma)
+            x += noise
+
+        if is_bounded:
+            x = tr.tanh(x) * (1.0 - eps)
+            x = x * 0.5 + 0.5
+
+        x = x.unfold(dimension=1, size=degree + 1, step=degree)
+
+        if alpha_linear is not None and degree > 1:
+            assert 0.0 <= alpha_linear <= 1.0
+            x_linear = x[:, :, [0, -1]]
+            x_linear = util.interpolate_dim(
+                x_linear, degree + 1, dim=2, align_corners=True
+            )
+            x = (alpha_linear * x_linear) + ((1.0 - alpha_linear) * x)
+
+        return x
 
     @staticmethod
     def calc_receptive_field(kernel_size: int, dilations: List[int]) -> int:

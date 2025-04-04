@@ -280,9 +280,9 @@ class PiecewiseBezier2D(PiecewiseBezier):
         grid_x = bezier_x
         grid_y = tr.zeros_like(grid_x)
         grid = tr.stack([grid_x, grid_y], dim=-1)
-        grid = grid * 2.0 - 1.0
-        assert grid.min() >= -1.0
-        assert grid.max() <= 1.0
+        grid = (grid * 2.0 - 1.0) * (1.0 - self.eps)
+        assert grid.min() >= -1.0, f"grid.min(): {grid.min()}"
+        assert grid.max() <= 1.0, f"grid.max(): {grid.max()}"
 
         bezier_y = bezier[..., 1]
         bez_img = tr.swapaxes(bezier_y.unsqueeze(-1), 2, 3)
