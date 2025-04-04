@@ -17,7 +17,12 @@ from audio_config import AudioConfig
 from fad import save_and_concat_fad_audio, calc_fad
 from feature_extraction import LogMelSpecFeatureExtractor
 from losses import MFCCL1
-from metrics import RMSCosineSimilarity, SpectralCentroidCosineSimilarity
+from metrics import (
+    SpectralCentroidMetric,
+    RMSMetric,
+    SpectralBandwidthMetric,
+    SpectralFlatnessMetric,
+)
 from modulations import ModSignalGenRandomBezier
 from paths import OUT_DIR
 from synths import SynthBase
@@ -116,14 +121,61 @@ class AcidDDSPLightingModule(pl.LightningModule):
             hop_len=metrics_hop_len,
             n_mels=metrics_n_mels,
         )
-        self.audio_metrics["rms_coss"] = RMSCosineSimilarity(
-            win_len=metrics_win_len, hop_len=metrics_hop_len, collapse_channels=True
-        )
-        self.audio_metrics["sc_coss"] = SpectralCentroidCosineSimilarity(
+        self.audio_metrics["rms_coss"] = RMSMetric(
             sr=self.ac.sr,
             win_len=metrics_win_len,
             hop_len=metrics_hop_len,
-            collapse_channels=True,
+            average_channels=True,
+            dist_fn="coss",
+        )
+        self.audio_metrics["rms_pcc"] = RMSMetric(
+            sr=self.ac.sr,
+            win_len=metrics_win_len,
+            hop_len=metrics_hop_len,
+            average_channels=True,
+            dist_fn="pcc",
+        )
+        self.audio_metrics["sc_coss"] = SpectralCentroidMetric(
+            sr=self.ac.sr,
+            win_len=metrics_win_len,
+            hop_len=metrics_hop_len,
+            average_channels=True,
+            dist_fn="coss",
+        )
+        self.audio_metrics["sc_pcc"] = SpectralCentroidMetric(
+            sr=self.ac.sr,
+            win_len=metrics_win_len,
+            hop_len=metrics_hop_len,
+            average_channels=True,
+            dist_fn="pcc",
+        )
+        self.audio_metrics["sb_coss"] = SpectralBandwidthMetric(
+            sr=self.ac.sr,
+            win_len=metrics_win_len,
+            hop_len=metrics_hop_len,
+            average_channels=True,
+            dist_fn="coss",
+        )
+        self.audio_metrics["sb_pcc"] = SpectralBandwidthMetric(
+            sr=self.ac.sr,
+            win_len=metrics_win_len,
+            hop_len=metrics_hop_len,
+            average_channels=True,
+            dist_fn="pcc",
+        )
+        self.audio_metrics["sf_coss"] = SpectralFlatnessMetric(
+            sr=self.ac.sr,
+            win_len=metrics_win_len,
+            hop_len=metrics_hop_len,
+            average_channels=True,
+            dist_fn="coss",
+        )
+        self.audio_metrics["sf_pcc"] = SpectralFlatnessMetric(
+            sr=self.ac.sr,
+            win_len=metrics_win_len,
+            hop_len=metrics_hop_len,
+            average_channels=True,
+            dist_fn="pcc",
         )
         self.global_n = 0
         self.curr_training_step = 0
@@ -308,14 +360,14 @@ class AcidDDSPLightingModule(pl.LightningModule):
             if stage != "test":
                 assert self.total_n_training_steps
                 # alpha_noise = self.beta ** self.curr_training_step
-                alpha_noise = (
-                    1.0 - self.curr_training_step / (self.total_n_training_steps / 1.5)
+                alpha_noise = 1.0 - self.curr_training_step / (
+                    self.total_n_training_steps / 1.5
                 )
                 alpha_noise = max(alpha_noise, 0.0)
                 assert alpha_noise >= 0.0
                 self.log(f"{stage}/alpha_noise", alpha_noise, prog_bar=False)
-                alpha_linear = (
-                    1.0 - self.curr_training_step / (self.total_n_training_steps / 1.5)
+                alpha_linear = 1.0 - self.curr_training_step / (
+                    self.total_n_training_steps / 1.5
                 )
                 alpha_linear = max(alpha_linear, 0.0)
                 assert alpha_linear >= 0.0
@@ -555,11 +607,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # Log audio metrics
         audio_metrics_hat = {}
-        for metric_name, metric in self.audio_metrics.items():
-            with tr.no_grad():
-                audio_metric = metric(x_hat, x)
-            audio_metrics_hat[metric_name] = audio_metric
-            self.log(f"{stage}/audio_{metric_name}", audio_metric, prog_bar=False)
+        if stage != "train":
+            for metric_name, metric in self.audio_metrics.items():
+                with tr.no_grad():
+                    audio_metric = metric(x_hat, x)
+                audio_metrics_hat[metric_name] = audio_metric
+                self.log(f"{stage}/audio_{metric_name}", audio_metric, prog_bar=False)
 
         # Calc FAD metrics
         fad_metrics = {}
@@ -594,7 +647,11 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 for p_name in self.global_param_names:
                     tsv_row.append(global_param_metrics[f"{p_name}_l1"].item())
                 for metric_name in self.audio_metrics:
-                    tsv_row.append(audio_metrics_hat[metric_name].item())
+                    if metric_name in audio_metrics_hat:
+                        val = audio_metrics_hat[metric_name].item()
+                    else:
+                        val = -1
+                    tsv_row.append(val)
                 for fad_model_name in self.fad_model_names:
                     fad_metric = fad_metrics.get(fad_model_name, -1)
                     tsv_row.append(fad_metric)
