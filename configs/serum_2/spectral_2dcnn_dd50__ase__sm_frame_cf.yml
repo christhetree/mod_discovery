@@ -34,3 +34,4 @@ init_args:
   cnn_act: prelu
   fc_act: prelu
   noise_std: 0.33
+  filter_cf_hz: 4.0

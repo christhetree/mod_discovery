@@ -172,16 +172,17 @@ class Spectral2DCNN(nn.Module):
         self.interp_n_frames = interp_n_frames
         self.filter_cf_hz = filter_cf_hz
 
-        # n_filter = 129
-        # filter_sr = n_frames // 3
-        # assert filter_sr == 500
-        # filter_support = 2 * (tr.arange(n_filter) - (n_filter - 1) / 2) / filter_sr
-        # filter_window = tr.blackman_window(n_filter, periodic=False)
-        # if filter_cf_hz is not None:
-        #     h = tr.sinc(filter_cf_hz * filter_support) * filter_window
-        #     h /= h.sum()
-        #     self.register_buffer("filter", h.view(1, 1, -1))
-        #     self.n_pad = n_filter // 2
+        self.n_pad = None
+        filter_sr = n_frames // 3
+        assert filter_sr == 500
+        n_filter = 63
+        filter_support = 2 * (tr.arange(n_filter) - (n_filter - 1) / 2) / filter_sr
+        filter_window = tr.blackman_window(n_filter, periodic=False)
+        if filter_cf_hz is not None:
+            h = tr.sinc(filter_cf_hz * filter_support) * filter_window
+            h /= h.sum()
+            self.register_buffer("filter", h.view(1, 1, -1))
+            self.n_pad = n_filter // 2
 
         # Define default params
         if out_channels is None:
@@ -232,12 +233,14 @@ class Spectral2DCNN(nn.Module):
             # Make frame by frame spline params or features
             in_dim = self.latent_dim
             out_dim = tp.dim
+            mean_pooling_layer = nn.Identity()
             if tp.is_spline:
                 out_dim = 2  # For PiecewiseBezier2D
+                mean_pooling_layer = MeanPooling(tp.n_segments * tp.degree + 1)
             n_hidden = (self.latent_dim + out_dim) // 2
             self.out_temp[name] = nn.Sequential(
                 BidirectionalLSTM(in_dim, in_dim // 2, unroll=True),
-                MeanPooling(tp.n_segments * tp.degree + 1),
+                mean_pooling_layer,
                 nn.Linear(in_dim, n_hidden),
                 nn.Dropout(p=dropout),
                 util.get_activation(self.fc_act),
@@ -363,7 +366,7 @@ class Spectral2DCNN(nn.Module):
                     logits_y,
                     tp.n_segments,
                     tp.degree,
-                    alpha_noise=None,
+                    alpha_noise=alpha_noise if tp.use_alpha_noise else None,
                     noise_std=self.noise_std,
                     alpha_linear=alpha_linear if tp.use_alpha_linear else None,
                     is_bounded=tp.is_bounded,
@@ -375,7 +378,7 @@ class Spectral2DCNN(nn.Module):
                 x = self.splines[name](cp=cp, cp_are_logits=False)
                 x = tr.swapaxes(x, 1, 2)
             else:
-                x = self.out_temp[name](x)
+                x = self.out_temp[name](latent)
 
             if not tp.is_spline and tp.use_alpha_noise and alpha_noise is not None:
                 sigma = alpha_noise * self.noise_std
@@ -442,6 +445,7 @@ class Spectral2DCNN(nn.Module):
     ) -> T:
         assert x.ndim == 2
         assert x.size(1) == n_segments * degree + 1
+        x = x[:, 1:]  # Remove first control point since it'll be zero
 
         if alpha_noise is not None:
             assert noise_std is not None

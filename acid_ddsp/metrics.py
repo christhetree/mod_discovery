@@ -2,12 +2,13 @@ import abc
 import logging
 import os
 from abc import abstractmethod
-from typing import Literal
+from typing import Literal, Optional
 
 import librosa
 import torch as tr
 from torch import Tensor as T
 from torch import nn
+from torch.nn import functional as F
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -22,6 +23,7 @@ class ModulationMetric(nn.Module, abc.ABC):
         hop_len: int,
         average_channels: bool = True,
         dist_fn: Literal["coss", "pcc"] = "pcc",
+        filter_cf_hz: Optional[float] = 10.0,
     ):
         super().__init__()
         self.sr = sr
@@ -29,10 +31,27 @@ class ModulationMetric(nn.Module, abc.ABC):
         self.hop_len = hop_len
         self.average_channels = average_channels
         self.dist_fn = dist_fn
+        self.filter_cf_hz = filter_cf_hz
+
+        self.filter = None
+        filter_sr = sr / hop_len
+        assert filter_sr == 80.0
+        n_filter = 11
+        filter_support = 2 * (tr.arange(n_filter) - (n_filter - 1) / 2) / filter_sr
+        filter_window = tr.blackman_window(n_filter, periodic=False)
+        if filter_cf_hz is not None:
+            h = tr.sinc(filter_cf_hz * filter_support) * filter_window
+            h /= h.sum()
+            self.filter = h.view(1, 1, -1)
 
     @abstractmethod
     def calc_feature(self, x: T) -> T:
         pass
+
+    def maybe_filter_feature(self, x: T) -> T:
+        if self.filter_cf_hz is not None:
+            x = F.conv1d(x.unsqueeze(1), self.filter, padding="valid").squeeze(1)
+        return x
 
     def forward(self, x: T, x_target: T) -> T:
         assert x.ndim == 3
@@ -47,6 +66,9 @@ class ModulationMetric(nn.Module, abc.ABC):
             x = self.calc_feature(x)
             x_target = self.calc_feature(x_target)
             assert x.ndim == x_target.ndim == 2
+            x = self.maybe_filter_feature(x)
+            x_target = self.maybe_filter_feature(x_target)
+            assert x.shape == x_target.shape
             if self.dist_fn == "coss":
                 dist = tr.nn.functional.cosine_similarity(x, x_target, dim=-1)
             elif self.dist_fn == "pcc":
@@ -72,7 +94,7 @@ class RMSMetric(ModulationMetric):
         x = librosa.feature.rms(
             y=x, frame_length=self.win_len, hop_length=self.hop_len
         ).squeeze(1)
-        x = tr.from_numpy(x)
+        x = tr.from_numpy(x).float()
         return x
 
 
@@ -82,7 +104,7 @@ class SpectralCentroidMetric(ModulationMetric):
         x = librosa.feature.spectral_centroid(
             y=x, sr=self.sr, n_fft=self.win_len, hop_length=self.hop_len
         ).squeeze(1)
-        x = tr.from_numpy(x)
+        x = tr.from_numpy(x).float()
         return x
 
 
@@ -92,7 +114,7 @@ class SpectralBandwidthMetric(ModulationMetric):
         x = librosa.feature.spectral_bandwidth(
             y=x, sr=self.sr, n_fft=self.win_len, hop_length=self.hop_len
         ).squeeze(1)
-        x = tr.from_numpy(x)
+        x = tr.from_numpy(x).float()
         return x
 
 
@@ -102,7 +124,7 @@ class SpectralFlatnessMetric(ModulationMetric):
         x = librosa.feature.spectral_flatness(
             y=x, n_fft=self.win_len, hop_length=self.hop_len
         ).squeeze(1)
-        x = tr.from_numpy(x)
+        x = tr.from_numpy(x).float()
         return x
 
 

@@ -210,6 +210,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
             tsv_cols.append(f"audio__{metric_name}")
         for fad_model_name in self.fad_model_names:
             tsv_cols.append(f"fad__{fad_model_name}")
+        tsv_cols.append("add_lfo_mean_range")
+        tsv_cols.append("add_lfo_max_range")
+        tsv_cols.append("add_lfo_min")
+        tsv_cols.append("add_lfo_max")
         self.tsv_cols = tsv_cols
         if run_name:
             self.tsv_path = os.path.join(OUT_DIR, f"{self.run_name}.tsv")
@@ -439,10 +443,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
                             temp_param_metrics[f"{p_name}_mse_inv"] = mse_inv
                             temp_param_metrics[f"{p_name}_fft_inv"] = fft_mag_dist_inv
                         else:
-                            temp_param_metrics[f"{p_name}_l1_inv"] = tr.tensor(-1)
-                            temp_param_metrics[f"{p_name}_esr_inv"] = tr.tensor(-1)
-                            temp_param_metrics[f"{p_name}_mse_inv"] = tr.tensor(-1)
-                            temp_param_metrics[f"{p_name}_fft_inv"] = tr.tensor(-1)
+                            temp_param_metrics[f"{p_name}_l1_inv"] = None
+                            temp_param_metrics[f"{p_name}_esr_inv"] = None
+                            temp_param_metrics[f"{p_name}_mse_inv"] = None
+                            temp_param_metrics[f"{p_name}_fft_inv"] = None
 
                 # Config decides which temp params are interpolated for synth_hat
                 if p_name in self.interp_temp_param_names_hat:
@@ -494,6 +498,26 @@ class AcidDDSPLightingModule(pl.LightningModule):
             #     q_mod_sig_hat = q_0to1_hat.unsqueeze(-1)
             #     temp_params_hat["q_mod_sig"] = q_mod_sig_hat
 
+        if "add_lfo" in temp_params_hat:
+            tp_hat = temp_params_hat["add_lfo"]
+            with tr.no_grad():
+                lfo_max = tp_hat.max(dim=1).values
+                lfo_min = tp_hat.min(dim=1).values
+                lfo_range = lfo_max - lfo_min
+                add_lfo_mean_range = lfo_range.mean().item()
+                add_lfo_max_range = lfo_range.max().item()
+                add_lfo_min = lfo_min.min().item()
+                add_lfo_max = lfo_max.max().item()
+            self.log(f"{stage}/add_lfo_mean_range", add_lfo_mean_range, prog_bar=False)
+            self.log(f"{stage}/add_lfo_max_range", add_lfo_max_range, prog_bar=False)
+            self.log(f"{stage}/add_lfo_min", add_lfo_min, prog_bar=False)
+            self.log(f"{stage}/add_lfo_max", add_lfo_max, prog_bar=False)
+        else:
+            add_lfo_mean_range = None
+            add_lfo_max_range = None
+            add_lfo_max = None
+            add_lfo_min = None
+
         # Compute invariant all metrics
         if stage != "train" and self.temp_param_names:
             tp = [temp_params[name] for name in self.temp_param_names]
@@ -507,16 +531,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     tp_hat, tp.size(2), dim=1, align_corners=True
                 )
                 tp_hat_s.append(tp_hat)
-                if name == "add_lfo":
-                    lfo_max = tp_hat.max(dim=1).values
-                    lfo_min = tp_hat.min(dim=1).values
-                    lfo_range = lfo_max - lfo_min
-                    max_range = lfo_range.max()
-                    self.log(f"{stage}/add_lfo_max_range", max_range, prog_bar=False)
-                    max_max = lfo_max.max()
-                    self.log(f"{stage}/add_lfo_max", max_max, prog_bar=False)
-                    min_min = lfo_min.min()
-                    self.log(f"{stage}/add_lfo_min", min_min, prog_bar=False)
 
             if tp_hat_s:
                 tp_hat = tr.stack(tp_hat_s, dim=1)
@@ -545,10 +559,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     temp_param_metrics[f"{p_name}_fft_inv_all"] = fft_mag_dist
         else:
             for p_name in self.temp_param_names:
-                temp_param_metrics[f"{p_name}_l1_inv_all"] = tr.tensor(-1)
-                temp_param_metrics[f"{p_name}_esr_inv_all"] = tr.tensor(-1)
-                temp_param_metrics[f"{p_name}_mse_inv_all"] = tr.tensor(-1)
-                temp_param_metrics[f"{p_name}_fft_inv_all"] = tr.tensor(-1)
+                temp_param_metrics[f"{p_name}_l1_inv_all"] = None
+                temp_param_metrics[f"{p_name}_esr_inv_all"] = None
+                temp_param_metrics[f"{p_name}_mse_inv_all"] = None
+                temp_param_metrics[f"{p_name}_fft_inv_all"] = None
 
         if log_spec_x is None:
             with tr.no_grad():
@@ -650,11 +664,15 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     if metric_name in audio_metrics_hat:
                         val = audio_metrics_hat[metric_name].item()
                     else:
-                        val = -1
+                        val = None
                     tsv_row.append(val)
                 for fad_model_name in self.fad_model_names:
-                    fad_metric = fad_metrics.get(fad_model_name, -1)
+                    fad_metric = fad_metrics.get(fad_model_name)
                     tsv_row.append(fad_metric)
+                tsv_row.append(add_lfo_mean_range)
+                tsv_row.append(add_lfo_max_range)
+                tsv_row.append(add_lfo_min)
+                tsv_row.append(add_lfo_max)
 
                 assert len(tsv_row) == len(self.tsv_cols)
                 f.write("\t".join(str(v) for v in tsv_row) + "\n")

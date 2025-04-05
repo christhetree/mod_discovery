@@ -289,10 +289,14 @@ if __name__ == "__main__":
     filtered_wt_names = None
 
     tsv_names_and_paths = [
+        ("ase", os.path.join(OUT_DIR, f"out/mss__s12d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("cf_4", os.path.join(OUT_DIR, f"out/mss__frame_cf_4__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("frame", os.path.join(OUT_DIR, f"out/mss__frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+
         # ("ase", os.path.join(OUT_DIR, f"out/mss__s12d3__sm_16_1024_noise_0.33__ableton__ase__fm_fold.tsv")),
-        ("ase", os.path.join(OUT_DIR, f"out/mss__s12d3__sm_16_1024__ableton__ase__fm_fold.tsv")),
-        ("frame_cf_4", os.path.join(OUT_DIR, f"out/mss__frame_cf_4__sm_16_1024__ableton__ase__fm_fold.tsv")),
-        ("ase_d2D", os.path.join(OUT_DIR, f"out/mss__s12d2D__sm_16_1024__ableton__ase__fm_fold.tsv")),
+        # ("ase", os.path.join(OUT_DIR, f"out/mss__s12d3__sm_16_1024__ableton__ase__fm_fold.tsv")),
+        # ("frame_cf_4", os.path.join(OUT_DIR, f"out/mss__frame_cf_4__sm_16_1024__ableton__ase__fm_fold.tsv")),
+        # ("ase_d2D", os.path.join(OUT_DIR, f"out/mss__s12d2D__sm_16_1024__ableton__ase__fm_fold.tsv")),
         # ("ase_nn", os.path.join(OUT_DIR, f"out/mss__s12d3_no_noise__sm_16_1024__ableton__ase__fm_fold.tsv")),
         # ("ase_nn_pos_aa", os.path.join(OUT_DIR, f"out/mss__s12d3_nn_pos_aa_9n_10hz__sm_16_1024__ableton__ase__fm_fold.tsv")),
         # ("ase_nn_512", os.path.join(OUT_DIR, f"out/mss__s12d3_nn__sm_16_512__ableton__ase__fm_fold.tsv")),
@@ -317,8 +321,8 @@ if __name__ == "__main__":
         # ("ae_d250_fe", os.path.join(OUT_DIR, f"out/mss__s12d3_delta_250_fe__ableton__add_env.tsv")),
     ]
     # stage = "train"
-    stage = "val"
-    # stage = "test"
+    # stage = "val"
+    stage = "test"
     x_col = "step"
     # x_col = "global_n"
 
@@ -333,22 +337,35 @@ if __name__ == "__main__":
     # lfo = "env"
 
     # y_col = f"{metric}{inv}__{lfo}"
-    y_col = "audio__mss"
+    # y_col = "audio__mss"
     # y_col = "audio__mel_stft"
     # y_col = "audio__mfcc"
     # y_col = "audio__rms_coss"
 
     # y_col = "fad__clap-2023"
     # y_col = "fad__encodec-emb-24k"
+    # y_col = "fad__encodec-emb-48k"
     # y_col = "fad__panns-cnn14-16k"
+    # y_col = "fad__panns-cnn14-32k"
     # y_col = "fad__panns-wavegram-logmel"
+
+    dist = "pcc"
+    # dist = "coss"
+    metric = "rms"
+    # metric = "sc"
+    # metric = "sb"
+    # metric = "sf"
+    y_col = f"audio__{metric}_{dist}"
+
+    # y_col = "add_lfo_max_range"
+    # y_col = "add_lfo_mean_range"
 
     y_con_val = 0.1
     trial_col = "seed"
     # trial_col = "wt_name"
 
-    allow_var_n = False
-    # allow_var_n = True
+    # allow_var_n = False
+    allow_var_n = True
 
     df_rows = []
     df_cols = []
@@ -362,7 +379,7 @@ if __name__ == "__main__":
             filter_vals = [wt_name]
         # Plot
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.set_title(f"wt_name: {wt_name}, stage: {stage}, trial_col: {trial_col}")
+        ax.set_title(f"{y_col}, wt_name: {wt_name}, stage: {stage}, trial_col: {trial_col}")
         for name, tsv_path in tsv_names_and_paths:
             data = prepare_tsv_data(
                 tsv_path,
