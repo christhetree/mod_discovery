@@ -46,7 +46,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         temp_param_names_hat: Optional[List[str]] = None,
         interp_temp_param_names_hat: Optional[List[str]] = None,
         global_param_names: Optional[List[str]] = None,
-        global_param_names_hat: Optional[List[str]] = None,
         use_p_loss: bool = False,
         fad_model_names: Optional[List[str]] = None,
         run_name: Optional[str] = None,
@@ -65,8 +64,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
             interp_temp_param_names_hat = []
         if global_param_names is None:
             global_param_names = []
-        if global_param_names_hat is None:
-            global_param_names_hat = []
         if fad_model_names is None:
             fad_model_names = []
         if run_name is None:
@@ -90,7 +87,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.temp_param_names_hat = temp_param_names_hat
         self.interp_temp_param_names_hat = interp_temp_param_names_hat
         self.global_param_names = global_param_names
-        self.global_param_names_hat = global_param_names_hat
         self.use_p_loss = use_p_loss
         self.fad_model_names = fad_model_names
         self.use_model = use_model
@@ -212,8 +208,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
             tsv_cols.append(f"fft__{p_name}")
             tsv_cols.append(f"fft_inv__{p_name}")
             tsv_cols.append(f"fft_inv_all__{p_name}")
-        for p_name in self.global_param_names:
-            tsv_cols.append(f"l1__{p_name}")
         for metric_name in self.audio_metrics:
             tsv_cols.append(f"audio__{metric_name}")
         for metric_name in self.signal_metrics:
@@ -349,7 +343,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         x = batch["x"]
         phase_hat = batch["phase_hat"]
         temp_params = batch.get("temp_params", {})
-        global_params_0to1 = batch.get("global_params_0to1", {})
         global_params = batch.get("global_params", {})
         other_params = batch.get("other_params", {})
 
@@ -363,12 +356,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
         temp_params_hat_raw = {}
         temp_params_hat = {}
         temp_params_hat_inv = {}
-        global_params_0to1_hat = {}
-        global_params_hat = {}
         log_spec_x = None
 
         temp_param_metrics = {}
-        global_param_metrics = {}
 
         # Perform model forward pass
         if self.use_model:
@@ -492,27 +482,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
                             )
                     temp_params_hat[f"{p_name}_adapted"] = p_hat
 
-            # Postprocess global_params_hat
-            for p_name in self.global_param_names_hat:
-                p_val_0to1_hat = model_out[f"{p_name}_0to1"]
-                p_val_hat = self.ac.convert_from_0to1(p_name, p_val_0to1_hat)
-                global_params_0to1_hat[p_name] = p_val_0to1_hat
-                global_params_hat[p_name] = p_val_hat
-                if not self.ac.is_fixed(p_name) and p_name in global_params_0to1:
-                    p_val_0to1 = global_params_0to1[p_name]
-                    with tr.no_grad():
-                        l1 = self.l1(p_val_0to1_hat, p_val_0to1)
-                    self.log(f"{stage}/{p_name}_l1", l1, prog_bar=False)
-                    global_param_metrics[f"{p_name}_l1"] = l1
-
             # Postprocess log_spec_x
             log_spec_x = model_out.get("log_spec_x")[:, 0, :, :]
-
-            # Postprocess q_hat TODO(cm): generalize
-            # if "q" in self.global_param_names_hat:
-            #     q_0to1_hat = global_params_0to1_hat["q"]
-            #     q_mod_sig_hat = q_0to1_hat.unsqueeze(-1)
-            #     temp_params_hat["q_mod_sig"] = q_mod_sig_hat
 
         if "add_lfo" in temp_params_hat:
             tp_hat = temp_params_hat["add_lfo"]
@@ -590,8 +561,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             f0_hz,
             phase_hat,
             temp_params_hat,
-            global_params_hat,
-            other_params,
+            global_params={},
+            other_params=other_params,
         )
         x_hat = synth_out_hat["env_audio"].unsqueeze(1)
 
@@ -609,18 +580,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     prog_bar=False,
                 )
                 loss += p_loss
-
-            for p_name in self.global_param_names:
-                if not self.ac.is_fixed(p_name):
-                    p_val = global_params_0to1[p_name]
-                    p_val_hat = global_params_0to1_hat[p_name]
-                    p_loss = self.loss_func(p_val_hat, p_val)
-                    self.log(
-                        f"{stage}/ploss_{self.loss_name}_{p_name}",
-                        p_loss,
-                        prog_bar=False,
-                    )
-                    loss += p_loss
             self.log(f"{stage}/ploss_{self.loss_name}", loss, prog_bar=False)
         else:
             loss = self.loss_func(x_hat, x)
@@ -718,8 +677,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     tsv_row.append(temp_param_metrics[f"{p_name}_fft"].item())
                     tsv_row.append(temp_param_metrics[f"{p_name}_fft_inv"].item())
                     tsv_row.append(temp_param_metrics[f"{p_name}_fft_inv_all"].item())
-                for p_name in self.global_param_names:
-                    tsv_row.append(global_param_metrics[f"{p_name}_l1"].item())
                 for metric_name in self.audio_metrics:
                     if metric_name in audio_metrics_hat:
                         val = audio_metrics_hat[metric_name].item()
@@ -748,7 +705,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 assert len(tsv_row) == len(self.tsv_cols)
                 f.write("\t".join(str(v) for v in tsv_row) + "\n")
 
-        global_params_hat = {f"{k}_hat": v for k, v in global_params_hat.items()}
         audio_metrics_hat = {f"{k}_hat": v for k, v in audio_metrics_hat.items()}
         out_dict = {
             "loss": loss,
@@ -765,8 +721,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         assert all(k not in out_dict for k in temp_param_metrics)
         assert all(k not in out_dict for k in temp_params_hat_inv)
         assert all(k not in out_dict for k in global_params)
-        assert all(k not in out_dict for k in global_params_hat)
-        assert all(k not in out_dict for k in global_param_metrics)
         assert all(k not in out_dict for k in audio_metrics_hat)
         assert all(k not in out_dict for k in signal_metrics)
         assert all(k not in out_dict for k in signal_metrics_hat)
@@ -776,8 +730,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         out_dict.update(temp_params_hat_inv)
         out_dict.update(temp_param_metrics)
         out_dict.update(global_params)
-        out_dict.update(global_params_hat)
-        out_dict.update(global_param_metrics)
         out_dict.update(audio_metrics_hat)
         out_dict.update(signal_metrics)
         out_dict.update(signal_metrics_hat)

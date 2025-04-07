@@ -133,8 +133,6 @@ class Spectral2DCNNBlock(nn.Module):
 
 
 class Spectral2DCNN(nn.Module):
-    global_param_names: List[str]
-
     def __init__(
         self,
         fe: LogMelSpecFeatureExtractor,
@@ -146,7 +144,6 @@ class Spectral2DCNN(nn.Module):
         pool_size: Tuple[int, int] = (2, 1),
         use_ln: bool = True,
         temp_params: Optional[Dict[str, Dict[str, str | int | bool]]] = None,
-        global_param_names: Optional[List[str]] = None,
         dropout: float = 0.0,
         n_frames: int = 1501,
         cnn_act: str = "prelu",
@@ -198,10 +195,7 @@ class Spectral2DCNN(nn.Module):
         if temp_params is None:
             temp_params = {}
         self.temp_params = {k: TempParam(**v) for k, v in temp_params.items()}
-        if global_param_names is None:
-            global_param_names = []
-        self.global_param_names = global_param_names
-        assert temp_params or global_param_names, "No params to predict"
+        assert temp_params, "No params to predict"
         if pool_size[1] == 1:
             log.info(
                 f"Temporal receptive field: "
@@ -289,21 +283,6 @@ class Spectral2DCNN(nn.Module):
                     eps=self.spline_eps,
                 )
 
-        # Define global params
-        self.out_global = nn.ModuleDict()
-        for param_name in global_param_names:
-            n_hidden = (self.latent_dim + 1) // 2
-            self.out_global[param_name] = nn.Sequential(
-                nn.Linear(self.latent_dim, n_hidden),
-                nn.Dropout(p=dropout),
-                util.get_activation(self.fc_act),
-                nn.Linear(n_hidden, n_hidden),
-                nn.Dropout(p=dropout),
-                util.get_activation(self.fc_act),
-                nn.Linear(n_hidden, out_features=1),
-                nn.Sigmoid(),
-            )
-
         if self.interp_n_frames is None:
             self.register_buffer(
                 "pos_enc", tr.linspace(0, 1, self.n_frames).view(1, -1, 1)
@@ -342,7 +321,6 @@ class Spectral2DCNN(nn.Module):
         x = tr.mean(x, dim=-2)
         latent = x.swapaxes(1, 2)
         out_dict["latent"] = latent
-        global_latent = tr.mean(latent, dim=-2)
 
         # Calc temporal params
         for name, tp in self.temp_params.items():
@@ -425,11 +403,6 @@ class Spectral2DCNN(nn.Module):
                 # else:
                 #     out_dict[f"{name}_adapted"] = adapt_out.squeeze(-1)
                 out_dict[f"{name}_adapted"] = adapt_out.squeeze(-1)
-
-        # Calc global params
-        for param_name, mlp in self.out_global.items():
-            p_val_hat = mlp(global_latent).squeeze(-1)
-            out_dict[param_name] = p_val_hat
 
         return out_dict
 
