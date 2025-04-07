@@ -156,15 +156,28 @@ class LFOMetric(nn.Module, abc.ABC):
 
 
 class EntropyMetric(LFOMetric):
-    def calc_metric(self, x: T) -> T:
+    @staticmethod
+    def calc_entropy(x: T, normalize: bool = True) -> T:
+        assert x.ndim == 2
         assert x.min() >= 0.0
         x = x / x.sum(dim=1, keepdim=True)
         x_log = tr.log(x)
         x_log = tr.nan_to_num(x_log, nan=0.0, posinf=0.0, neginf=0.0)
         entropy = -x * x_log
         entropy = entropy.sum(dim=1)
-        assert x.size(1) > 1
-        entropy /= tr.log(tr.tensor(x.size(1)))
+        if normalize:
+            assert x.size(1) > 1
+            entropy /= tr.log(tr.tensor(x.size(1)))
+        return entropy
+
+    def calc_metric(self, x: T) -> T:
+        return self.calc_entropy(x, normalize=True)
+
+
+class SpectralEntropyMetric(LFOMetric):
+    def calc_metric(self, x: T) -> T:
+        mag_spec = tr.fft.rfft(x, dim=1).abs()
+        entropy = EntropyMetric.calc_entropy(mag_spec, normalize=True)
         return entropy
 
 

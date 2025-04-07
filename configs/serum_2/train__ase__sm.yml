@@ -25,10 +25,10 @@ data:
   init_args:
     batch_size: 32
     ac: audio_config.yml
-#    data_dir: ../data/serum-nsynth-v1
-    data_dir: data/serum-nsynth-v1
-#    preset_params_path: ../data/preset_params_v2.json
-    preset_params_path: data/preset_params_v2.json
+    data_dir: ../data/serum-nsynth-v1
+#    data_dir: data/serum-nsynth-v1
+    preset_params_path: ../data/preset_params_v2.json
+#    preset_params_path: data/preset_params_v2.json
     split_train: 0.6
     split_val: 0.2
     num_workers: 4

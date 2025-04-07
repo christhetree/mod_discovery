@@ -22,6 +22,7 @@ from metrics import (
     RMSMetric,
     SpectralBandwidthMetric,
     SpectralFlatnessMetric, EntropyMetric, TotalVariationMetric, TurningPointsMetric,
+    SpectralEntropyMetric,
 )
 from modulations import ModSignalGenRandomBezier
 from paths import OUT_DIR
@@ -180,6 +181,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         self.signal_metrics = nn.ModuleDict()
         self.signal_metrics["ent"] = EntropyMetric(eps=eps)
+        self.signal_metrics["spec_ent"] = SpectralEntropyMetric(eps=eps)
         self.signal_metrics["tv"] = TotalVariationMetric(eps=eps)
         self.signal_metrics["tp"] = TurningPointsMetric(eps=eps)
 
@@ -358,6 +360,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "audio": x,
             "f0_hz": f0_hz,
         }
+        temp_params_hat_raw = {}
         temp_params_hat = {}
         temp_params_hat_inv = {}
         global_params_0to1_hat = {}
@@ -393,8 +396,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
             )
 
             # Postprocess temp_params_hat
+            # TODO(cm): clean this up
             for p_name in self.temp_param_names_hat:
                 p_hat = model_out[p_name]
+                temp_params_hat_raw[p_name] = p_hat
                 p_hat_interp = None
                 if p_name in temp_params:
                     p = temp_params[p_name]
