@@ -9,7 +9,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [6]
+  devices: [7]
   max_epochs: 30
   num_sanity_val_steps: 1
   accumulate_grad_batches: 1
@@ -63,4 +63,4 @@ model:
       - panns-cnn14-32k
       - panns-wavegram-logmel
 
-    run_name: mss__frame_cf_4__sm_16_1024__serum__BA_both_lfo_10
+    run_name: mss__frame_cf_8__sm_16_1024__serum__BA_both_lfo_10

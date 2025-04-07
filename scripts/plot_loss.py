@@ -289,8 +289,8 @@ if __name__ == "__main__":
     filtered_wt_names = None
 
     tsv_names_and_paths = [
-        ("ase", os.path.join(OUT_DIR, f"out/mss__s12d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("cf_4", os.path.join(OUT_DIR, f"out/mss__frame_cf_4__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("ase", os.path.join(OUT_DIR, f"out/mss__s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("cf_8", os.path.join(OUT_DIR, f"out/mss__frame_cf_8__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         ("frame", os.path.join(OUT_DIR, f"out/mss__frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
 
         # ("ase", os.path.join(OUT_DIR, f"out/mss__s12d3__sm_16_1024_noise_0.33__ableton__ase__fm_fold.tsv")),
@@ -326,21 +326,28 @@ if __name__ == "__main__":
     x_col = "step"
     # x_col = "global_n"
 
+    # lfo = "add_lfo"
+    # lfo = "sub_lfo"
+    lfo = "env"
+
     # metric = "l1"
     metric = "esr"
     # metric = "mse"
     # inv = ""
     inv = "_inv"
     # inv = "_inv_all"
-    # lfo = "add_lfo"
-    lfo = "sub_lfo"
-    # lfo = "env"
-
     # y_col = f"{metric}{inv}__{lfo}"
-    # y_col = "audio__mss"
+
+    metric = "ent"
+    # metric = "tv"
+    # metric = "tp"
+    # hat = ""
+    hat = "__hat"
+    # y_col = f"signal__{lfo}__{metric}{hat}"
+
+    y_col = "audio__mss"
     # y_col = "audio__mel_stft"
     # y_col = "audio__mfcc"
-    # y_col = "audio__rms_coss"
 
     # y_col = "fad__clap-2023"
     # y_col = "fad__encodec-emb-24k"
@@ -355,7 +362,7 @@ if __name__ == "__main__":
     # metric = "sc"
     # metric = "sb"
     # metric = "sf"
-    y_col = f"audio__{metric}_{dist}"
+    # y_col = f"audio__{metric}_{dist}"
 
     # y_col = "add_lfo_max_range"
     # y_col = "add_lfo_mean_range"

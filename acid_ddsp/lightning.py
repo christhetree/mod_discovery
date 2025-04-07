@@ -21,7 +21,7 @@ from metrics import (
     SpectralCentroidMetric,
     RMSMetric,
     SpectralBandwidthMetric,
-    SpectralFlatnessMetric,
+    SpectralFlatnessMetric, EntropyMetric, TotalVariationMetric, TurningPointsMetric,
 )
 from modulations import ModSignalGenRandomBezier
 from paths import OUT_DIR
@@ -177,6 +177,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
             average_channels=True,
             dist_fn="pcc",
         )
+
+        self.signal_metrics = nn.ModuleDict()
+        self.signal_metrics["ent"] = EntropyMetric(eps=eps)
+        self.signal_metrics["tv"] = TotalVariationMetric(eps=eps)
+        self.signal_metrics["tp"] = TurningPointsMetric(eps=eps)
+
         self.global_n = 0
         self.curr_training_step = 0
         self.total_n_training_steps = None
@@ -208,6 +214,11 @@ class AcidDDSPLightingModule(pl.LightningModule):
             tsv_cols.append(f"l1__{p_name}")
         for metric_name in self.audio_metrics:
             tsv_cols.append(f"audio__{metric_name}")
+        for metric_name in self.signal_metrics:
+            for p_name in self.temp_param_names:
+                tsv_cols.append(f"signal__{p_name}__{metric_name}")
+            for p_name in self.temp_param_names_hat:
+                tsv_cols.append(f"signal__{p_name}_hat__{metric_name}")
         for fad_model_name in self.fad_model_names:
             tsv_cols.append(f"fad__{fad_model_name}")
         tsv_cols.append("add_lfo_mean_range")
@@ -633,6 +644,50 @@ class AcidDDSPLightingModule(pl.LightningModule):
         if stage == "test":
             fad_metrics = self.calc_fad_metrics(x, x_hat)
 
+        # Interpolate temp_params_hat and temp_params_hat_inv if needed
+        temp_params_hat = {f"{k}_hat": v for k, v in temp_params_hat.items()}
+        temp_params_hat = {
+            k: util.interpolate_dim(v, n=self.ac.n_samples, dim=1, align_corners=True)
+            for k, v in temp_params_hat.items()
+        }
+        temp_params_hat_inv = {
+            k: util.interpolate_dim(v, n=self.ac.n_samples, dim=1, align_corners=True)
+            for k, v in temp_params_hat_inv.items()
+        }
+
+        # Calculate signal metrics
+        signal_metrics = {}
+        signal_metrics_hat = {}
+        n_frames = None
+        if stage != "train":
+            for metric_name, metric in self.signal_metrics.items():
+                for p_name in self.temp_param_names:
+                    signal = temp_params[p_name]
+                    if n_frames is None:
+                        n_frames = signal.size(1)
+                    else:
+                        assert n_frames == signal.size(1)
+                    val = metric(signal)
+                    signal_metrics[f"{p_name}_{metric_name}"] = val
+                    self.log(
+                        f"{stage}/{p_name}_{metric_name}",
+                        val,
+                        prog_bar=False,
+                    )
+                for p_name in self.temp_param_names_hat:
+                    signal_hat = temp_params_hat[f"{p_name}_hat"]
+                    if n_frames is None:
+                        n_frames = signal_hat.size(1)
+                    else:
+                        assert n_frames == signal_hat.size(1)
+                    val_hat = metric(signal_hat)
+                    signal_metrics_hat[f"{p_name}_{metric_name}"] = val_hat
+                    self.log(
+                        f"{stage}/{p_name}_hat_{metric_name}",
+                        val_hat,
+                        prog_bar=False,
+                    )
+
         # TSV logging
         if self.tsv_path:
             with open(self.tsv_path, "a") as f:
@@ -666,6 +721,17 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     else:
                         val = None
                     tsv_row.append(val)
+                for metric_name in self.signal_metrics:
+                    for p_name in self.temp_param_names:
+                        val = signal_metrics.get(f"{p_name}_{metric_name}")
+                        if val is not None:
+                            val = val.item()
+                        tsv_row.append(val)
+                    for p_name in self.temp_param_names_hat:
+                        val_hat = signal_metrics_hat.get(f"{p_name}_{metric_name}")
+                        if val_hat is not None:
+                            val_hat = val_hat.item()
+                        tsv_row.append(val_hat)
                 for fad_model_name in self.fad_model_names:
                     fad_metric = fad_metrics.get(fad_model_name)
                     tsv_row.append(fad_metric)
@@ -677,15 +743,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 assert len(tsv_row) == len(self.tsv_cols)
                 f.write("\t".join(str(v) for v in tsv_row) + "\n")
 
-        temp_params_hat = {f"{k}_hat": v for k, v in temp_params_hat.items()}
-        temp_params_hat = {
-            k: util.interpolate_dim(v, n=self.ac.n_samples, dim=1, align_corners=True)
-            for k, v in temp_params_hat.items()
-        }
-        temp_params_hat_inv = {
-            k: util.interpolate_dim(v, n=self.ac.n_samples, dim=1, align_corners=True)
-            for k, v in temp_params_hat_inv.items()
-        }
         global_params_hat = {f"{k}_hat": v for k, v in global_params_hat.items()}
         audio_metrics_hat = {f"{k}_hat": v for k, v in audio_metrics_hat.items()}
         out_dict = {
@@ -706,6 +763,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         assert all(k not in out_dict for k in global_params_hat)
         assert all(k not in out_dict for k in global_param_metrics)
         assert all(k not in out_dict for k in audio_metrics_hat)
+        assert all(k not in out_dict for k in signal_metrics)
+        assert all(k not in out_dict for k in signal_metrics_hat)
         assert all(k not in out_dict for k in fad_metrics)
         out_dict.update(temp_params)
         out_dict.update(temp_params_hat)
@@ -715,6 +774,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         out_dict.update(global_params_hat)
         out_dict.update(global_param_metrics)
         out_dict.update(audio_metrics_hat)
+        out_dict.update(signal_metrics)
+        out_dict.update(signal_metrics_hat)
         out_dict.update(fad_metrics)
         return out_dict
 

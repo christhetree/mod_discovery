@@ -16,8 +16,8 @@ init_args:
       dim: 1
       act: none
       is_spline: true
-      n_segments: 12
-#      n_segments: 24
+#      n_segments: 12
+      n_segments: 24
       degree: 3
 #      degree: 6
       is_c1_cont: false
@@ -29,8 +29,8 @@ init_args:
       dim: 1
       act: none
       is_spline: true
-      n_segments: 12
-#      n_segments: 24
+#      n_segments: 12
+      n_segments: 24
       degree: 3
 #      degree: 6
       is_c1_cont: false
@@ -44,8 +44,8 @@ init_args:
       dim: 1
       act: none
       is_spline: true
-      n_segments: 12
-#      n_segments: 24
+#      n_segments: 12
+      n_segments: 24
       degree: 3
 #      degree: 6
       is_c1_cont: false

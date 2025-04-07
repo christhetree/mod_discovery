@@ -48,7 +48,7 @@ if __name__ == "__main__":
 
     seeds = [42]
     # seeds = [42, 42, 3, 42]
-    # seeds = list(range(10))
+    # seeds = list(range(20))
     log.info(f"Running with seeds: {seeds}")
 
     # wt_dir = os.path.join(WAVETABLES_DIR, "testing")

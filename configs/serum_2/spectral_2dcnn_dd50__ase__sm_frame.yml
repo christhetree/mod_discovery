@@ -33,4 +33,4 @@ init_args:
   n_frames: 1501
   cnn_act: prelu
   fc_act: prelu
-  noise_std: 0.33
+  noise_std: 0.33  #

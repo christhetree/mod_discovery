@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-class ModulationMetric(nn.Module, abc.ABC):
+class AudioMetric(nn.Module, abc.ABC):
     def __init__(
         self,
         sr: int,
@@ -23,7 +23,7 @@ class ModulationMetric(nn.Module, abc.ABC):
         hop_len: int,
         average_channels: bool = True,
         dist_fn: Literal["coss", "pcc"] = "pcc",
-        filter_cf_hz: Optional[float] = 10.0,
+        filter_cf_hz: Optional[float] = 8.0,
     ):
         super().__init__()
         self.sr = sr
@@ -88,7 +88,7 @@ class ModulationMetric(nn.Module, abc.ABC):
             return dist
 
 
-class RMSMetric(ModulationMetric):
+class RMSMetric(AudioMetric):
     def calc_feature(self, x: T) -> T:
         x = x.cpu().numpy()
         x = librosa.feature.rms(
@@ -98,7 +98,7 @@ class RMSMetric(ModulationMetric):
         return x
 
 
-class SpectralCentroidMetric(ModulationMetric):
+class SpectralCentroidMetric(AudioMetric):
     def calc_feature(self, x: T) -> T:
         x = x.cpu().numpy()
         x = librosa.feature.spectral_centroid(
@@ -108,7 +108,7 @@ class SpectralCentroidMetric(ModulationMetric):
         return x
 
 
-class SpectralBandwidthMetric(ModulationMetric):
+class SpectralBandwidthMetric(AudioMetric):
     def calc_feature(self, x: T) -> T:
         x = x.cpu().numpy()
         x = librosa.feature.spectral_bandwidth(
@@ -118,7 +118,7 @@ class SpectralBandwidthMetric(ModulationMetric):
         return x
 
 
-class SpectralFlatnessMetric(ModulationMetric):
+class SpectralFlatnessMetric(AudioMetric):
     def calc_feature(self, x: T) -> T:
         x = x.cpu().numpy()
         x = librosa.feature.spectral_flatness(
@@ -126,6 +126,66 @@ class SpectralFlatnessMetric(ModulationMetric):
         ).squeeze(1)
         x = tr.from_numpy(x).float()
         return x
+
+
+class LFOMetric(nn.Module, abc.ABC):
+    def __init__(
+        self,
+        normalize: bool = True,
+        eps: float = 1e-8,
+    ):
+        super().__init__()
+        self.normalize = normalize
+        self.eps = eps
+
+    @abstractmethod
+    def calc_metric(self, x: T) -> T:
+        pass
+
+    def forward(self, x: T) -> T:
+        assert x.ndim == 2
+        with tr.no_grad():
+            if self.normalize:
+                x_min = x.min(dim=1, keepdim=True).values
+                x_max = x.max(dim=1, keepdim=True).values
+                x_range = x_max - x_min
+                x = (x - x_min) / (x_range + self.eps)
+            metric = self.calc_metric(x)
+            metric = metric.mean()
+            return metric
+
+
+class EntropyMetric(LFOMetric):
+    def calc_metric(self, x: T) -> T:
+        assert x.min() >= 0.0
+        x = x / x.sum(dim=1, keepdim=True)
+        x_log = tr.log(x)
+        x_log = tr.nan_to_num(x_log, nan=0.0, posinf=0.0, neginf=0.0)
+        entropy = -x * x_log
+        entropy = entropy.sum(dim=1)
+        assert x.size(1) > 1
+        entropy /= tr.log(tr.tensor(x.size(1)))
+        return entropy
+
+
+class TotalVariationMetric(LFOMetric):
+    def calc_metric(self, x: T) -> T:
+        assert x.size(1) > 1
+        diffs = x[:, 1:] - x[:, :-1]
+        diffs = tr.abs(diffs)
+        diffs = diffs.mean(dim=1)
+        return diffs
+
+
+class TurningPointsMetric(LFOMetric):
+    def calc_metric(self, x: T) -> T:
+        assert x.size(1) > 2
+        diffs = x[:, 1:] - x[:, :-1]
+        diffs = tr.sign(diffs)
+        ddiffs = diffs[:, 1:] * diffs[:, :-1]
+        turning_points = (ddiffs < 0).sum(dim=1).float()
+        turning_points = turning_points / (x.size(1) - 2)
+        return turning_points
 
 
 # import librosa
@@ -165,9 +225,19 @@ class SpectralFlatnessMetric(ModulationMetric):
 
 
 if __name__ == "__main__":
-    x = tr.tensor([1, 2, 3, 2, 1]).float().view(1, -1).repeat(3, 1)
-    y = tr.tensor([1, 2, 3, 2, 1]).float().view(1, -1).repeat(3, 1)
-    y[1, :] -= 1
+    # x = tr.tensor([1, 2, 3, 2, 1]).float().view(1, -1).repeat(1, 1)
+    x = tr.tensor([0, -1, 1, 0]).float().view(1, -1).repeat(1, 1)
+    # y = tr.tensor([1, 2, 3, 2, 1]).float().view(1, -1).repeat(1, 1)
+    # y[1, :] -= 1
+
+    # metric = EntropyMetric()
+    metric = TotalVariationMetric()
+    # metric = TurningPointsMetric()
+    dist = metric(x)
+    print(dist)
+    exit()
+
+
 
     cos = tr.nn.functional.cosine_similarity(x, y, dim=-1)
     print(cos)
