@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-class AudioMetric(nn.Module, abc.ABC):
+class AudioDistance(nn.Module, abc.ABC):
     def __init__(
         self,
         sr: int,
@@ -56,39 +56,38 @@ class AudioMetric(nn.Module, abc.ABC):
     def forward(self, x: T, x_target: T) -> T:
         assert x.ndim == 3
         assert x.shape == x_target.shape
-        with tr.no_grad():
-            if self.average_channels:
-                x = x.mean(dim=1)
-                x_target = x_target.mean(dim=1)
-            else:
-                x = x.view(-1, x.size(-1))
-                x_target = x_target.view(-1, x_target.size(-1))
-            x = self.calc_feature(x)
-            x_target = self.calc_feature(x_target)
-            assert x.ndim == x_target.ndim == 2
-            x = self.maybe_filter_feature(x)
-            x_target = self.maybe_filter_feature(x_target)
-            assert x.shape == x_target.shape
-            if self.dist_fn == "coss":
-                dist = tr.nn.functional.cosine_similarity(x, x_target, dim=-1)
-            elif self.dist_fn == "pcc":
-                pcc_s = []
-                # TODO(cm): vectorize
-                for idx in range(x.size(0)):
-                    curr_x = x[idx, :]
-                    curr_x_target = x_target[idx, :]
-                    data = tr.stack([curr_x, curr_x_target], dim=0)
-                    corr_matrix = tr.corrcoef(data)
-                    pcc = corr_matrix[0, 1]
-                    pcc_s.append(pcc)
-                dist = tr.stack(pcc_s, dim=0)
-            else:
-                raise ValueError(f"Unknown distance function: {self.dist_fn}")
-            dist = dist.mean()
-            return dist
+        if self.average_channels:
+            x = x.mean(dim=1)
+            x_target = x_target.mean(dim=1)
+        else:
+            x = x.view(-1, x.size(-1))
+            x_target = x_target.view(-1, x_target.size(-1))
+        x = self.calc_feature(x)
+        x_target = self.calc_feature(x_target)
+        assert x.ndim == x_target.ndim == 2
+        x = self.maybe_filter_feature(x)
+        x_target = self.maybe_filter_feature(x_target)
+        assert x.shape == x_target.shape
+        if self.dist_fn == "coss":
+            dist = tr.nn.functional.cosine_similarity(x, x_target, dim=-1)
+        elif self.dist_fn == "pcc":
+            pcc_s = []
+            # TODO(cm): vectorize
+            for idx in range(x.size(0)):
+                curr_x = x[idx, :]
+                curr_x_target = x_target[idx, :]
+                data = tr.stack([curr_x, curr_x_target], dim=0)
+                corr_matrix = tr.corrcoef(data)
+                pcc = corr_matrix[0, 1]
+                pcc_s.append(pcc)
+            dist = tr.stack(pcc_s, dim=0)
+        else:
+            raise ValueError(f"Unknown distance function: {self.dist_fn}")
+        dist = dist.mean()
+        return dist
 
 
-class RMSMetric(AudioMetric):
+class RMSDistance(AudioDistance):
     def calc_feature(self, x: T) -> T:
         x = x.cpu().numpy()
         x = librosa.feature.rms(
@@ -98,7 +97,7 @@ class RMSMetric(AudioMetric):
         return x
 
 
-class SpectralCentroidMetric(AudioMetric):
+class SpectralCentroidDistance(AudioDistance):
     def calc_feature(self, x: T) -> T:
         x = x.cpu().numpy()
         x = librosa.feature.spectral_centroid(
@@ -108,7 +107,7 @@ class SpectralCentroidMetric(AudioMetric):
         return x
 
 
-class SpectralBandwidthMetric(AudioMetric):
+class SpectralBandwidthDistance(AudioDistance):
     def calc_feature(self, x: T) -> T:
         x = x.cpu().numpy()
         x = librosa.feature.spectral_bandwidth(
@@ -118,7 +117,7 @@ class SpectralBandwidthMetric(AudioMetric):
         return x
 
 
-class SpectralFlatnessMetric(AudioMetric):
+class SpectralFlatnessDistance(AudioDistance):
     def calc_feature(self, x: T) -> T:
         x = x.cpu().numpy()
         x = librosa.feature.spectral_flatness(
@@ -144,15 +143,14 @@ class LFOMetric(nn.Module, abc.ABC):
 
     def forward(self, x: T) -> T:
         assert x.ndim == 2
-        with tr.no_grad():
-            if self.normalize:
-                x_min = x.min(dim=1, keepdim=True).values
-                x_max = x.max(dim=1, keepdim=True).values
-                x_range = x_max - x_min
-                x = (x - x_min) / (x_range + self.eps)
-            metric = self.calc_metric(x)
-            metric = metric.mean()
-            return metric
+        if self.normalize:
+            x_min = x.min(dim=1, keepdim=True).values
+            x_max = x.max(dim=1, keepdim=True).values
+            x_range = x_max - x_min
+            x = (x - x_min) / (x_range + self.eps)
+        metric = self.calc_metric(x)
+        metric = metric.mean()
+        return metric
 
 
 class EntropyMetric(LFOMetric):

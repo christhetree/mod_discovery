@@ -1,9 +1,6 @@
 import logging
 import os
-from typing import Optional
 
-import torch as tr
-from kymatio.torch import TimeFrequencyScattering, Scattering1D
 from torch import Tensor as T
 from torch import nn
 from torchaudio.transforms import MFCC
@@ -38,105 +35,6 @@ class MFCCL1(nn.Module):
         assert x.ndim == 3
         assert x.shape == x_target.shape
         return self.l1(self.mfcc(x), self.mfcc(x_target))
-
-
-class Scat1DLoss(nn.Module):
-    def __init__(
-        self,
-        shape: int,
-        J: int,
-        Q1: int,
-        Q2: int,
-        T: Optional[str | int] = None,
-        max_order: int = 2,
-        p: int = 2,
-        # use_o2_only: bool = False,
-    ):
-        super().__init__()
-        # if use_o2_only:
-        #     assert max_order == 2
-        self.max_order = max_order
-        self.p = p
-        # self.use_o2_only = use_o2_only
-        self.scat_1d = Scattering1D(
-            shape=(shape,),
-            J=J,
-            Q=(Q1, Q2),
-            T=T,
-            max_order=max_order,
-        )
-        meta = self.scat_1d.meta()
-        # self.o2_cf_hz = {idx: round(xi[1] * 16000, 6) for idx, xi in enumerate(meta["xi"]) if not np.isnan(xi[1])}
-        # self.o2_indices = [idx for idx, order in enumerate(meta["order"]) if order == 2]
-        # # self.o2_indices = [idx for idx, cf_hz in self.o2_cf_hz.items() if cf_hz < 5]
-        # log.info(f"number of o2_indices = {len(self.o2_indices)}")
-
-    def forward(self, x: T, x_target: T) -> T:
-        assert x.ndim == x_target.ndim == 3
-        assert x.size(1) == x_target.size(1) == 1
-        Sx = self.scat_1d(x)
-        Sx_target = self.scat_1d(x_target)
-        # if self.use_o2_only:
-        #     Sx = Sx[:, :, self.o2_indices, :]
-        #     Sx_target = Sx_target[:, :, self.o2_indices, :]
-        # else:
-        Sx = Sx[:, :, 1:, :]  # Remove the 0th order coefficients
-        Sx_target = Sx_target[:, :, 1:, :]  # Remove the 0th order coefficients
-
-        if self.max_order == 1:
-            dist = tr.linalg.vector_norm(Sx_target - Sx, ord=self.p, dim=(-2, -1))
-        else:
-            dist = tr.linalg.vector_norm(Sx_target - Sx, ord=self.p, dim=-1)
-
-        dist = tr.mean(dist)
-        return dist
-
-
-class JTFSTLoss(nn.Module):
-    def __init__(
-        self,
-        shape: int,
-        J: int,
-        Q1: int,
-        Q2: int,
-        J_fr: int,
-        Q_fr: int,
-        T: Optional[str | int] = None,
-        F: Optional[str | int] = None,
-        format_: str = "joint",
-        p: int = 2,
-    ):
-        super().__init__()
-        assert format_ in ["time", "joint"]
-        self.format = format_
-        self.p = p
-        self.jtfs = TimeFrequencyScattering(
-            shape=(shape,),
-            J=J,
-            Q=(Q1, Q2),
-            Q_fr=Q_fr,
-            J_fr=J_fr,
-            T=T,
-            F=F,
-            format=format_,
-        )
-        jtfs_meta = self.jtfs.meta()
-        jtfs_keys = [key for key in jtfs_meta["key"] if len(key) == 2]
-        log.info(f"number of JTFS keys = {len(jtfs_keys)}")
-
-    def forward(self, x: T, x_target: T) -> T:
-        assert x.ndim == x_target.ndim == 3
-        assert x.size(1) == x_target.size(1) == 1
-        Sx = self.jtfs(x)
-        Sx_target = self.jtfs(x_target)
-        if self.format == "time":
-            Sx = Sx[:, :, 1:, :]  # Remove the 0th order coefficients
-            Sx_target = Sx_target[:, :, 1:, :]  # Remove the 0th order coefficients
-            dist = tr.linalg.vector_norm(Sx_target - Sx, ord=self.p, dim=-1)
-        else:
-            dist = tr.linalg.vector_norm(Sx_target - Sx, ord=self.p, dim=(-2, -1))
-        dist = tr.mean(dist)
-        return dist
 
 
 class ESRLoss(nn.Module):
