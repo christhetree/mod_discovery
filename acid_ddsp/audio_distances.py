@@ -2,7 +2,7 @@ import abc
 import logging
 import os
 from abc import abstractmethod
-from typing import Literal, Optional
+from typing import Literal, Optional, Callable
 
 import librosa
 import torch as tr
@@ -10,6 +10,8 @@ from torch import Tensor as T
 from torch import nn
 from torch.nn import functional as F
 from torchaudio.transforms import MFCC
+
+from lfo_distances import PCCDistance
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -30,6 +32,7 @@ class MFCCDistance(nn.Module):
         self.p = p
         self.mfcc = MFCC(
             sample_rate=sr,
+            n_mfcc=40,
             log_mels=log_mels,
             melkwargs={
                 "n_fft": n_fft,
@@ -57,8 +60,8 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
         sr: int,
         win_len: int,
         hop_len: int,
+        dist_fn: Callable[[T, T], T],
         average_channels: bool = True,
-        dist_fn: Literal["coss", "pcc"] = "pcc",
         filter_cf_hz: Optional[float] = 8.0,
     ):
         super().__init__()
@@ -104,21 +107,7 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
         x = self.maybe_filter_feature(x)
         x_target = self.maybe_filter_feature(x_target)
         assert x.shape == x_target.shape
-        if self.dist_fn == "coss":
-            dist = tr.nn.functional.cosine_similarity(x, x_target, dim=-1)
-        elif self.dist_fn == "pcc":
-            pcc_s = []
-            # TODO(cm): vectorize
-            for idx in range(x.size(0)):
-                curr_x = x[idx, :]
-                curr_x_target = x_target[idx, :]
-                data = tr.stack([curr_x, curr_x_target], dim=0)
-                corr_matrix = tr.corrcoef(data)
-                pcc = corr_matrix[0, 1]
-                pcc_s.append(pcc)
-            dist = tr.stack(pcc_s, dim=0)
-        else:
-            raise ValueError(f"Unknown distance function: {self.dist_fn}")
+        dist = self.dist_fn(x, x_target)
         dist = dist.mean()
         return dist
 

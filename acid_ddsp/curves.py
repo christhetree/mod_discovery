@@ -10,7 +10,6 @@ from torch.nn import functional as F
 from tqdm import tqdm
 
 import util
-from losses import FirstDerivativeL1Loss, SecondDerivativeL1Loss
 
 logging.basicConfig()
 log = logging.getLogger(__name__)

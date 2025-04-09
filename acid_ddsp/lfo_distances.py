@@ -2,13 +2,65 @@ import logging
 import os
 from typing import Callable
 
+import numpy as np
+from numpy import ndarray
 import torch as tr
 from torch import Tensor as T
 from torch import nn
 
+from dtw import dtw
+
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
+
+
+class COSSDistance(nn.Module):
+    def forward(self, x: T, x_target: T) -> T:
+        assert x.ndim == 2
+        assert x.shape == x_target.shape
+        dist = tr.nn.functional.cosine_similarity(x, x_target, dim=-1)
+        return dist
+
+
+class PCCDistance(nn.Module):
+    def forward(self, x: T, x_target: T) -> T:
+        assert x.ndim == 2
+        assert x.shape == x_target.shape
+        x_mean = x.mean(dim=-1, keepdim=True)
+        x_target_mean = x_target.mean(dim=-1, keepdim=True)
+        x = x - x_mean
+        x_target = x_target - x_target_mean
+        n_frames = x.size(1)
+        cov = (x * x_target).sum(dim=-1) / (n_frames - 1)
+        x_std = x.std(dim=1, unbiased=True)
+        x_target_std = x_target.std(dim=1, unbiased=True)
+        corr = cov / (x_std * x_target_std)
+        dist = corr.mean()
+        return dist
+
+
+class DTWDistance(nn.Module):
+    def forward(self, x: T, x_target: T) -> T:
+        assert x.ndim == 2
+        assert x.shape == x_target.shape
+        bs = x.size(0)
+        x = x.numpy()
+        x_target = x_target.numpy()
+        dists = []
+        for idx in range(bs):
+            curr_x = x[idx, :]
+            curr_x_target = x_target[idx, :]
+            dist = dtw(curr_x, curr_x_target, dist_method=self.l1, distance_only=True)
+            dist = dist.normalizedDistance
+            dists.append(dist)
+        dist = tr.tensor(dists, dtype=tr.float)
+        dist = dist.mean()
+        return dist
+
+    @staticmethod
+    def l1(a: ndarray, b: ndarray) -> float:
+        return np.mean(np.abs(a - b))
 
 
 class ESRLoss(nn.Module):
@@ -109,3 +161,19 @@ class SecondDerivativeDistance(nn.Module):
         d1 = FirstDerivativeDistance.calc_first_derivative(x)
         d2 = FirstDerivativeDistance.calc_first_derivative(d1)
         return d2
+
+
+if __name__ == "__main__":
+    n_frames = 1000
+    t = tr.linspace(0.0, 2 * tr.pi, steps=n_frames)
+    x = tr.sin(t)
+    x_target = tr.roll(x, 500)
+    # x_target = tr.roll(x, 0)
+    x = x.view(1, -1).repeat(2, 1)
+    x_target = x_target.view(1, -1).repeat(2, 1)
+    x_target[0, :] = x[0, :]
+    # x_target[1, :] = x[1, :]
+    dtw_dist = DTWDistance()
+    # dist = dtw_dist(x, x_target)
+    dist = dtw_dist(x_target, x)
+    print(f"dist = {dist}")

@@ -26,7 +26,7 @@ from lfo_distances import (
     FirstDerivativeDistance,
     SecondDerivativeDistance,
     ESRLoss,
-    FFTMagDist,
+    FFTMagDist, PCCDistance, COSSDistance,
 )
 from lfo_metrics import (
     EntropyMetric,
@@ -159,12 +159,18 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 ("sb", SpectralBandwidthDistance),
                 ("sf", SpectralFlatnessDistance),
             ]:
+                if dist_name == "coss":
+                    dist_fn = COSSDistance()
+                elif dist_name == "pcc":
+                    dist_fn = PCCDistance()
+                else:
+                    raise ValueError(f"Unknown distance name: {dist_name}")
                 self.audio_dists[f"{feat_name}_{dist_name}"] = feat_cls(
                     sr=self.ac.sr,
                     win_len=self.metrics_win_len,
                     hop_len=self.metrics_hop_len,
+                    dist_fn=dist_fn,
                     average_channels=True,
-                    dist_fn=dist_name,
                     filter_cf_hz=8.0,  # TODO(cm): plot this
                 )
 
@@ -186,6 +192,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.lfo_dists["fft_l1_d2"] = SecondDerivativeDistance(
             dist_fn=FFTMagDist(ignore_dc=True, p=1)
         )
+        self.lfo_dists["pcc"] = PCCDistance()
+        self.lfo_dists["pcc_d1"] = FirstDerivativeDistance(dist_fn=PCCDistance())
+        self.lfo_dists["pcc_d2"] = SecondDerivativeDistance(dist_fn=PCCDistance())
 
         # LFO metrics ==================================================================
         self.lfo_metrics = nn.ModuleDict()
