@@ -29,6 +29,7 @@ class SeedDataset(Dataset):
         mod_sig_gens: List[ModSignalGenerator],
         global_param_names: List[str],
         temp_param_names: List[str],
+        n_frames: Optional[int] = None,
         randomize_seed: bool = False,
     ):
         super().__init__()
@@ -42,6 +43,9 @@ class SeedDataset(Dataset):
         self.global_param_names = global_param_names
         self.temp_param_names = temp_param_names
         self.randomize_seed = randomize_seed
+        if n_frames is None:
+            n_frames = ac.n_samples
+        self.n_frames = n_frames
 
         # To ensure it's of type float32
         self.note_on_duration = tr.tensor(ac.note_on_duration).float()
@@ -72,7 +76,7 @@ class SeedDataset(Dataset):
             assert "_0to1" not in name
             result[f"{name}_0to1"] = tr.rand((1,), generator=self.rand_gen).squeeze()
         for name, mod_sig_gen in zip(self.temp_param_names, self.mod_sig_gens):
-            mod_sig = mod_sig_gen(self.ac.n_samples, rand_gen=self.rand_gen)
+            mod_sig = mod_sig_gen(self.n_frames, rand_gen=self.rand_gen)
             result[name] = mod_sig
         return result
 

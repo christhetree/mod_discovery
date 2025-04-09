@@ -1,16 +1,6 @@
 custom:
   project_name: acid_ddsp_2
-#  model_name: mss__s12d3_lin_proj__lfo
-#  model_name: mss__s12d3D__lfo
-#  model_name: mss__s12d2D_trans_enc_dec__lfo
-#  model_name: mss__s12d2D_rnn_b4_chunk_25__lfo
-  model_name: mss__s12d3D_rnn_b4_chunk_37__lfo
-#  model_name: mss__s12d3D_att_37_mean_softmax_0.005_rnn__lfo
-#  model_name: mss__s12d2D_att_25_tau_0.25__lfo
-#  model_name: mss__frame_cf_20__lfo
-#  model_name: mss__frame_32__lfo
-#  model_name: mss__frame_256__lfo
-#  model_name: mss__frame_lin_interp_36__lfo
+  model_name: mss__s24d3D__lfo
   dataset_name: lfo_fi__ase__fm_fold
   cpu_batch_size: 5
   use_wandb_cpu: false
@@ -37,7 +27,6 @@ data:
           max_n_seg: 8
           min_degree: 1
           max_degree: 3
-#          min_seg_interval_frac: 0.25
           min_seg_interval_frac: 1.0
           softmax_tau: 0.25
           normalize: false
@@ -47,6 +36,7 @@ data:
       - add_lfo
       - sub_lfo
       - env
+    n_frames: 1501
     num_workers: 4
 
 model:
@@ -54,15 +44,15 @@ model:
   init_args:
     ac: audio_config.yml
     spectral_visualizer: log_mel_spec.yml
-#    spectral_visualizer: log_mel_spec_hs_256.yml
-
     synth: synth__ase.yml
     temp_param_names:
       - add_lfo
       - sub_lfo
       - env
-
-    use_model: true
+    interp_temp_param_names:
+      - add_lfo
+      - sub_lfo
+      - env
     model: spectral_2dcnn_dd50__ase__lfo.yml
 #    model: spectral_2dcnn_dd50__ase__lfo_frame_cf_4.yml
 #    model: spectral_2dcnn_dd50__ase__lfo_frame_32.yml
@@ -83,10 +73,9 @@ model:
     model_opt: ../opt/sf_adam_w__lr_5e-3.yml
 
     fad_model_names:
-#      - vggish
       - clap-2023
       - encodec-emb-24k
-#      - encodec-emb-48k
       - panns-cnn14-16k
-#      - panns-cnn14-32k
       - panns-wavegram-logmel
+
+#    run_name: testing

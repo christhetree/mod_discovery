@@ -1,40 +1,14 @@
 import logging
 import os
+from typing import Callable
 
+import torch as tr
 from torch import Tensor as T
 from torch import nn
-from torchaudio.transforms import MFCC
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
-
-
-class MFCCL1(nn.Module):
-    def __init__(
-        self,
-        sr: int,
-        log_mels: bool = True,
-        n_fft: int = 2048,
-        hop_len: int = 512,
-        n_mels: int = 128,
-    ):
-        super().__init__()
-        self.mfcc = MFCC(
-            sample_rate=sr,
-            log_mels=log_mels,
-            melkwargs={
-                "n_fft": n_fft,
-                "hop_length": hop_len,
-                "n_mels": n_mels,
-            },
-        )
-        self.l1 = nn.L1Loss()
-
-    def forward(self, x: T, x_target: T) -> T:
-        assert x.ndim == 3
-        assert x.shape == x_target.shape
-        return self.l1(self.mfcc(x), self.mfcc(x_target))
 
 
 class ESRLoss(nn.Module):
@@ -74,16 +48,43 @@ class ESRLoss(nn.Module):
         return losses
 
 
-class FirstDerivativeL1Loss(nn.Module):
-    def __init__(self) -> None:
+class FFTMagDist(nn.Module):
+    def __init__(self, ignore_dc: bool = True, p: int = 1) -> None:
         super().__init__()
-        self.l1 = nn.L1Loss()
+        self.ignore_dc = ignore_dc
+        self.p = p
 
-    def forward(self, input: T, target: T) -> T:
-        input_prime = self.calc_first_derivative(input)
-        target_prime = self.calc_first_derivative(target)
-        loss = self.l1(input_prime, target_prime)
-        return loss
+        self.l1 = nn.L1Loss()
+        self.mse = nn.MSELoss()
+
+    def forward(self, x: T, x_target: T) -> T:
+        assert x.ndim == 2
+        assert x.shape == x_target.shape
+        X = tr.fft.rfft(x, dim=1).abs()
+        X_target = tr.fft.rfft(x_target, dim=1).abs()
+        if self.ignore_dc:
+            X = X[:, 1:]
+            X_target = X_target[:, 1:]
+        if self.p == 1:
+            dist = self.l1(X, X_target)
+        elif self.p == 2:
+            dist = self.mse(X, X_target)
+        else:
+            raise ValueError(f"Unknown p value: {self.p}")
+        return dist
+
+
+class FirstDerivativeDistance(nn.Module):
+    def __init__(self, dist_fn: Callable[[T, T], T]) -> None:
+        super().__init__()
+        self.dist_fn = dist_fn
+
+    def forward(self, x: T, x_target: T) -> T:
+        assert x.ndim == 2
+        x_prime = self.calc_first_derivative(x)
+        x_target_prime = self.calc_first_derivative(x_target)
+        dist = self.dist_fn(x_prime, x_target_prime)
+        return dist
 
     @staticmethod
     def calc_first_derivative(x: T) -> T:
@@ -91,19 +92,20 @@ class FirstDerivativeL1Loss(nn.Module):
         return (x[..., 2:] - x[..., :-2]) / 2.0
 
 
-class SecondDerivativeL1Loss(nn.Module):
-    def __init__(self) -> None:
+class SecondDerivativeDistance(nn.Module):
+    def __init__(self, dist_fn: Callable[[T, T], T]) -> None:
         super().__init__()
-        self.l1 = nn.L1Loss()
+        self.dist_fn = dist_fn
 
-    def forward(self, input: T, target: T) -> T:
-        input_prime = self.calc_second_derivative(input)
-        target_prime = self.calc_second_derivative(target)
-        loss = self.l1(input_prime, target_prime)
-        return loss
+    def forward(self, x: T, x_target: T) -> T:
+        assert x.ndim == 2
+        x_pp = self.calc_second_derivative(x)
+        x_target_pp = self.calc_second_derivative(x_target)
+        dist = self.dist_fn(x_pp, x_target_pp)
+        return dist
 
     @staticmethod
     def calc_second_derivative(x: T) -> T:
-        d1 = FirstDerivativeL1Loss.calc_first_derivative(x)
-        d2 = FirstDerivativeL1Loss.calc_first_derivative(d1)
+        d1 = FirstDerivativeDistance.calc_first_derivative(x)
+        d2 = FirstDerivativeDistance.calc_first_derivative(d1)
         return d2

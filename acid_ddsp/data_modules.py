@@ -35,6 +35,7 @@ class SeedDataModule(pl.LightningDataModule):
         temp_param_names: Optional[List[str]] = None,
         val_split: float = 0.2,
         test_split: float = 0.2,
+        n_frames: Optional[int] = None,
         randomize_train_seed: bool = False,
         num_workers: int = 0,
     ):
@@ -51,6 +52,7 @@ class SeedDataModule(pl.LightningDataModule):
         self.temp_param_names = temp_param_names
         self.val_split = val_split
         self.test_split = test_split
+        self.n_frames = n_frames
         self.randomize_train_seed = randomize_train_seed
         self.num_workers = num_workers
 
@@ -82,6 +84,7 @@ class SeedDataModule(pl.LightningDataModule):
             mod_sig_gens,
             global_param_names,
             temp_param_names,
+            n_frames=n_frames,
             randomize_seed=randomize_train_seed,
         )
         self.val_ds = SeedDataset(
@@ -90,6 +93,7 @@ class SeedDataModule(pl.LightningDataModule):
             mod_sig_gens,
             global_param_names,
             temp_param_names,
+            n_frames=n_frames,
         )
         self.test_ds = SeedDataset(
             ac,
@@ -97,6 +101,7 @@ class SeedDataModule(pl.LightningDataModule):
             mod_sig_gens,
             global_param_names,
             temp_param_names,
+            n_frames=n_frames,
         )
 
     def train_dataloader(self) -> DataLoader:

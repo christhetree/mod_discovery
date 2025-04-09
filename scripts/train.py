@@ -32,7 +32,7 @@ os.makedirs("wandb_logs", exist_ok=True)
 if __name__ == "__main__":
     # config_name = "synthetic_2/train.yml"
 
-    # config_name = "synthetic_2/train__ase__lfo.yml"
+    config_name = "synthetic_2/train__ase__lfo.yml"
 
     # config_name = "synthetic_2/train__ase__sm.yml"
     # config_name = "synthetic_2/train__ase__sm_frame_32.yml"
@@ -42,7 +42,7 @@ if __name__ == "__main__":
     # config_name = "synthetic_2/train__a__sm.yml"
     # config_name = "synthetic_2/train__s__sm.yml"
 
-    config_name = "serum_2/train__ase__sm.yml"
+    # config_name = "serum_2/train__ase__sm.yml"
     # config_name = "serum_2/train__ase__sm_frame.yml"
     # config_name = "serum_2/train__ase__sm_frame_cf.yml"
 
@@ -53,25 +53,25 @@ if __name__ == "__main__":
 
     # wt_dir = os.path.join(WAVETABLES_DIR, "testing")
     # wt_dir = os.path.join(WAVETABLES_DIR, "ableton_basic_shapes")
-    # wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
+    wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
     # wt_dir = os.path.join(WAVETABLES_DIR, "waveedit")
 
-    # wt_names = [f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")]
-    # filtered_wt_names = []
-    # for wt_name in wt_names:
-    #     if any(bad_wt_name in wt_name for bad_wt_name in BAD_ABLETON_WTS):
-    #         continue
-    #     if not wt_name.startswith("basics__"):
-    #         continue
-    #     # if not "galactica" in wt_name:
-    #     if not "fm_fold" in wt_name:
-    #         # if not "basic_shapes" in wt_name:
-    #         continue
-    #     filtered_wt_names.append(wt_name)
-    # wt_paths = [os.path.join(wt_dir, f"{wt_name}.pt") for wt_name in filtered_wt_names]
-    # wt_paths = sorted(wt_paths)
-    # log.info(f"\nWavetable directory: {wt_dir}\nFound {len(wt_paths)} wavetables")
-    wt_paths = [None]
+    wt_names = [f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")]
+    filtered_wt_names = []
+    for wt_name in wt_names:
+        if any(bad_wt_name in wt_name for bad_wt_name in BAD_ABLETON_WTS):
+            continue
+        if not wt_name.startswith("basics__"):
+            continue
+        # if not "galactica" in wt_name:
+        if not "fm_fold" in wt_name:
+            # if not "basic_shapes" in wt_name:
+            continue
+        filtered_wt_names.append(wt_name)
+    wt_paths = [os.path.join(wt_dir, f"{wt_name}.pt") for wt_name in filtered_wt_names]
+    wt_paths = sorted(wt_paths)
+    log.info(f"\nWavetable directory: {wt_dir}\nFound {len(wt_paths)} wavetables")
+    # wt_paths = [None]
 
     # basic_shapes_wt_path = os.path.join(WAVETABLES_DIR, "ableton_basic_shapes", "basics__basic_shapes__4_1024.pt")
     # basic_shapes_wt = tr.load(basic_shapes_wt_path, weights_only=True)

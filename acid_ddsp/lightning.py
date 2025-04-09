@@ -7,27 +7,34 @@ from typing import Dict, Any, Optional, List, Mapping, Tuple
 import auraloss
 import pytorch_lightning as pl
 import torch as tr
-from auraloss.time import ESRLoss
 from pytorch_lightning.cli import OptimizerCallable
 from torch import Tensor as T
 from torch import nn
 
 import util
 from audio_config import AudioConfig
-from fad import save_and_concat_fad_audio, calc_fad
-from feature_extraction import LogMelSpecFeatureExtractor
-from losses import MFCCL1
-from metrics import (
-    SpectralCentroidDistance,
+from audio_distances import (
     RMSDistance,
+    SpectralCentroidDistance,
     SpectralBandwidthDistance,
     SpectralFlatnessDistance,
+    MFCCDistance,
+)
+from fad import save_and_concat_fad_audio, calc_fad
+from feature_extraction import LogMelSpecFeatureExtractor
+from lfo_distances import (
+    FirstDerivativeDistance,
+    SecondDerivativeDistance,
+    ESRLoss,
+    FFTMagDist,
+)
+from lfo_metrics import (
     EntropyMetric,
+    SpectralEntropyMetric,
     TotalVariationMetric,
     TurningPointsMetric,
-    SpectralEntropyMetric,
+    LFORangeMetric,
 )
-from modulations import ModSignalGenRandomBezier
 from paths import OUT_DIR
 from synths import SynthBase
 
@@ -43,7 +50,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         spectral_visualizer: LogMelSpecFeatureExtractor,
         model: nn.Module,
         loss_func: nn.Module,
-        synth: SynthBase,
+        synth: Optional[SynthBase] = None,
         synth_hat: Optional[SynthBase] = None,
         temp_param_names: Optional[List[str]] = None,
         interp_temp_param_names: Optional[List[str]] = None,
@@ -74,7 +81,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
         if interp_temp_param_names_hat is None:
             interp_temp_param_names_hat = []
         if temp_param_n_frames is None:
-            temp_param_n_frames = ac.n_samples
+            if hasattr(model, "n_frames"):
+                temp_param_n_frames = model.n_frames
+            else:
+                temp_param_n_frames = ac.n_samples
         if temp_param_n_samples is None:
             temp_param_n_samples = ac.n_samples
         if global_param_names is None:
@@ -89,7 +99,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         assert ac.sr == spectral_visualizer.sr
         if hasattr(loss_func, "sr"):
             assert loss_func.sr == ac.sr
-
+        if hasattr(model, "n_frames"):
+            assert model.n_frames == temp_param_n_frames
         self.ac = ac
         self.spectral_visualizer = spectral_visualizer
         self.model = model
@@ -133,12 +144,13 @@ class AcidDDSPLightingModule(pl.LightningModule):
             win_length=self.metrics_win_len,
             n_mels=self.metrics_n_mels,
         )
-        self.audio_dists["mfcc"] = MFCCL1(
+        self.audio_dists["mfcc"] = MFCCDistance(
             sr=self.ac.sr,
             log_mels=True,
             n_fft=self.metrics_win_len,
             hop_len=self.metrics_hop_len,
             n_mels=self.metrics_n_mels,
+            p=1,
         )
         for dist_name in ["coss", "pcc"]:
             for feat_name, feat_cls in [
@@ -159,12 +171,27 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # LFO distances ================================================================
         self.lfo_dists = nn.ModuleDict()
         self.lfo_dists["esr"] = ESRLoss(eps=eps)
+        self.lfo_dists["esr_d1"] = FirstDerivativeDistance(dist_fn=ESRLoss(eps=eps))
+        self.lfo_dists["esr_d2"] = SecondDerivativeDistance(dist_fn=ESRLoss(eps=eps))
         self.lfo_dists["l1"] = nn.L1Loss()
+        self.lfo_dists["l1_d1"] = FirstDerivativeDistance(dist_fn=nn.L1Loss())
+        self.lfo_dists["l1_d2"] = SecondDerivativeDistance(dist_fn=nn.L1Loss())
         self.lfo_dists["mse"] = nn.MSELoss()
+        self.lfo_dists["mse_d1"] = FirstDerivativeDistance(dist_fn=nn.MSELoss())
+        self.lfo_dists["mse_d2"] = SecondDerivativeDistance(dist_fn=nn.MSELoss())
+        self.lfo_dists["fft_l1"] = FFTMagDist(ignore_dc=True, p=1)
+        self.lfo_dists["fft_l1_d1"] = FirstDerivativeDistance(
+            dist_fn=FFTMagDist(ignore_dc=True, p=1)
+        )
+        self.lfo_dists["fft_l1_d2"] = SecondDerivativeDistance(
+            dist_fn=FFTMagDist(ignore_dc=True, p=1)
+        )
 
         # LFO metrics ==================================================================
         self.lfo_metrics = nn.ModuleDict()
-        # TODO(cm): add LFO range metrics
+        self.lfo_metrics["range_mean"] = LFORangeMetric(agg_fn="mean")
+        self.lfo_metrics["min_val"] = LFORangeMetric(agg_fn="min_val")
+        self.lfo_metrics["max_val"] = LFORangeMetric(agg_fn="max_val")
         self.lfo_metrics["ent"] = EntropyMetric(eps=eps)
         self.lfo_metrics["spec_ent"] = SpectralEntropyMetric(eps=eps)
         self.lfo_metrics["tv"] = TotalVariationMetric(eps=eps)
@@ -310,6 +337,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "add_audio": add_audio,
             "sub_audio": sub_audio,
             "env_audio": env_audio,
+            "x": env_audio.unsqueeze(1),
             "temp_params_raw": temp_params_raw,
             "temp_params": temp_params,
             "global_params": global_params,
@@ -380,6 +408,16 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     p_hat, self.temp_param_n_samples, dim=1, align_corners=True
                 )
             temp_params_hat[p_name] = p_hat
+            if f"{p_name}_adapted" in model_out:
+                p_hat_adapted = model_out[f"{p_name}_adapted"]
+                if p_name in self.interp_temp_param_names_hat:
+                    p_hat_adapted = util.interpolate_dim(
+                        p_hat_adapted,
+                        self.temp_param_n_samples,
+                        dim=1,
+                        align_corners=True,
+                    )
+                temp_params_hat[f"{p_name}_adapted"] = p_hat_adapted
 
         # Compute LFO distances and metrics ============================================
         lfo_dist_vals = {}
@@ -390,7 +428,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     temp_params_hat_raw[p_name]
                     for p_name in self.compare_temp_param_names
                 ]
-                p_hats = tr.stack(p_hats, dim=1)
+                if p_hats:
+                    p_hats = tr.stack(p_hats, dim=1)
                 # Calc LFO distances
                 for p_name in self.compare_temp_param_names:
                     p = temp_params_raw[p_name]
@@ -612,18 +651,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 f"\n - synth_opt initial LR: {self.synth_opt.defaults['lr']:.6f}"
             )
             return self.model_opt, self.synth_opt
-
-    @staticmethod
-    def calc_fft_mag_dist(x_hat: T, x: T, ignore_dc: bool = True) -> T:
-        assert x.ndim == 2
-        assert x.shape == x_hat.shape
-        X = tr.fft.rfft(x, dim=1).abs()
-        X_hat = tr.fft.rfft(x_hat, dim=1).abs()
-        if ignore_dc:
-            X = X[:, 1:]
-            X_hat = X_hat[:, 1:]
-        dist = tr.nn.functional.l1_loss(X_hat, X)
-        return dist
 
     @staticmethod
     def compute_lstsq_with_bias(x_hat: T, x: T) -> T:
