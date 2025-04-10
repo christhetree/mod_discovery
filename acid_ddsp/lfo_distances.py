@@ -2,13 +2,10 @@ import logging
 import os
 from typing import Callable
 
-import numpy as np
-from numpy import ndarray
 import torch as tr
+from dtw import dtw
 from torch import Tensor as T
 from torch import nn
-
-from dtw import dtw
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -41,6 +38,10 @@ class PCCDistance(nn.Module):
 
 
 class DTWDistance(nn.Module):
+    def __init__(self, dist_method: str = "cityblock") -> None:
+        super().__init__()
+        self.dist_method = dist_method
+
     def forward(self, x: T, x_target: T) -> T:
         assert x.ndim == 2
         assert x.shape == x_target.shape
@@ -51,16 +52,14 @@ class DTWDistance(nn.Module):
         for idx in range(bs):
             curr_x = x[idx, :]
             curr_x_target = x_target[idx, :]
-            dist = dtw(curr_x, curr_x_target, dist_method=self.l1, distance_only=True)
+            dist = dtw(
+                curr_x, curr_x_target, dist_method=self.dist_method, distance_only=True
+            )
             dist = dist.normalizedDistance
             dists.append(dist)
         dist = tr.tensor(dists, dtype=tr.float)
         dist = dist.mean()
         return dist
-
-    @staticmethod
-    def l1(a: ndarray, b: ndarray) -> float:
-        return np.mean(np.abs(a - b))
 
 
 class ESRLoss(nn.Module):
@@ -164,14 +163,14 @@ class SecondDerivativeDistance(nn.Module):
 
 
 if __name__ == "__main__":
-    n_frames = 1000
+    n_frames = 1501
     t = tr.linspace(0.0, 2 * tr.pi, steps=n_frames)
     x = tr.sin(t)
-    x_target = tr.roll(x, 500)
+    x_target = tr.roll(x, 750)
     # x_target = tr.roll(x, 0)
     x = x.view(1, -1).repeat(2, 1)
     x_target = x_target.view(1, -1).repeat(2, 1)
-    x_target[0, :] = x[0, :]
+    # x_target[0, :] = x[0, :]
     # x_target[1, :] = x[1, :]
     dtw_dist = DTWDistance()
     # dist = dtw_dist(x, x_target)

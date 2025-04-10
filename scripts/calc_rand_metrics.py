@@ -7,8 +7,8 @@ from torch import nn
 from tqdm import tqdm
 
 import util
+from lfo_distances import ESRLoss, FFTMagDist, PCCDistance, COSSDistance, DTWDistance
 from lightning import AcidDDSPLightingModule
-from losses import ESRLoss
 from paths import CONFIGS_DIR
 
 logging.basicConfig()
@@ -18,6 +18,7 @@ log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 if __name__ == "__main__":
     tr.random.manual_seed(42)
+    eps = 1e-8
 
     n_iter = 100
     bs = 32
@@ -25,15 +26,19 @@ if __name__ == "__main__":
     x_n_signals = 1
     x_hat_n_signals = 1
     # x_hat_n_signals = 3
-    x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier.yml")
+    # x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier_1d.yml")
+    x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier_2d.yml")
     # x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier_norm.yml")
     x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__model.yml")
     # x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__model_norm.yml")
     metric_fn_s = {
         "l1": nn.L1Loss(),
-        "esr": ESRLoss(),
+        "esr": ESRLoss(eps=eps),
         "mse": nn.MSELoss(),
-        "fft": AcidDDSPLightingModule.calc_fft_mag_dist,
+        "fft": FFTMagDist(ignore_dc=True, p=1),
+        "pcc": PCCDistance(),
+        "coss": COSSDistance(),
+        # "dtw": DTWDistance(),
     }
 
     x_mod_gen = util.load_class_from_yaml(x_mod_gen_path)
@@ -74,36 +79,23 @@ if __name__ == "__main__":
         dist_std = dists.std().item()
         dist_min = dists.min().item()
         dist_max = dists.max().item()
-        log.info(f"{metric_name:9}: {dist:6.4f}, std: {dist_std:6.4f}, "
+        log.info(f"{metric_name:10}: {dist:6.4f}, std: {dist_std:6.4f}, "
                  f"min: {dist_min:6.4f}, max: {dist_max:6.4f}, n: {n}")
 
 
-
 # INFO:__main__:n_iter: 100, bs: 32, n_frames: 1501,
 # INFO:__main__:x_n_signals: 1, x_hat_n_signals: 1
-# INFO:__main__:l1       : 0.2349, std: 0.0097, min: 0.2120, max: 0.2653, n: 100
-# INFO:__main__:esr      : 0.4594, std: 0.4802, min: 0.2699, max: 4.9285, n: 100
-# INFO:__main__:mse      : 0.0842, std: 0.0063, min: 0.0700, max: 0.1046, n: 100
-# INFO:__main__:fft      : 0.9542, std: 0.0474, min: 0.8613, max: 1.0695, n: 100
-# INFO:__main__:l1_inv_1 : 0.1334, std: 0.0088, min: 0.1127, max: 0.1531, n: 100
-# INFO:__main__:esr_inv_1: 0.1123, std: 0.0141, min: 0.0754, max: 0.1603, n: 100
-# INFO:__main__:mse_inv_1: 0.0289, std: 0.0031, min: 0.0223, max: 0.0354, n: 100
-# INFO:__main__:fft_inv_1: 0.8513, std: 0.0748, min: 0.6578, max: 1.0506, n: 100
-
-# INFO:__main__:n_iter: 1000, bs: 32, n_frames: 1501,
-# INFO:__main__:x_n_signals: 1, x_hat_n_signals: 1
-# INFO:__main__:l1       : 0.2354, std: 0.0092, min: 0.2044, max: 0.2674, n: 1000
-# INFO:__main__:esr      : 0.6819, std: 3.9487, min: 0.2431, max: 100.3500, n: 1000
-# INFO:__main__:mse      : 0.0844, std: 0.0060, min: 0.0651, max: 0.1046, n: 1000
-# INFO:__main__:fft      : 0.9553, std: 0.0469, min: 0.8128, max: 1.1438, n: 1000
-# INFO:__main__:l1_inv_1 : 0.1329, std: 0.0083, min: 0.1116, max: 0.1563, n: 1000
-# INFO:__main__:esr_inv_1: 0.1121, std: 0.0133, min: 0.0727, max: 0.1612, n: 1000
-# INFO:__main__:mse_inv_1: 0.0288, std: 0.0030, min: 0.0211, max: 0.0371, n: 1000
-# INFO:__main__:fft_inv_1: 0.8500, std: 0.0695, min: 0.6466, max: 1.0772, n: 1000
-
-# INFO:__main__:n_iter: 100, bs: 32, n_frames: 1501,
-# INFO:__main__:x_n_signals: 1, x_hat_n_signals: 3
-# INFO:__main__:l1_inv_3 : 0.1229, std: 0.0076, min: 0.1038, max: 0.1405, n: 100
-# INFO:__main__:esr_inv_3: 0.0983, std: 0.0120, min: 0.0712, max: 0.1278, n: 100
-# INFO:__main__:mse_inv_3: 0.0252, std: 0.0026, min: 0.0195, max: 0.0310, n: 100
-# INFO:__main__:fft_inv_3: 0.7240, std: 0.0565, min: 0.5932, max: 0.8666, n: 100
+# INFO:__main__:l1       : 0.2345, std: 0.0077, min: 0.2102, max: 0.2521, n: 100
+# INFO:__main__:esr      : 0.4593, std: 0.4184, min: 0.2354, max: 4.0390, n: 100
+# INFO:__main__:mse      : 0.0840, std: 0.0049, min: 0.0680, max: 0.0958, n: 100
+# INFO:__main__:fft      : 1.3913, std: 0.0485, min: 1.2520, max: 1.5352, n: 100
+# INFO:__main__:pcc      : 0.0006, std: 0.0366, min: -0.0575, max: 0.1172, n: 100
+# INFO:__main__:coss     : 0.8738, std: 0.0485, min: 0.5174, max: 0.9641, n: 100
+# INFO:__main__:dtw      : 0.0707, std: 0.0045, min: 0.0611, max: 0.0827, n: 100
+# INFO:__main__:l1_inv_1 : 0.1385, std: 0.0078, min: 0.1193, max: 0.1541, n: 100
+# INFO:__main__:esr_inv_1: 0.1167, std: 0.0138, min: 0.0809, max: 0.1513, n: 100
+# INFO:__main__:mse_inv_1: 0.0306, std: 0.0027, min: 0.0238, max: 0.0363, n: 100
+# INFO:__main__:fft_inv_1: 0.8544, std: 0.0677, min: 0.7014, max: 1.0669, n: 100
+# INFO:__main__:pcc_inv_1: 0.1534, std: 0.0204, min: 0.0974, max: 0.2000, n: 100
+# INFO:__main__:coss_inv_1: 0.9389, std: 0.0414, min: 0.6351, max: 1.0000, n: 100
+# INFO:__main__:dtw_inv_1: 0.0584, std: 0.0037, min: 0.0501, max: 0.0668, n: 100
