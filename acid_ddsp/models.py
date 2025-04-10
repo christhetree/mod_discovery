@@ -13,6 +13,7 @@ from torchaudio.transforms import AmplitudeToDB
 import util
 from curves import PiecewiseBezier2D
 from feature_extraction import LogMelSpecFeatureExtractor
+from modulations import ModSignalGenerator
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -379,7 +380,7 @@ class Spectral2DCNN(nn.Module):
 
             out_dict[name] = x.squeeze(-1)
 
-            pos_enc = self.pos_enc.expand(x.size(0), x.size(1), -1)
+            pos_enc = self.pos_enc.expand(x.size(0), -1, -1)
             if tp.adapt_dim:
                 adapt_in = tr.cat([x, pos_enc], dim=-1)
                 # if tp.adapt_use_latent:
@@ -493,6 +494,93 @@ class Spectral2DCNN(nn.Module):
 
 
 # Baselines models below here ==========================================================
+class RandomModSigModel(nn.Module):
+    def __init__(
+        self,
+        n_frames: int,
+        temp_params: Dict[str, TempParam],
+        mod_sig_gen: ModSignalGenerator,
+        dropout: float = 0.0,
+        fc_act: str = "prelu",
+    ):
+        super().__init__()
+        self.n_frames = n_frames
+        self.temp_params = temp_params
+        self.mod_sig_gen = mod_sig_gen
+        self.dropout = dropout
+        self.fc_act = fc_act
+
+        self.register_buffer(
+            "pos_enc", tr.linspace(0, 1, n_frames).view(1, -1, 1)
+        )
+        self.adapters = nn.ModuleDict()
+        self.adapter_acts = nn.ModuleDict()
+        for name, tp in temp_params.items():
+            if tp.adapt_dim:
+                assert not tp.adapt_use_latent
+                adapt_in_dim = tp.dim + 1
+                n_hidden = (adapt_in_dim + tp.adapt_dim) // 2
+                if tp.adapt_use_separate:
+                    for dim_idx in range(tp.adapt_dim):
+                        self.adapters[f"{name}_{dim_idx}"] = nn.Sequential(
+                            nn.Linear(adapt_in_dim, n_hidden),
+                            nn.Dropout(p=dropout),
+                            util.get_activation(self.fc_act),
+                            nn.Linear(n_hidden, n_hidden),
+                            nn.Dropout(p=dropout),
+                            util.get_activation(self.fc_act),
+                            nn.Linear(n_hidden, 1),
+                        )
+                else:
+                    self.adapters[name] = nn.Sequential(
+                        nn.Linear(adapt_in_dim, n_hidden),
+                        nn.Dropout(p=dropout),
+                        util.get_activation(self.fc_act),
+                        nn.Linear(n_hidden, n_hidden),
+                        nn.Dropout(p=dropout),
+                        util.get_activation(self.fc_act),
+                        nn.Linear(n_hidden, tp.adapt_dim),
+                    )
+                self.adapter_acts[name] = util.get_activation(tp.adapt_act)
+
+    def forward(
+        self,
+        x: Dict[str, T],
+        tp_name: Optional[str] = None,
+        alpha_noise: Optional[float] = None,
+        alpha_linear: Optional[float] = None,
+    ) -> Dict[str, T]:
+        out_dict = {}
+        audio = x["audio"]
+        bs = audio.size(0)
+        for name, tp in self.temp_params.items():
+            if tp_name is not None and name != tp_name:
+                continue
+            mod_sigs = []
+            for idx in range(tp.dim * bs):
+                mod_sig = self.mod_sig_gen(self.n_frames)
+                mod_sigs.append(mod_sig)
+            mod_sig = tr.stack(mod_sigs, dim=0)
+            mod_sig = mod_sig.view(bs, -1, tp.dim)
+            out_dict[name] = mod_sig.squeeze(-1)
+
+            pos_enc = self.pos_enc.expand(bs, -1, -1)
+            if tp.adapt_dim:
+                adapt_in = tr.cat([mod_sig, pos_enc], dim=-1)
+                if tp.adapt_use_separate:
+                    adapt_outs = []
+                    for dim_idx in range(tp.adapt_dim):
+                        adapter = self.adapters[f"{name}_{dim_idx}"]
+                        adapt_out = adapter(adapt_in)
+                        adapt_outs.append(adapt_out)
+                    adapt_out = tr.cat(adapt_outs, dim=-1)
+                else:
+                    adapt_out = self.adapters[name](adapt_in)
+                adapt_out = self.adapter_acts[name](adapt_out)
+                out_dict[f"{name}_adapted"] = adapt_out.squeeze(-1)
+        return out_dict
+
+
 def mlp(in_size: int, hidden_size: int, n_layers: int) -> nn.Sequential:
     channels = [in_size] + (n_layers) * [hidden_size]
     net = []

@@ -50,6 +50,7 @@ model:
     ac: audio_config.yml
     spectral_visualizer: log_mel_spec.yml
     model: spectral_2dcnn_dd50__ase__sm.yml
+#    model: random_mod_sig_model.yml
 #    model: spectral_2dcnn_dd50__ase__sm_frame.yml
 #    model: spectral_2dcnn_dd50__ase__sm_frame_cf.yml
 #    model: spectral_2dcnn_dd50__ase__sm_shan_16_frame.yml
