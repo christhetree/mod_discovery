@@ -1,9 +1,13 @@
+import abc
 import logging
 import os
 from typing import Callable
 
 import torch as tr
 from dtw import dtw
+from pytorch3d.loss import chamfer_distance
+from shapely import frechet_distance
+from shapely.geometry.linestring import LineString
 from torch import Tensor as T
 from torch import nn
 
@@ -60,6 +64,57 @@ class DTWDistance(nn.Module):
         dist = tr.tensor(dists, dtype=tr.float)
         dist = dist.mean()
         return dist
+
+
+class XCoordDistance(nn.Module, abc.ABC):
+    def __init__(self, n_frames: int):
+        super().__init__()
+        self.n_frames = n_frames
+        self.register_buffer(
+            "x_coords", tr.linspace(0.0, 1.0, n_frames).view(1, -1, 1), persistent=False
+        )
+
+    @abc.abstractmethod
+    def calc_distance(self, x: T, x_target: T) -> T:
+        pass
+
+    def forward(self, x: T, x_target: T) -> T:
+        assert x.ndim == 2
+        assert x.size(1) == self.n_frames
+        assert x.shape == x_target.shape
+        bs = x.size(0)
+        x_coords = self.x_coords.expand(bs, -1, -1)
+        x = x.unsqueeze(-1)
+        x = tr.cat([x_coords, x], dim=-1)
+        x_target = x_target.unsqueeze(-1)
+        x_target = tr.cat([x_coords, x_target], dim=-1)
+        dist = self.calc_distance(x, x_target)
+        dist = dist.mean()
+        return dist
+
+
+class ChamferDistance(XCoordDistance):
+    def __init__(self, n_frames: int, p: int = 1) -> None:
+        super().__init__(n_frames)
+        self.p = p
+
+    def calc_distance(self, x: T, x_target: T) -> T:
+        dist, _ = chamfer_distance(x, x_target, norm=self.p, batch_reduction=None)
+        return dist
+
+
+class FrechetDistance(XCoordDistance):
+    def calc_distance(self, x: T, x_target: T) -> T:
+        x = x.cpu().numpy().tolist()
+        x_target = x_target.cpu().numpy().tolist()
+        dists = []
+        for curr_x, curr_x_target in zip(x, x_target):
+            curr_x = LineString(curr_x)
+            curr_x_target = LineString(curr_x_target)
+            dist = frechet_distance(curr_x, curr_x_target)
+            dists.append(dist)
+        dists = tr.tensor(dists, dtype=tr.float)
+        return dists
 
 
 class ESRLoss(nn.Module):
@@ -172,7 +227,12 @@ if __name__ == "__main__":
     x_target = x_target.view(1, -1).repeat(2, 1)
     # x_target[0, :] = x[0, :]
     # x_target[1, :] = x[1, :]
-    dtw_dist = DTWDistance()
-    # dist = dtw_dist(x, x_target)
-    dist = dtw_dist(x_target, x)
+    # x.fill_(0.0)
+    # x_target.fill_(1.0)
+
+    # dist_fn = DTWDistance()
+    # dist_fn = ChamferDistance(n_frames, p=1)
+    dist_fn = FrechetDistance(n_frames)
+    # dist = dist_fn(x, x_target)
+    dist = dist_fn(x_target, x)
     print(f"dist = {dist}")

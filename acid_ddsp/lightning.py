@@ -22,13 +22,13 @@ from audio_distances import (
 )
 from fad import save_and_concat_fad_audio, calc_fad
 from feature_extraction import LogMelSpecFeatureExtractor
-from lfo_distances import (
+from mod_sig_distances import (
     FirstDerivativeDistance,
     SecondDerivativeDistance,
     ESRLoss,
     FFTMagDist, PCCDistance, COSSDistance,
 )
-from lfo_metrics import (
+from mod_sig_metrics import (
     EntropyMetric,
     SpectralEntropyMetric,
     TotalVariationMetric,

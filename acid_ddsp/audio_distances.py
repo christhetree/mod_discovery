@@ -2,7 +2,7 @@ import abc
 import logging
 import os
 from abc import abstractmethod
-from typing import Literal, Optional, Callable
+from typing import Optional, Callable
 
 import librosa
 import torch as tr
@@ -10,8 +10,6 @@ from torch import Tensor as T
 from torch import nn
 from torch.nn import functional as F
 from torchaudio.transforms import MFCC
-
-from lfo_distances import PCCDistance
 
 logging.basicConfig()
 log = logging.getLogger(__name__)

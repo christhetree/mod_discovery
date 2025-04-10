@@ -21,15 +21,13 @@ data:
     ac: audio_config.yml
     n_seeds: 1024
     mod_sig_gens:
-      - class_path: acid_ddsp.modulations.ModSignalGenRandomBezier
+      - class_path: acid_ddsp.modulations.ModSignalGenRandomBezier1D
         init_args:
           min_n_seg: 1
           max_n_seg: 8
           min_degree: 1
           max_degree: 3
-          min_seg_interval_frac: 1.0
-          softmax_tau: 0.25
-          normalize: false
+          min_seg_interval_frac: 0.5
     global_param_names:
       - q
     temp_param_names:

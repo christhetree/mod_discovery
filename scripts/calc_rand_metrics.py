@@ -7,8 +7,18 @@ from torch import nn
 from tqdm import tqdm
 
 import util
-from lfo_distances import ESRLoss, FFTMagDist, PCCDistance, COSSDistance, DTWDistance
 from lightning import AcidDDSPLightingModule
+from mod_sig_distances import (
+    ESRLoss,
+    FFTMagDist,
+    PCCDistance,
+    COSSDistance,
+    DTWDistance,
+    ChamferDistance,
+    FrechetDistance,
+    FirstDerivativeDistance,
+    SecondDerivativeDistance,
+)
 from paths import CONFIGS_DIR
 
 logging.basicConfig()
@@ -28,18 +38,33 @@ if __name__ == "__main__":
     # x_hat_n_signals = 3
     # x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier_1d.yml")
     x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier_2d.yml")
-    # x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier_norm.yml")
     x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__model.yml")
-    # x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__model_norm.yml")
     metric_fn_s = {
         "l1": nn.L1Loss(),
         "esr": ESRLoss(eps=eps),
         "mse": nn.MSELoss(),
-        "fft": FFTMagDist(ignore_dc=True, p=1),
         "pcc": PCCDistance(),
-        "coss": COSSDistance(),
+        # "fft": FFTMagDist(ignore_dc=True),
+        # "coss": COSSDistance(),
+        # "cd": ChamferDistance(n_frames),
+        # "fd": FrechetDistance(n_frames),
         # "dtw": DTWDistance(),
     }
+    d1_metric_fn_s = {
+        # "cd_d1": FirstDerivativeDistance(ChamferDistance(n_frames - 2)),
+        # "fd_d1": FirstDerivativeDistance(FrechetDistance(n_frames - 2)),
+    }
+    d2_metric_fn_s = {
+        # "cd_d2": SecondDerivativeDistance(ChamferDistance(n_frames - 4)),
+        # "fd_d2": SecondDerivativeDistance(FrechetDistance(n_frames - 4)),
+    }
+    for metric_name, metric_fn in metric_fn_s.items():
+        if metric_name in ["cd", "fd"]:
+            continue
+        d1_metric_fn_s[f"{metric_name}_d1"] = FirstDerivativeDistance(metric_fn)
+        d2_metric_fn_s[f"{metric_name}_d2"] = SecondDerivativeDistance(metric_fn)
+    metric_fn_s.update(d1_metric_fn_s)
+    metric_fn_s.update(d2_metric_fn_s)
 
     x_mod_gen = util.load_class_from_yaml(x_mod_gen_path)
     x_hat_mod_gen = util.load_class_from_yaml(x_hat_mod_gen_path)
@@ -79,8 +104,10 @@ if __name__ == "__main__":
         dist_std = dists.std().item()
         dist_min = dists.min().item()
         dist_max = dists.max().item()
-        log.info(f"{metric_name:10}: {dist:6.4f}, std: {dist_std:6.4f}, "
-                 f"min: {dist_min:6.4f}, max: {dist_max:6.4f}, n: {n}")
+        log.info(
+            f"{metric_name:12}: {dist:6.4f}, std: {dist_std:6.4f}, "
+            f"min: {dist_min:6.4f}, max: {dist_max:6.4f}, n: {n}"
+        )
 
 
 # INFO:__main__:n_iter: 100, bs: 32, n_frames: 1501,

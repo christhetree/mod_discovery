@@ -179,7 +179,7 @@ class Spectral2DCNN(nn.Module):
         if filter_cf_hz is not None:
             h = tr.sinc(filter_cf_hz * filter_support) * filter_window
             h /= h.sum()
-            self.register_buffer("filter", h.view(1, 1, -1))
+            self.register_buffer("filter", h.view(1, 1, -1), persistent=False)
             self.n_pad = n_filter // 2
 
         # Define default params
@@ -286,11 +286,15 @@ class Spectral2DCNN(nn.Module):
 
         if self.interp_n_frames is None:
             self.register_buffer(
-                "pos_enc", tr.linspace(0, 1, self.n_frames).view(1, -1, 1)
+                "pos_enc",
+                tr.linspace(0, 1, self.n_frames).view(1, -1, 1),
+                persistent=False,
             )
         else:
             self.register_buffer(
-                "pos_enc", tr.linspace(0, 1, self.interp_n_frames).view(1, -1, 1)
+                "pos_enc",
+                tr.linspace(0, 1, self.interp_n_frames).view(1, -1, 1),
+                persistent=False,
             )
 
     def forward(
@@ -511,7 +515,7 @@ class RandomModSigModel(nn.Module):
         self.fc_act = fc_act
 
         self.register_buffer(
-            "pos_enc", tr.linspace(0, 1, n_frames).view(1, -1, 1)
+            "pos_enc", tr.linspace(0, 1, n_frames).view(1, -1, 1), persistent=False
         )
         self.adapters = nn.ModuleDict()
         self.adapter_acts = nn.ModuleDict()
