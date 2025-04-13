@@ -30,6 +30,8 @@ class CustomLightningCLI(LightningCLI):
     def add_arguments_to_parser(self, parser: LightningArgumentParser) -> None:
         for add_arg in self.cli_config["additional_arguments"]:
             name = add_arg["name"]
+            if not name.startswith("--"):
+                name = f"--{name}"
             default = add_arg.get("default")
             if default is not None:
                 parser.add_argument(name, default=default)
@@ -39,6 +41,7 @@ class CustomLightningCLI(LightningCLI):
         for link_args in self.cli_config["link_arguments"]:
             parser.link_arguments(link_args["src"], link_args["dest"])
 
+    # TODO(cm): refactor
     def link_arguments_if_possible(
         self, src: str, dest: str, config: Dict[str, Any], is_strict: bool = False
     ) -> None:

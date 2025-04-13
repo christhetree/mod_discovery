@@ -273,6 +273,36 @@ class AcidDDSPLightingModule(pl.LightningModule):
         #     self.synth = tr.compile(self.synth)
         #     self.synth_hat = tr.compile(self.synth_hat)
 
+    def on_train_epoch_start(self) -> None:
+        try:
+            self.model_opt.train()
+        except AttributeError:
+            pass
+        try:
+            self.synth_opt.train()
+        except AttributeError:
+            pass
+
+    def on_validation_epoch_start(self) -> None:
+        try:
+            self.model_opt.eval()
+        except AttributeError:
+            pass
+        try:
+            self.synth_opt.eval()
+        except AttributeError:
+            pass
+
+    def on_test_epoch_start(self) -> None:
+        try:
+            self.model_opt.eval()
+        except AttributeError:
+            pass
+        try:
+            self.synth_opt.eval()
+        except AttributeError:
+            pass
+
     def preprocess_batch(self, batch: Dict[str, T]) -> Dict[str, T | Dict[str, T]]:
         f0_hz = batch["f0_hz"]
         note_on_duration = batch["note_on_duration"]
@@ -394,7 +424,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # Use alpha_linear and alpha_noise for train and val, but not test
         if stage != "test":
             assert self.total_n_training_steps
-            # alpha_noise = self.beta ** self.curr_training_step
             alpha_noise = 1.0 - self.curr_training_step / (
                 self.total_n_training_steps / self.alpha_divisor
             )

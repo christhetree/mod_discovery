@@ -12,40 +12,37 @@ init_args:
       dim: 1
       act: none
       is_spline: true
-      n_segments: 12
-      degree: 2
+      n_segments: 24
+      degree: 3
       is_c1_cont: false
       is_bounded: true
       use_alpha_noise: true
-#      use_alpha_noise: false
       use_alpha_linear: true
       adapt_dim: 0
     sub_lfo:
       dim: 1
       act: none
       is_spline: true
-      n_segments: 12
-      degree: 2
+      n_segments: 24
+      degree: 3
       is_c1_cont: false
       is_bounded: false
       use_alpha_noise: false
       use_alpha_linear: true
       adapt_dim: 5
       adapt_act: none
-      adapt_use_latent: false
       adapt_use_separate: true
     env:
       dim: 1
       act: none
       is_spline: true
-      n_segments: 12
-      degree: 2
+      n_segments: 24
+      degree: 3
       is_c1_cont: false
       is_bounded: true
       use_alpha_noise: false
       use_alpha_linear: true
       adapt_dim: 0
-  global_param_names: []
   dropout: 0.0
   n_frames: 1501
   cnn_act: prelu

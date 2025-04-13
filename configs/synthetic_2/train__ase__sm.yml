@@ -1,8 +1,7 @@
 custom:
   project_name: acid_ddsp_2
-#  model_name: mss__s12d3_nn__sm_16_512
-  model_name: mss__s12d2D__sm_16_1024
-  dataset_name: ableton__ase__fm_fold
+  model_name: mss__s24d3D__sm_16_1024
+  dataset_name: lfo__ase__fm_fold
   cpu_batch_size: 5
   use_wandb_cpu: false
   use_wandb_gpu: false
@@ -22,21 +21,20 @@ data:
     ac: audio_config.yml
     n_seeds: 1024
     mod_sig_gens:
-      - class_path: acid_ddsp.modulations.ModSignalGenRandomBezier
+      - class_path: acid_ddsp.modulations.ModSignalGenRandomBezier1D
         init_args:
           min_n_seg: 1
           max_n_seg: 8
           min_degree: 1
           max_degree: 3
-          min_seg_interval_frac: 0.25
-          softmax_tau: 0.25
-          normalize: false
+          min_seg_interval_frac: 0.5
     global_param_names:
       - q
     temp_param_names:
       - add_lfo
       - sub_lfo
       - env
+    n_frames: 1501
     num_workers: 4
 
 model:
@@ -44,14 +42,15 @@ model:
   init_args:
     ac: audio_config.yml
     spectral_visualizer: log_mel_spec.yml
-
     synth: synth__ase.yml
     temp_param_names:
       - add_lfo
       - sub_lfo
       - env
-
-    use_model: true
+    interp_temp_param_names:
+      - add_lfo
+      - sub_lfo
+      - env
     model: spectral_2dcnn_dd50__ase__sm.yml
     temp_param_names_hat:
       - add_lfo
@@ -63,10 +62,6 @@ model:
     synth_hat: synth__ase__sm.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
-    use_p_loss: false
-
-#    run_name: mss__s12d3_nn__sm_16_512__ableton__ase__fm_fold
-    run_name: mss__s12d2D__sm_16_1024__ableton__ase__fm_fold
 
     synth_opt: ../opt/sf_adam_w__lr_5e-2.yml
     model_opt: ../opt/sf_adam_w__lr_5e-3.yml
@@ -76,3 +71,5 @@ model:
       - encodec-emb-24k
       - panns-cnn14-16k
       - panns-wavegram-logmel
+
+#    run_name: testing

@@ -32,5 +32,5 @@ dependencies:
     - wandb
     - git+https://github.com/Neutone/neutone_sdk.git@c69108d6ad11910afdc3ce4ead0a647456e2addb
 
-# uv pip install torch lightning numba torchaudio torchvision auraloss black hypy_utils librosa matplotlib numpy nvitop pandas schedulefree 'scipy<=1.11.4' tensorboard wandb pip-chill dtw-python 'numpy<2.0.0' 'jsonargparse[signatures]' torchlibrosa # uv pip install torch lightning numba torchaudio torchvision auraloss black hypy_utils librosa matplotlib numpy nvitop pandas schedulefree 'scipy<=1.11.4' tensorboard wandb pip-chill dtw-python pytorch3d 'numpy<2.0.0' 'jsonargparse[signatures]' torchlibrosa shapely
+# uv pip install torch lightning numba torchaudio torchvision auraloss black hypy_utils librosa matplotlib numpy nvitop pandas schedulefree 'scipy<=1.11.4' tensorboard wandb pip-chill dtw-python 'numpy<2.0.0' 'jsonargparse[signatures]' torchlibrosa shapely
 # uv pip install "git+https://github.com/facebookresearch/pytorch3d.git@stable" --no-build-isolation

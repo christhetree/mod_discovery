@@ -1,7 +1,7 @@
 custom:
   project_name: acid_ddsp_2
   model_name: mss__s24d3D__lfo
-  dataset_name: lfo_fi__ase__fm_fold
+  dataset_name: lfo__ase__fm_fold
   cpu_batch_size: 5
   use_wandb_cpu: false
   use_wandb_gpu: true

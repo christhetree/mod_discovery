@@ -32,9 +32,9 @@ os.makedirs("wandb_logs", exist_ok=True)
 if __name__ == "__main__":
     # config_name = "synthetic_2/train.yml"
 
-    config_name = "synthetic_2/train__ase__lfo.yml"
+    # config_name = "synthetic_2/train__ase__lfo.yml"
 
-    # config_name = "synthetic_2/train__ase__sm.yml"
+    config_name = "synthetic_2/train__ase__sm.yml"
     # config_name = "synthetic_2/train__ase__sm_frame_32.yml"
     # config_name = "synthetic_2/train__ase__sm_frame_cf_4.yml"
     # config_name = "synthetic_2/train__ase__sm_frame_32_interp_36.yml"
@@ -87,7 +87,7 @@ if __name__ == "__main__":
         log.info(f"Current seed: {seed} and wavetable: {wt_path}")
 
         cli = CustomLightningCLI(
-            args=["fit", "-c", config_path, "--seed_everything", str(seed)],
+            args=["-c", config_path, "--seed_everything", str(seed)],
             trainer_defaults=CustomLightningCLI.make_trainer_defaults(),
             run=False,
         )
