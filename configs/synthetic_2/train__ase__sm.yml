@@ -72,4 +72,4 @@ model:
       - panns-cnn14-16k
       - panns-wavegram-logmel
 
-#    run_name: testing
+    run_name: testing

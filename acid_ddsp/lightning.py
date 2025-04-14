@@ -26,7 +26,11 @@ from mod_sig_distances import (
     FirstDerivativeDistance,
     SecondDerivativeDistance,
     ESRLoss,
-    FFTMagDist, PCCDistance, COSSDistance,
+    FFTMagDist,
+    PCCDistance,
+    DTWDistance,
+    ChamferDistance,
+    FrechetDistance,
 )
 from mod_sig_metrics import (
     EntropyMetric,
@@ -136,7 +140,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # Audio distances ==============================================================
         self.audio_dists = nn.ModuleDict()
+        ad_tsv_cols = []
         self.audio_dists["mss"] = auraloss.freq.MultiResolutionSTFTLoss()
+        ad_tsv_cols.append("mss")
         self.audio_dists["mel_stft"] = auraloss.freq.MelSTFTLoss(
             sample_rate=self.ac.sr,
             fft_size=self.metrics_win_len,
@@ -144,6 +150,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             win_length=self.metrics_win_len,
             n_mels=self.metrics_n_mels,
         )
+        ad_tsv_cols.append("mel_stft")
         self.audio_dists["mfcc"] = MFCCDistance(
             sr=self.ac.sr,
             log_mels=True,
@@ -152,27 +159,45 @@ class AcidDDSPLightingModule(pl.LightningModule):
             n_mels=self.metrics_n_mels,
             p=1,
         )
-        for dist_name in ["coss", "pcc"]:
-            for feat_name, feat_cls in [
-                ("rms", RMSDistance),
-                ("sc", SpectralCentroidDistance),
-                ("sb", SpectralBandwidthDistance),
-                ("sf", SpectralFlatnessDistance),
-            ]:
-                if dist_name == "coss":
-                    dist_fn = COSSDistance()
-                elif dist_name == "pcc":
-                    dist_fn = PCCDistance()
-                else:
-                    raise ValueError(f"Unknown distance name: {dist_name}")
-                self.audio_dists[f"{feat_name}_{dist_name}"] = feat_cls(
-                    sr=self.ac.sr,
-                    win_len=self.metrics_win_len,
-                    hop_len=self.metrics_hop_len,
-                    dist_fn=dist_fn,
-                    average_channels=True,
-                    filter_cf_hz=8.0,  # TODO(cm): plot this
-                )
+        ad_tsv_cols.append("mfcc")
+        metrics_n_frames = self.ac.n_samples // self.metrics_hop_len + 1
+        ad_dist_fn_s = {
+            "esr": ESRLoss(eps=eps),
+            "esr_d1": FirstDerivativeDistance(ESRLoss(eps=eps)),
+            "esr_d2": SecondDerivativeDistance(ESRLoss(eps=eps)),
+            "l1": nn.L1Loss(),
+            "l1_d1": FirstDerivativeDistance(nn.L1Loss()),
+            "l1_d2": SecondDerivativeDistance(nn.L1Loss()),
+            "mse": nn.MSELoss(),
+            "mse_d1": FirstDerivativeDistance(nn.MSELoss()),
+            "mse_d2": SecondDerivativeDistance(nn.MSELoss()),
+            "fft": FFTMagDist(),
+            "fft_d1": FirstDerivativeDistance(FFTMagDist()),
+            "fft_d2": SecondDerivativeDistance(FFTMagDist()),
+            "pcc": PCCDistance(),
+            "pcc_d1": FirstDerivativeDistance(PCCDistance()),
+            "pcc_d2": SecondDerivativeDistance(PCCDistance()),
+            "dtw": DTWDistance(),
+            "cd": ChamferDistance(n_frames=metrics_n_frames),
+            "fd": FrechetDistance(n_frames=metrics_n_frames),
+        }
+        for feat_name, feat_cls in [
+            ("rms", RMSDistance),
+            ("sc", SpectralCentroidDistance),
+            ("sb", SpectralBandwidthDistance),
+            ("sf", SpectralFlatnessDistance),
+        ]:
+            self.audio_dists[feat_name] = feat_cls(
+                sr=self.ac.sr,
+                win_len=self.metrics_win_len,
+                hop_len=self.metrics_hop_len,
+                dist_fn_s=ad_dist_fn_s,
+                average_channels=True,
+                filter_cf_hz=8.0,  # TODO(cm): plot this
+            )
+            for dist_name in ad_dist_fn_s:
+                ad_tsv_cols.append(f"{feat_name}__{dist_name}")
+        ad_tsv_cols = [f"audio__{v}" for v in ad_tsv_cols]
 
         # LFO distances ================================================================
         self.lfo_dists = nn.ModuleDict()
@@ -185,26 +210,26 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.lfo_dists["mse"] = nn.MSELoss()
         self.lfo_dists["mse_d1"] = FirstDerivativeDistance(dist_fn=nn.MSELoss())
         self.lfo_dists["mse_d2"] = SecondDerivativeDistance(dist_fn=nn.MSELoss())
-        self.lfo_dists["fft_l1"] = FFTMagDist(ignore_dc=True, p=1)
-        self.lfo_dists["fft_l1_d1"] = FirstDerivativeDistance(
-            dist_fn=FFTMagDist(ignore_dc=True, p=1)
-        )
-        self.lfo_dists["fft_l1_d2"] = SecondDerivativeDistance(
-            dist_fn=FFTMagDist(ignore_dc=True, p=1)
-        )
+        self.lfo_dists["fft_l1"] = FFTMagDist()
+        self.lfo_dists["fft_l1_d1"] = FirstDerivativeDistance(dist_fn=FFTMagDist())
+        self.lfo_dists["fft_l1_d2"] = SecondDerivativeDistance(dist_fn=FFTMagDist())
         self.lfo_dists["pcc"] = PCCDistance()
         self.lfo_dists["pcc_d1"] = FirstDerivativeDistance(dist_fn=PCCDistance())
         self.lfo_dists["pcc_d2"] = SecondDerivativeDistance(dist_fn=PCCDistance())
+
+        self.lfo_dists["dtw"] = DTWDistance()
+        self.lfo_dists["cd"] = ChamferDistance(n_frames=temp_param_n_frames)
+        self.lfo_dists["fd"] = FrechetDistance(n_frames=temp_param_n_frames)
 
         # LFO metrics ==================================================================
         self.lfo_metrics = nn.ModuleDict()
         self.lfo_metrics["range_mean"] = LFORangeMetric(agg_fn="mean")
         self.lfo_metrics["min_val"] = LFORangeMetric(agg_fn="min_val")
         self.lfo_metrics["max_val"] = LFORangeMetric(agg_fn="max_val")
-        self.lfo_metrics["ent"] = EntropyMetric(eps=eps)
-        self.lfo_metrics["spec_ent"] = SpectralEntropyMetric(eps=eps)
-        self.lfo_metrics["tv"] = TotalVariationMetric(eps=eps)
-        self.lfo_metrics["tp"] = TurningPointsMetric(eps=eps)
+        self.lfo_metrics["ent"] = EntropyMetric(eps=eps, normalize=True)
+        self.lfo_metrics["spec_ent"] = SpectralEntropyMetric(eps=eps, normalize=True)
+        self.lfo_metrics["tv"] = TotalVariationMetric(eps=eps, normalize=True)
+        self.lfo_metrics["tp"] = TurningPointsMetric()
 
         # TSV logging ==================================================================
         self.wt_name = None
@@ -216,8 +241,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             "global_n",
             "loss",
         ]
-        for dist_name in self.audio_dists:
-            tsv_cols.append(f"audio__{dist_name}")
+        tsv_cols.extend(ad_tsv_cols)
         for dist_name in self.lfo_dists:
             for p_name in self.compare_temp_param_names:
                 for p_suffix in ["", "_inv", "_inv_all"]:
@@ -234,11 +258,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
             tsv_cols.append(f"fad__{fad_model_name}")
         assert len(tsv_cols) == len(set(tsv_cols)), "Duplicate TSV columns"
         self.tsv_cols = tsv_cols
+        # log.info(f"TSV columns: {self.tsv_cols}")
         if run_name:
             self.tsv_path = os.path.join(OUT_DIR, f"{self.run_name}.tsv")
-            assert not os.path.exists(
-                self.tsv_path
-            ), f"File already exists: {self.tsv_path}"
+            # assert not os.path.exists(
+            #     self.tsv_path
+            # ), f"File already exists: {self.tsv_path}"
             if not os.path.exists(self.tsv_path):
                 with open(self.tsv_path, "w") as f:
                     f.write("\t".join(tsv_cols) + "\n")
@@ -600,10 +625,15 @@ class AcidDDSPLightingModule(pl.LightningModule):
         audio_dist_vals = {}
         if stage != "train":
             with tr.no_grad():
-                for dist_name, dist_fn in self.audio_dists.items():
-                    val = dist_fn(x_hat, x)
-                    self.log(f"{stage}/audio__{dist_name}", val, prog_bar=False)
-                    audio_dist_vals[f"audio__{dist_name}"] = val.item()
+                for feat_name, feat_fn in self.audio_dists.items():
+                    vals = feat_fn(x_hat, x)
+                    if isinstance(vals, dict):
+                        vals = {f"{feat_name}__{k}": v for k, v in vals.items()}
+                    else:
+                        vals = {feat_name: vals}
+                    for dist_name, val in vals.items():
+                        self.log(f"{stage}/audio__{dist_name}", val, prog_bar=False)
+                        audio_dist_vals[f"audio__{dist_name}"] = val.item()
 
         assert not any(k in tsv_row_vals for k in audio_dist_vals)
         tsv_row_vals.update(audio_dist_vals)
@@ -629,9 +659,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             curr_tsv_row_len = len(tsv_row)
             for col in self.tsv_cols[curr_tsv_row_len:]:
                 if stage == "test":
-                    assert col in tsv_row_vals
+                    assert col in tsv_row_vals, f"Missing TSV column: {col}"
                 if stage != "train" and not col.startswith("fad__"):
-                    assert col in tsv_row_vals
+                    assert col in tsv_row_vals, f"Missing TSV column: {col}"
                 val = tsv_row_vals.get(col)
                 tsv_row.append(val)
             assert len(tsv_row) == len(self.tsv_cols)

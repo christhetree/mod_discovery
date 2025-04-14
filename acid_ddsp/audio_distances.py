@@ -2,7 +2,7 @@ import abc
 import logging
 import os
 from abc import abstractmethod
-from typing import Optional, Callable
+from typing import Optional, Callable, Dict
 
 import librosa
 import torch as tr
@@ -58,7 +58,7 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
         sr: int,
         win_len: int,
         hop_len: int,
-        dist_fn: Callable[[T, T], T],
+        dist_fn_s: Dict[str, Callable[[T, T], T]],
         average_channels: bool = True,
         filter_cf_hz: Optional[float] = 8.0,
     ):
@@ -67,12 +67,12 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
         self.win_len = win_len
         self.hop_len = hop_len
         self.average_channels = average_channels
-        self.dist_fn = dist_fn
+        self.dist_fn_s = dist_fn_s
         self.filter_cf_hz = filter_cf_hz
 
         self.filter = None
         filter_sr = sr / hop_len
-        assert filter_sr == 80.0
+        assert filter_sr == 80.0  # TODO(cm): tmp
         n_filter = 11
         filter_support = 2 * (tr.arange(n_filter) - (n_filter - 1) / 2) / filter_sr
         filter_window = tr.blackman_window(n_filter, periodic=False)
@@ -87,10 +87,15 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
 
     def maybe_filter_feature(self, x: T) -> T:
         if self.filter_cf_hz is not None:
+            x = F.pad(
+                x,
+                (self.filter.size(-1) // 2, self.filter.size(-1) // 2),
+                mode="replicate",
+            )
             x = F.conv1d(x.unsqueeze(1), self.filter, padding="valid").squeeze(1)
         return x
 
-    def forward(self, x: T, x_target: T) -> T:
+    def forward(self, x: T, x_target: T) -> Dict[str, T]:
         assert x.ndim == 3
         assert x.shape == x_target.shape
         if self.average_channels:
@@ -105,9 +110,12 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
         x = self.maybe_filter_feature(x)
         x_target = self.maybe_filter_feature(x_target)
         assert x.shape == x_target.shape
-        dist = self.dist_fn(x, x_target)
-        dist = dist.mean()
-        return dist
+        dists = {}
+        for dist_name, dist_fn in self.dist_fn_s.items():
+            dist = dist_fn(x, x_target)
+            dist = dist.mean()
+            dists[dist_name] = dist
+        return dists
 
 
 class RMSDistance(OneDimensionalAudioDistance):

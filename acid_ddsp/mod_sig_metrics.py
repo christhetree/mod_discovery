@@ -43,7 +43,7 @@ class LFORangeMetric(nn.Module):
 class LFOMetric(nn.Module, abc.ABC):
     def __init__(
         self,
-        normalize: bool = True,
+        normalize: bool = False,
         eps: float = 1e-8,
     ):
         super().__init__()
@@ -82,13 +82,13 @@ class EntropyMetric(LFOMetric):
         return entropy
 
     def calc_metric(self, x: T) -> T:
-        return self.calc_entropy(x, normalize=True)
+        return self.calc_entropy(x)
 
 
 class SpectralEntropyMetric(LFOMetric):
     def calc_metric(self, x: T) -> T:
         mag_spec = tr.fft.rfft(x, dim=1).abs()
-        entropy = EntropyMetric.calc_entropy(mag_spec, normalize=True)
+        entropy = EntropyMetric.calc_entropy(mag_spec)
         return entropy
 
 
@@ -102,6 +102,10 @@ class TotalVariationMetric(LFOMetric):
 
 
 class TurningPointsMetric(LFOMetric):
+    def __init__(self):
+        # Turning points doesn't need normalization
+        super().__init__(normalize=False, eps=1e-8)
+
     def calc_metric(self, x: T) -> T:
         assert x.size(1) > 2
         diffs = x[:, 1:] - x[:, :-1]
