@@ -157,7 +157,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
             n_fft=self.metrics_win_len,
             hop_len=self.metrics_hop_len,
             n_mels=self.metrics_n_mels,
-            p=1,
         )
         ad_tsv_cols.append("mfcc")
         metrics_n_frames = self.ac.n_samples // self.metrics_hop_len + 1
@@ -187,16 +186,18 @@ class AcidDDSPLightingModule(pl.LightningModule):
             ("sb", SpectralBandwidthDistance),
             ("sf", SpectralFlatnessDistance),
         ]:
+            cf_hz = 8.0  # TODO(cm): add to config
             self.audio_dists[feat_name] = feat_cls(
                 sr=self.ac.sr,
                 win_len=self.metrics_win_len,
                 hop_len=self.metrics_hop_len,
                 dist_fn_s=ad_dist_fn_s,
                 average_channels=True,
-                filter_cf_hz=8.0,  # TODO(cm): plot this
+                filter_cf_hz=cf_hz,
             )
             for dist_name in ad_dist_fn_s:
                 ad_tsv_cols.append(f"{feat_name}__{dist_name}")
+                ad_tsv_cols.append(f"{feat_name}__{dist_name}__cf_{cf_hz:.0f}_hz")
         ad_tsv_cols = [f"audio__{v}" for v in ad_tsv_cols]
 
         # LFO distances ================================================================
@@ -258,17 +259,15 @@ class AcidDDSPLightingModule(pl.LightningModule):
             tsv_cols.append(f"fad__{fad_model_name}")
         assert len(tsv_cols) == len(set(tsv_cols)), "Duplicate TSV columns"
         self.tsv_cols = tsv_cols
-        # log.info(f"TSV columns: {self.tsv_cols}")
+        log.info(f"TSV columns: {self.tsv_cols}")
         if run_name:
             self.tsv_path = os.path.join(OUT_DIR, f"{self.run_name}.tsv")
-            # assert not os.path.exists(
-            #     self.tsv_path
-            # ), f"File already exists: {self.tsv_path}"
             if not os.path.exists(self.tsv_path):
                 with open(self.tsv_path, "w") as f:
                     f.write("\t".join(tsv_cols) + "\n")
             else:
                 log.info(f"Appending to existing TSV file: {self.tsv_path}")
+                # TODO(cm): check existing header
         else:
             self.tsv_path = None
 

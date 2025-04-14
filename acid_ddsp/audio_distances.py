@@ -107,14 +107,29 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
         x = self.calc_feature(x)
         x_target = self.calc_feature(x_target)
         assert x.ndim == x_target.ndim == 2
-        x = self.maybe_filter_feature(x)
-        x_target = self.maybe_filter_feature(x_target)
+
+        # from matplotlib import pyplot as plt
+        # plt.plot(x[0].cpu().numpy(), label="x")
+        # plt.plot(x_target[0].cpu().numpy(), label="x_target")
+
+        assert self.filter_cf_hz is not None
+        x_filtered = self.maybe_filter_feature(x)
+        x_target_filtered = self.maybe_filter_feature(x_target)
+
+        # plt.plot(x_target[0].cpu().numpy(), label="x_target_f")
+        # plt.title(f"{self.__class__.__name__} {self.filter_cf_hz} Hz")
+        # plt.legend()
+        # plt.show()
+
         assert x.shape == x_target.shape
         dists = {}
         for dist_name, dist_fn in self.dist_fn_s.items():
             dist = dist_fn(x, x_target)
             dist = dist.mean()
             dists[dist_name] = dist
+            dist_filtered = dist_fn(x_filtered, x_target_filtered)
+            dist_filtered = dist_filtered.mean()
+            dists[f"{dist_name}__cf_{self.filter_cf_hz:.0f}_hz"] = dist_filtered
         return dists
 
 

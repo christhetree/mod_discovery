@@ -342,7 +342,7 @@ class Spectral2DCNN(nn.Module):
                     alpha_noise=None,
                     noise_std=self.noise_std,
                     alpha_linear=alpha_linear if tp.use_alpha_linear else None,
-                    softmax_tau=0.25,
+                    softmax_tau=0.25,  # TODO(cm): add to config
                 )
                 logits_y = x[:, :, 1]
                 cp_y = self.process_bezier_logits_y(
@@ -566,6 +566,7 @@ class RandomModSigModel(nn.Module):
                 mod_sigs.append(mod_sig)
             mod_sig = tr.stack(mod_sigs, dim=0)
             mod_sig = mod_sig.view(bs, -1, tp.dim)
+            mod_sig = mod_sig.to(audio.device)
             out_dict[name] = mod_sig.squeeze(-1)
 
             pos_enc = self.pos_enc.expand(bs, -1, -1)

@@ -1,20 +1,16 @@
 custom:
   project_name: acid_ddsp_2
-  model_name: mss__s24d3D__sm_16_1024
-#  model_name: mss__frame__sm_16_1024
-#  model_name: mss__frame_cf_8__sm_16_1024
+  model_name: mss__frame_8_hz__sm_16_1024
   dataset_name: serum__BA_both_lfo_10
   cpu_batch_size: 5
   use_wandb_cpu: false
-#  use_wandb_gpu: true
   use_wandb_gpu: false
 
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [2]
+  devices: [5]
   max_epochs: 30
-#  max_epochs: 50
   num_sanity_val_steps: 1
   accumulate_grad_batches: 1
   gradient_clip_val: 0.5
@@ -48,12 +44,7 @@ model:
   init_args:
     ac: audio_config.yml
     spectral_visualizer: log_mel_spec.yml
-    model: spectral_2dcnn_dd50__ase__sm.yml
-#    model: random_mod_sig_model.yml
-#    model: spectral_2dcnn_dd50__ase__sm_frame.yml
-#    model: spectral_2dcnn_dd50__ase__sm_frame_cf.yml
-#    model: spectral_2dcnn_dd50__ase__sm_shan_16_frame.yml
-#    model: spectral_2dcnn_dd50__ase__sm_shan.yml
+    model: spectral_2dcnn_dd50__ase__sm_frame_8_hz.yml
     temp_param_names_hat:
       - add_lfo
       - sub_lfo
@@ -71,7 +62,4 @@ model:
       - panns-cnn14-32k
       - panns-wavegram-logmel
 
-    run_name: mss__s24d3D__sm_16_1024__serum__BA_both_lfo_10
-#    run_name: mss__s36d3__sm_16_1024__serum_frame__BA_both_lfo_10
-#    run_name: mss__s36d3__sm_16_1024_shan_16_frame__serum__BA_both_lfo_10
-#    run_name: mss__s36d3__sm_16_1024_shan__serum__BA_both_lfo_10
+    run_name: mss__frame_8_hz__sm_16_1024__serum__BA_both_lfo_10
