@@ -12,7 +12,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [2]
+  devices: [4]
   max_epochs: 30
 #  max_epochs: 50
   num_sanity_val_steps: 1

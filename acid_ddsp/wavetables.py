@@ -61,7 +61,6 @@ BAD_ABLETON_WTS = [
     # "filter__super_phased",
     # "formant__aeiou",
     # "noise__",
-
 ]
 
 BOTH_LFO_SERUM_WTS = [

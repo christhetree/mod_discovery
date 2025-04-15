@@ -41,11 +41,14 @@ if __name__ == "__main__":
 
     # config_name = "serum_2/train__ase__sm.yml"
     # config_name = "serum_2/train__ase__sm_frame.yml"
-    config_name = "serum_2/train__ase__sm_frame_8_hz.yml"
+    # config_name = "serum_2/train__ase__sm_frame_8_hz.yml"
     # config_name = "serum_2/train__ase__sm_rand.yml"
 
+    # config_name = "serum_2/train__ase__sm_shan.yml"
+    # config_name = "serum_2/train__ase__sm_shan_frame.yml"
+    config_name = "serum_2/train__ase__sm_shan_frame_8_hz.yml"
+
     # seeds = [42]
-    # seeds = [42, 42, 3, 42]
     seeds = list(range(20))
     log.info(f"Running with seeds: {seeds}")
 

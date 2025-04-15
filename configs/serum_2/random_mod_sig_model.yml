@@ -9,6 +9,8 @@ init_args:
       adapt_dim: 5
       adapt_act: none
       adapt_use_separate: true
+#    sub_lfo_adapted:
+#      dim: 5
     env:
       dim: 1
   mod_sig_gen:

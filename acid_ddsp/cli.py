@@ -138,8 +138,10 @@ class CustomLightningCLI(LightningCLI):
                 log.info(f"Setting checkpoint name to: {cb.filename}")
 
         use_gpu = tr.cuda.is_available()
-        if use_wandb or (use_gpu and self.config.custom.use_wandb_gpu) or (
-            not use_gpu and self.config.custom.use_wandb_cpu
+        if (
+            use_wandb
+            or (use_gpu and self.config.custom.use_wandb_gpu)
+            or (not use_gpu and self.config.custom.use_wandb_cpu)
         ):
             # Used directly by the callbacks
             wandb.init(

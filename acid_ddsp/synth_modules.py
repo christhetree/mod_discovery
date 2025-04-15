@@ -463,10 +463,10 @@ class WavetableOscShan(WavetableOsc):
             # If attention matrix is provided, it must have shape (bs, n_samples, n_pos)
             assert attention_matrix.ndim == 3
             attention_matrix = tr.swapaxes(attention_matrix, 1, 2)
-            assert (
-                attention_matrix.shape == audio.shape
-            ), (f"Attention matrix must be the same as audio shape, given attention "
-                f"matrix: {attention_matrix.shape}, audio: {audio.shape}")
+            assert attention_matrix.shape == audio.shape, (
+                f"Attention matrix must be the same as audio shape, given attention "
+                f"matrix: {attention_matrix.shape}, audio: {audio.shape}"
+            )
             audio = tr.einsum("bns,bns->bs", audio, attention_matrix)
         else:
             # If no attention matrix is provided, we simply take the mean
