@@ -2,6 +2,7 @@ import logging
 import os
 from collections import defaultdict
 
+import pandas as pd
 import torch as tr
 from torch import nn
 from tqdm import tqdm
@@ -12,12 +13,18 @@ from mod_sig_distances import (
     ESRLoss,
     FFTMagDist,
     PCCDistance,
-    COSSDistance,
     DTWDistance,
     ChamferDistance,
     FrechetDistance,
     FirstDerivativeDistance,
     SecondDerivativeDistance,
+)
+from mod_sig_metrics import (
+    LFORangeMetric,
+    EntropyMetric,
+    TotalVariationMetric,
+    SpectralEntropyMetric,
+    TurningPointsMetric,
 )
 from paths import CONFIGS_DIR
 
@@ -36,35 +43,44 @@ if __name__ == "__main__":
     x_n_signals = 1
     x_hat_n_signals = 1
     # x_hat_n_signals = 3
-    # x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier_1d.yml")
-    x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier_2d.yml")
+    x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier_1d.yml")
     x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__model.yml")
-    metric_fn_s = {
-        "l1": nn.L1Loss(),
+
+    dist_fn_s = {
         "esr": ESRLoss(eps=eps),
+        "l1": nn.L1Loss(),
         "mse": nn.MSELoss(),
+        "fft": FFTMagDist(ignore_dc=True),
         "pcc": PCCDistance(),
-        # "fft": FFTMagDist(ignore_dc=True),
-        # "coss": COSSDistance(),
-        # "cd": ChamferDistance(n_frames),
-        # "fd": FrechetDistance(n_frames),
-        # "dtw": DTWDistance(),
+        "dtw": DTWDistance(),
+        "cd": ChamferDistance(n_frames),
+        "fd": FrechetDistance(n_frames),
     }
-    d1_metric_fn_s = {
+    d1_dist_fn_s = {
         # "cd_d1": FirstDerivativeDistance(ChamferDistance(n_frames - 2)),
         # "fd_d1": FirstDerivativeDistance(FrechetDistance(n_frames - 2)),
     }
-    d2_metric_fn_s = {
+    d2_dist_fn_s = {
         # "cd_d2": SecondDerivativeDistance(ChamferDistance(n_frames - 4)),
         # "fd_d2": SecondDerivativeDistance(FrechetDistance(n_frames - 4)),
     }
-    for metric_name, metric_fn in metric_fn_s.items():
-        if metric_name in ["cd", "fd"]:
+    metric_fn_s = {
+        "range_mean": LFORangeMetric(agg_fn="mean"),
+        "min_val": LFORangeMetric(agg_fn="min_val"),
+        "max_val": LFORangeMetric(agg_fn="max_val"),
+        "ent": EntropyMetric(eps=eps, normalize=True),
+        "spec_ent": SpectralEntropyMetric(eps=eps, normalize=True),
+        "tv": TotalVariationMetric(eps=eps, normalize=True),
+        "tp": TurningPointsMetric(),
+    }
+
+    for dist_name, dist_fn in dist_fn_s.items():
+        if dist_name in ["dtw", "cd", "fd"]:
             continue
-        d1_metric_fn_s[f"{metric_name}_d1"] = FirstDerivativeDistance(metric_fn)
-        d2_metric_fn_s[f"{metric_name}_d2"] = SecondDerivativeDistance(metric_fn)
-    metric_fn_s.update(d1_metric_fn_s)
-    metric_fn_s.update(d2_metric_fn_s)
+        d1_dist_fn_s[f"{dist_name}_d1"] = FirstDerivativeDistance(dist_fn)
+        d2_dist_fn_s[f"{dist_name}_d2"] = SecondDerivativeDistance(dist_fn)
+    dist_fn_s.update(d1_dist_fn_s)
+    dist_fn_s.update(d2_dist_fn_s)
 
     x_mod_gen = util.load_class_from_yaml(x_mod_gen_path)
     x_hat_mod_gen = util.load_class_from_yaml(x_hat_mod_gen_path)
@@ -78,51 +94,117 @@ if __name__ == "__main__":
         x = tr.stack(x_s, dim=0).view(bs, x_n_signals, n_frames)
         for _ in range(bs * x_hat_n_signals):
             x_hat = x_hat_mod_gen(n_frames)
-            # x_hat.fill_(0.5)
             x_hat_s.append(x_hat)
         x_hat = tr.stack(x_hat_s, dim=0).view(bs, x_hat_n_signals, n_frames)
 
         if x_n_signals == x_hat_n_signals == 1:
+            for dist_name, dist_fn in dist_fn_s.items():
+                dist = dist_fn(x_hat.squeeze(1), x.squeeze(1))
+                results[dist_name].append(dist)
             for metric_name, metric_fn in metric_fn_s.items():
-                dist = metric_fn(x_hat.squeeze(1), x.squeeze(1))
-                results[metric_name].append(dist)
+                metric = metric_fn(x.squeeze(1))
+                results[f"lfo__{metric_name}"].append(metric)
+                metric = metric_fn(x_hat.squeeze(1))
+                results[f"lfo_hat__{metric_name}"].append(metric)
 
-        x_pred = AcidDDSPLightingModule.compute_lstsq_with_bias(x_hat, x)
+        x_inv = AcidDDSPLightingModule.compute_lstsq_with_bias(x_hat, x)
         for idx in range(x_n_signals):
             curr_x = x[:, idx, :]
-            curr_x_pred = x_pred[:, idx, :]
-            for metric_name, metric_fn in metric_fn_s.items():
-                dist = metric_fn(curr_x_pred, curr_x)
-                results[f"{metric_name}_inv_{x_hat_n_signals}"].append(dist)
+            curr_x_inv = x_inv[:, idx, :]
+            for dist_name, dist_fn in dist_fn_s.items():
+                dist = dist_fn(curr_x_inv, curr_x)
+                results[f"{dist_name}_inv_{x_hat_n_signals}"].append(dist)
 
     log.info(f"n_iter: {n_iter}, bs: {bs}, n_frames: {n_frames}, ")
     log.info(f"x_n_signals: {x_n_signals}, x_hat_n_signals: {x_hat_n_signals}")
-    for metric_name, dists in results.items():
+    df_cols = ["name", "mean", "std", "min", "max", "n"]
+    df_rows = [df_cols]
+    for dist_name, dists in results.items():
         dists = tr.stack(dists, dim=0)
         n = dists.size(0)
         dist = dists.mean().item()
         dist_std = dists.std().item()
         dist_min = dists.min().item()
         dist_max = dists.max().item()
-        log.info(
-            f"{metric_name:12}: {dist:6.4f}, std: {dist_std:6.4f}, "
-            f"min: {dist_min:6.4f}, max: {dist_max:6.4f}, n: {n}"
-        )
+        # log.info(
+        #     f"{dist_name:12}: {dist:6.4f}, std: {dist_std:6.4f}, "
+        #     f"min: {dist_min:6.4f}, max: {dist_max:6.4f}, n: {n}"
+        # )
+        df_rows.append([dist_name, dist, dist_std, dist_min, dist_max, n])
 
+    df = pd.DataFrame.from_records(df_rows)
+    print(df.to_string())
 
-# INFO:__main__:n_iter: 100, bs: 32, n_frames: 1501,
-# INFO:__main__:x_n_signals: 1, x_hat_n_signals: 1
-# INFO:__main__:l1       : 0.2345, std: 0.0077, min: 0.2102, max: 0.2521, n: 100
-# INFO:__main__:esr      : 0.4593, std: 0.4184, min: 0.2354, max: 4.0390, n: 100
-# INFO:__main__:mse      : 0.0840, std: 0.0049, min: 0.0680, max: 0.0958, n: 100
-# INFO:__main__:fft      : 1.3913, std: 0.0485, min: 1.2520, max: 1.5352, n: 100
-# INFO:__main__:pcc      : 0.0006, std: 0.0366, min: -0.0575, max: 0.1172, n: 100
-# INFO:__main__:coss     : 0.8738, std: 0.0485, min: 0.5174, max: 0.9641, n: 100
-# INFO:__main__:dtw      : 0.0707, std: 0.0045, min: 0.0611, max: 0.0827, n: 100
-# INFO:__main__:l1_inv_1 : 0.1385, std: 0.0078, min: 0.1193, max: 0.1541, n: 100
-# INFO:__main__:esr_inv_1: 0.1167, std: 0.0138, min: 0.0809, max: 0.1513, n: 100
-# INFO:__main__:mse_inv_1: 0.0306, std: 0.0027, min: 0.0238, max: 0.0363, n: 100
-# INFO:__main__:fft_inv_1: 0.8544, std: 0.0677, min: 0.7014, max: 1.0669, n: 100
-# INFO:__main__:pcc_inv_1: 0.1534, std: 0.0204, min: 0.0974, max: 0.2000, n: 100
-# INFO:__main__:coss_inv_1: 0.9389, std: 0.0414, min: 0.6351, max: 1.0000, n: 100
-# INFO:__main__:dtw_inv_1: 0.0584, std: 0.0037, min: 0.0501, max: 0.0668, n: 100
+#                       0              1             2            3             4    5
+# 0                  name           mean           std          min           max    n
+# 1                   esr       0.459046      0.418221     0.235528       4.03744  100
+# 2                    l1       0.234476      0.007714     0.210253      0.252167  100
+# 3                   mse       0.083897      0.004926     0.068009      0.095731  100
+# 4                   fft       1.384295       0.04731     1.246398      1.524272  100
+# 5                   pcc         0.0005      0.036642    -0.058259      0.117849  100
+# 6                   dtw        0.07067      0.004497     0.061215      0.082738  100
+# 7                    cd       0.194168      0.014794     0.156575      0.231637  100
+# 8                    fd       0.564713      0.028638     0.507373      0.642912  100
+# 9                esr_d1   11915.280273  63206.085938    90.898758  471707.40625  100
+# 10                l1_d1       0.008714      0.000134     0.008405      0.009002  100
+# 11               mse_d1       0.000143      0.000004     0.000134      0.000152  100
+# 12               fft_d1       0.193603      0.004975     0.179324      0.204905  100
+# 13               pcc_d1       0.001019      0.010582    -0.023333      0.025518  100
+# 14               esr_d2  164597.765625  80905.851562  9714.926758  438981.53125  100
+# 15                l1_d2       0.001124      0.000024     0.001069      0.001181  100
+# 16               mse_d2       0.000008           0.0     0.000008      0.000009  100
+# 17               fft_d2       0.072749      0.002246     0.066947      0.077571  100
+# 18               pcc_d2       0.000305      0.005576    -0.018601      0.016429  100
+# 19      lfo__range_mean       0.662286      0.038166     0.542321      0.769346  100
+# 20  lfo_hat__range_mean       0.910702      0.009108     0.888036      0.932982  100
+# 21         lfo__min_val       0.005598      0.005527     0.000099      0.031328  100
+# 22     lfo_hat__min_val       0.004444      0.002907     0.000105      0.015118  100
+# 23         lfo__max_val       0.994186      0.005759     0.970512      0.999814  100
+# 24     lfo_hat__max_val       0.995508      0.002591     0.989073      0.999595  100
+# 25             lfo__ent       0.974694      0.002553     0.965276      0.980203  100
+# 26         lfo_hat__ent       0.986454      0.000575     0.984393        0.9877  100
+# 27        lfo__spec_ent       0.497553      0.021817     0.444433      0.561752  100
+# 28    lfo_hat__spec_ent       0.560893       0.00797     0.538667       0.58087  100
+# 29              lfo__tv       0.001875      0.000171     0.001431      0.002278  100
+# 30          lfo_hat__tv       0.009471      0.000147     0.009014      0.009871  100
+# 31              lfo__tp       0.003239      0.000501     0.001793      0.004586  100
+# 32          lfo_hat__tp       0.026874      0.000357     0.025976      0.027831  100
+# 33            esr_inv_1       0.116712      0.013792     0.080886      0.151314  100
+# 34             l1_inv_1       0.138495      0.007838      0.11929      0.154117  100
+# 35            mse_inv_1       0.030615      0.002697     0.023804       0.03633  100
+# 36            fft_inv_1        0.85502      0.067745     0.702258      1.067568  100
+# 37            pcc_inv_1       0.153447      0.020418     0.097529      0.200308  100
+# 38            dtw_inv_1       0.058475      0.003705     0.050112      0.066821  100
+# 39             cd_inv_1       0.197421      0.010834     0.173198      0.220794  100
+# 40             fd_inv_1       0.364707      0.022746     0.291902      0.428538  100
+# 41         esr_d1_inv_1       5.647351      1.904902     2.397205     11.719714  100
+# 42          l1_d1_inv_1       0.001908      0.000198     0.001328        0.0023  100
+# 43         mse_d1_inv_1       0.000008      0.000002     0.000004      0.000014  100
+# 44         fft_d1_inv_1       0.027063      0.003557     0.020085      0.034818  100
+# 45         pcc_d1_inv_1       0.017894      0.009662    -0.004709      0.046387  100
+# 46         esr_d2_inv_1     2204.59668   1929.934326     48.54895   9850.530273  100
+# 47          l1_d2_inv_1       0.000168      0.000025     0.000116       0.00023  100
+# 48         mse_d2_inv_1            0.0           0.0          0.0      0.000001  100
+# 49         fft_d2_inv_1       0.008879      0.001417     0.006129       0.01228  100
+# 50         pcc_d2_inv_1       0.000174       0.00621    -0.025318      0.015489  100
+
+#                       0              1             2            3             4    5
+# 0                  name           mean           std          min           max    n
+# 1             esr_inv_3       0.110096       0.01416     0.079498      0.147648  100
+# 2              l1_inv_3       0.133125      0.008175     0.112516      0.152996  100
+# 3             mse_inv_3       0.028705      0.002893     0.020737       0.03536  100
+# 4             fft_inv_3       0.788416       0.05915     0.665683      0.990864  100
+# 5             pcc_inv_3       0.303219      0.020112     0.255647      0.342783  100
+# 6             dtw_inv_3       0.046541      0.003629     0.039073      0.055115  100
+# 7              cd_inv_3       0.163597       0.01081     0.140283      0.189269  100
+# 8              fd_inv_3       0.347224      0.023565     0.300457       0.40381  100
+# 9          esr_d1_inv_3       15.09454      4.818378     7.493365     26.752983  100
+# 10          l1_d1_inv_3       0.002826      0.000223     0.002289      0.003438  100
+# 11         mse_d1_inv_3       0.000016      0.000002     0.000011      0.000021  100
+# 12         fft_d1_inv_3        0.04875      0.004324     0.039445      0.059677  100
+# 13         pcc_d1_inv_3       0.038402      0.011173     0.010439      0.081244  100
+# 14         esr_d2_inv_3    8649.664062   6600.187012   479.087463  30897.933594  100
+# 15          l1_d2_inv_3       0.000376      0.000033     0.000292      0.000459  100
+# 16         mse_d2_inv_3       0.000001           0.0     0.000001      0.000001  100
+# 17         fft_d2_inv_3       0.017821      0.001742     0.014164       0.02191  100
+# 18         pcc_d2_inv_3       0.000692      0.006115    -0.010805      0.019657  100

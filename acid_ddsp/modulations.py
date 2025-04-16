@@ -33,6 +33,7 @@ class ModSignalGenRandomBezier2D(ModSignalGenerator):
         is_c1_cont: bool = False,
         normalize: bool = False,
         eps: float = 1e-8,
+        spline_eps: float = 1e-3,
     ):
         super().__init__()
         assert 1 <= min_n_seg <= max_n_seg
@@ -49,6 +50,7 @@ class ModSignalGenRandomBezier2D(ModSignalGenerator):
         self.is_c1_cont = is_c1_cont
         self.normalize = normalize
         self.eps = eps
+        self.spline_eps = spline_eps
 
     def make_bezier(
         self,
@@ -62,7 +64,7 @@ class ModSignalGenRandomBezier2D(ModSignalGenerator):
             n_segments,
             degree=degree,
             is_c1_cont=self.is_c1_cont,
-            eps=self.eps,
+            eps=self.spline_eps,
         )
         cp_x = self.make_cp_x(
             n_segments * degree, self.min_seg_interval_frac, rand_gen=rand_gen
@@ -141,7 +143,7 @@ class ModSignalGenRandomBezier1D(ModSignalGenRandomBezier2D):
             degree=degree,
             modes=modes,
             is_c1_cont=self.is_c1_cont,
-            eps=self.eps,
+            eps=self.spline_eps,
         )
         cp = (
             tr.rand((1, (n_segments * degree) + 1), generator=rand_gen)

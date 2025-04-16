@@ -3,6 +3,8 @@ import logging
 import os
 import warnings
 
+from wavetables import CONTINUOUS_ABLETON_WTS
+
 # Prevents a bug with PyTorch and CUDA_VISIBLE_DEVICES
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 # Prevent FADTK from going crazy with CPU usage
@@ -32,11 +34,14 @@ os.makedirs("wandb_logs", exist_ok=True)
 if __name__ == "__main__":
     # config_name = "synthetic_2/train.yml"
 
-    # config_name = "synthetic_2/train__ase__lfo.yml"
+    config_name = "synthetic_2/train__ase__lfo.yml"
     # config_name = "synthetic_2/train__ase__lfo_frame.yml"
     # config_name = "synthetic_2/train__ase__lfo_frame_8_hz.yml"
 
-    config_name = "synthetic_2/train__ase__sm.yml"
+    # config_name = "synthetic_2/train__ase__sm.yml"
+    # config_name = "synthetic_2/train__ase__sm_frame.yml"
+    # config_name = "synthetic_2/train__ase__sm_frame_8_hz.yml"
+    # config_name = "synthetic_2/test__ase__sm_rand.yml"
 
     # config_name = "serum_2/train__ase__sm.yml"
     # config_name = "serum_2/train__ase__sm_frame.yml"
@@ -48,30 +53,29 @@ if __name__ == "__main__":
     # config_name = "serum_2/train__ase__sm_shan_frame_8_hz.yml"
 
     # seeds = [42]
-    # seeds = list(range(5))
     seeds = list(range(10))
     # seeds = list(range(20))
     log.info(f"Running with seeds: {seeds}")
 
-    # wt_dir = os.path.join(WAVETABLES_DIR, "testing")
-    # wt_dir = os.path.join(WAVETABLES_DIR, "ableton_basic_shapes")
     wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
-    # wt_dir = os.path.join(WAVETABLES_DIR, "waveedit")
 
     wt_names = [f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")]
     filtered_wt_names = []
     for wt_name in wt_names:
-        if any(bad_wt_name in wt_name for bad_wt_name in BAD_ABLETON_WTS):
-            continue
-        if not wt_name.startswith("basics__"):
-            continue
-        # if not "galactica" in wt_name:
-        if not "fm_fold" in wt_name:
-            # if not "basic_shapes" in wt_name:
-            continue
-        filtered_wt_names.append(wt_name)
+        if any(wt_name.startswith(n) for n in CONTINUOUS_ABLETON_WTS):
+            filtered_wt_names.append(wt_name)
+        # if any(bad_wt_name in wt_name for bad_wt_name in BAD_ABLETON_WTS):
+        #     continue
+        # if not wt_name.startswith("basics__"):
+        #     continue
+        # if not "fm_fold" in wt_name:
+        #     continue
+        # filtered_wt_names.append(wt_name)
     wt_paths = [os.path.join(wt_dir, f"{wt_name}.pt") for wt_name in filtered_wt_names]
     wt_paths = sorted(wt_paths)
+    for wt_path in wt_paths:
+        wt_name = os.path.basename(wt_path)
+        log.info(wt_name)
     log.info(f"\nWavetable directory: {wt_dir}\nFound {len(wt_paths)} wavetables")
     # wt_paths = [None]
 

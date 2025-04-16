@@ -1,10 +1,9 @@
 custom:
   project_name: acid_ddsp_2
-  model_name: mss__s24d3D_nn__lfo
+  model_name: mss__frame_8_hz__sm_16_1024
   dataset_name: lfo__ase__fm_fold
   cpu_batch_size: 5
   use_wandb_cpu: false
-#  use_wandb_gpu: true
   use_wandb_gpu: false
 
 trainer:
@@ -52,20 +51,19 @@ model:
       - add_lfo
       - sub_lfo
       - env
-    model: spectral_2dcnn_dd50__ase__lfo.yml
+    model: spectral_2dcnn_dd50__ase__sm_frame_8_hz.yml
     temp_param_names_hat:
       - add_lfo
       - sub_lfo
       - env
     interp_temp_param_names_hat:
       - add_lfo
-      - sub_lfo
       - env
-    synth_hat: synth__ase.yml
+    synth_hat: synth__ase__sm.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
-    use_p_loss: false
 
+    synth_opt: ../opt/sf_adam_w__lr_5e-2.yml
     model_opt: ../opt/sf_adam_w__lr_5e-3.yml
 
     fad_model_names:
@@ -74,4 +72,4 @@ model:
       - panns-cnn14-32k
       - panns-wavegram-logmel
 
-    run_name: mss__s24d3D_nn__lfo__lfo__ase__fm_fold
+    run_name: mss__frame_8_hz__sm_16_1024__lfo__ase__fm_fold

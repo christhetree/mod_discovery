@@ -259,7 +259,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             tsv_cols.append(f"fad__{fad_model_name}")
         assert len(tsv_cols) == len(set(tsv_cols)), "Duplicate TSV columns"
         self.tsv_cols = tsv_cols
-        log.info(f"TSV columns: {self.tsv_cols}")
+        # log.info(f"TSV columns: {self.tsv_cols}")
         if run_name:
             self.tsv_path = os.path.join(OUT_DIR, f"{self.run_name}.tsv")
             if not os.path.exists(self.tsv_path):
@@ -484,8 +484,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # Compute LFO distances and metrics ============================================
         lfo_dist_vals = {}
         lfo_metric_vals = {}
-        if stage != "train":
-        # if stage == "test":
+        if stage != "train":  # Only compute distances and metrics during val and test
             with tr.no_grad():
                 p_hats = [
                     temp_params_hat_raw[p_name]
@@ -510,11 +509,28 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     temp_params_hat_inv_all[p_name] = p_hat_inv_all
                     # Calc LFO distances
                     for dist_name in self.lfo_dists:
+                        if stage == "val":
+                            # Skip expensive distances during validation
+                            if dist_name in ["dtw", "fd"]:
+                                continue
+                            # Skip derivative distances for now
+                            if "_d1" in dist_name or "_d2" in dist_name:
+                                continue
                         dist_fn = self.lfo_dists[dist_name]
-                        # Calc raw
-                        val = dist_fn(p_hat, p)
-                        self.log(f"{stage}/{p_name}__{dist_name}", val, prog_bar=False)
-                        lfo_dist_vals[f"{p_name}__{dist_name}"] = val.item()
+
+                        # Don't calc raw distances during validation and sound matching
+                        # to save time since they will probably be meaningless
+                        should_calc_raw = True
+                        if self.synth_opt is not None and stage == "val":
+                            should_calc_raw = False
+
+                        if should_calc_raw:
+                            # Calc raw
+                            val = dist_fn(p_hat, p)
+                            self.log(
+                                f"{stage}/{p_name}__{dist_name}", val, prog_bar=False
+                            )
+                            lfo_dist_vals[f"{p_name}__{dist_name}"] = val.item()
                         # Calc inv
                         val = dist_fn(p_hat_inv, p)
                         self.log(
@@ -529,44 +545,51 @@ class AcidDDSPLightingModule(pl.LightningModule):
                             prog_bar=False,
                         )
                         lfo_dist_vals[f"{p_name}_inv_all__{dist_name}"] = val.item()
-                # Calc LFO metrics raw
-                for p_name in self.temp_param_names:
-                    p = temp_params_raw[p_name]
-                    for metric_name in self.lfo_metrics:
-                        metric_fn = self.lfo_metrics[metric_name]
-                        val = metric_fn(p)
-                        self.log(
-                            f"{stage}/{p_name}__{metric_name}", val, prog_bar=False
-                        )
-                        lfo_metric_vals[f"{p_name}__{metric_name}"] = val.item()
-                # Calc LFO metrics raw hat
-                for p_name in self.temp_param_names_hat:
-                    p_hat = temp_params_hat_raw[p_name]
-                    for metric_name in self.lfo_metrics:
-                        metric_fn = self.lfo_metrics[metric_name]
-                        val = metric_fn(p_hat)
-                        self.log(
-                            f"{stage}/{p_name}_hat__{metric_name}", val, prog_bar=False
-                        )
-                        lfo_metric_vals[f"{p_name}_hat__{metric_name}"] = val.item()
-                # Calc LFO metrics inv and inv all
-                for p_name in self.compare_temp_param_names:
-                    p_hat_inv = temp_params_hat_inv[p_name]
-                    p_hat_inv_all = temp_params_hat_inv_all[p_name]
-                    for metric_name in self.lfo_metrics:
-                        metric_fn = self.lfo_metrics[metric_name]
-                        val = metric_fn(p_hat_inv)
-                        self.log(
-                            f"{stage}/{p_name}_inv__{metric_name}", val, prog_bar=False
-                        )
-                        lfo_metric_vals[f"{p_name}_inv__{metric_name}"] = val.item()
-                        val = metric_fn(p_hat_inv_all)
-                        self.log(
-                            f"{stage}/{p_name}_inv_all__{metric_name}",
-                            val,
-                            prog_bar=False,
-                        )
-                        lfo_metric_vals[f"{p_name}_inv_all__{metric_name}"] = val.item()
+                if stage == "test":  # Only compute LFO metrics during test to save time
+                    # Calc LFO metrics raw
+                    for p_name in self.temp_param_names:
+                        p = temp_params_raw[p_name]
+                        for metric_name in self.lfo_metrics:
+                            metric_fn = self.lfo_metrics[metric_name]
+                            val = metric_fn(p)
+                            self.log(
+                                f"{stage}/{p_name}__{metric_name}", val, prog_bar=False
+                            )
+                            lfo_metric_vals[f"{p_name}__{metric_name}"] = val.item()
+                    # Calc LFO metrics raw hat
+                    for p_name in self.temp_param_names_hat:
+                        p_hat = temp_params_hat_raw[p_name]
+                        for metric_name in self.lfo_metrics:
+                            metric_fn = self.lfo_metrics[metric_name]
+                            val = metric_fn(p_hat)
+                            self.log(
+                                f"{stage}/{p_name}_hat__{metric_name}",
+                                val,
+                                prog_bar=False,
+                            )
+                            lfo_metric_vals[f"{p_name}_hat__{metric_name}"] = val.item()
+                    # Calc LFO metrics inv and inv all
+                    for p_name in self.compare_temp_param_names:
+                        p_hat_inv = temp_params_hat_inv[p_name]
+                        p_hat_inv_all = temp_params_hat_inv_all[p_name]
+                        for metric_name in self.lfo_metrics:
+                            metric_fn = self.lfo_metrics[metric_name]
+                            val = metric_fn(p_hat_inv)
+                            self.log(
+                                f"{stage}/{p_name}_inv__{metric_name}",
+                                val,
+                                prog_bar=False,
+                            )
+                            lfo_metric_vals[f"{p_name}_inv__{metric_name}"] = val.item()
+                            val = metric_fn(p_hat_inv_all)
+                            self.log(
+                                f"{stage}/{p_name}_inv_all__{metric_name}",
+                                val,
+                                prog_bar=False,
+                            )
+                            lfo_metric_vals[f"{p_name}_inv_all__{metric_name}"] = (
+                                val.item()
+                            )
 
         assert not any(k in tsv_row_vals for k in lfo_dist_vals)
         assert not any(k in tsv_row_vals for k in lfo_metric_vals)
@@ -626,6 +649,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
         if stage != "train":
             with tr.no_grad():
                 for feat_name, feat_fn in self.audio_dists.items():
+                    if stage == "val":
+                        if feat_name in ["rms", "sc", "sb", "sf"]:
+                            # Skip expensive distances during validation
+                            continue
                     vals = feat_fn(x_hat, x)
                     if isinstance(vals, dict):
                         vals = {f"{feat_name}__{k}": v for k, v in vals.items()}

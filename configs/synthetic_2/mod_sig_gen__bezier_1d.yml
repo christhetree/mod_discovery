@@ -7,4 +7,3 @@ init_args:
   min_seg_interval_frac: 0.5
   is_c1_cont: false
   normalize: false
-  eps: 1.0e-8

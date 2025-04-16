@@ -270,9 +270,7 @@ def plot_xy_vals(
 
 if __name__ == "__main__":
     wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
-    wt_names = [
-        f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")
-    ]
+    wt_names = [f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")]
     wt_names = sorted(wt_names)
 
     filtered_wt_names = []
@@ -290,11 +288,15 @@ if __name__ == "__main__":
     filtered_wt_names = None
 
     tsv_names_and_paths = [
-        ("ase", os.path.join(OUT_DIR, f"out_curr/mss__s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("cf_8", os.path.join(OUT_DIR, f"out_curr/mss__frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("frame", os.path.join(OUT_DIR, f"out_curr/mss__frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("rand", os.path.join(OUT_DIR, f"out_curr/mss__s24d3D_rand_adapt__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("shan", os.path.join(OUT_DIR, f"out_curr/mss__s24d3D__sm_16_1024_shan__serum__BA_both_lfo_10.tsv")),
+        # ("ase", os.path.join(OUT_DIR, f"out_curr/mss__s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("cf_8", os.path.join(OUT_DIR, f"out_curr/mss__frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("frame", os.path.join(OUT_DIR, f"out_curr/mss__frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("rand", os.path.join(OUT_DIR, f"out_curr/mss__s24d3D_rand_adapt__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("shan", os.path.join(OUT_DIR, f"out_curr/mss__s24d3D__sm_16_1024_shan__serum__BA_both_lfo_10.tsv")),
+
+        ("ase", os.path.join(OUT_DIR, f"out_curr/mss__s24d3D__lfo__lfo__ase__fm_fold.tsv")),
+        ("cf_8", os.path.join(OUT_DIR, f"out_curr/mss__frame_8_hz__lfo__lfo__ase__fm_fold.tsv")),
+        ("frame", os.path.join(OUT_DIR, f"out_curr/mss__frame__lfo__lfo__ase__fm_fold.tsv")),
     ]
     # stage = "train"
     # stage = "val"
@@ -311,8 +313,8 @@ if __name__ == "__main__":
     # inv = "_inv"
     # inv = "_inv_all"
 
-    dist_fn = "__esr"
-    # dist_fn = "__l1"
+    # dist_fn = "__esr"
+    dist_fn = "__l1"
     # dist_fn = "__mse"
     # dist_fn = "__fft"
     # dist_fn = "__pcc"
@@ -324,7 +326,7 @@ if __name__ == "__main__":
     # deriv = "_d1"
     # deriv = "_d2"
 
-    # y_col = f"{lfo}{inv}{dist_fn}{deriv}"
+    y_col = f"{lfo}{inv}{dist_fn}{deriv}"
 
     # Mod signal metrics ===============================================================
     lfo = "add_lfo"
@@ -349,15 +351,15 @@ if __name__ == "__main__":
     # y_col = f"{lfo}{hat}{inv}__{metric}"
 
     # Audio distances ==================================================================
-    # metric = "mss"
+    metric = "mss"
     # metric = "mel_stft"
     # metric = "mfcc"
     # metric = "rms"
     # metric = "sc"
     # metric = "sb"
-    metric = "sf"
+    # metric = "sf"
 
-    # dist_fn = ""
+    dist_fn = ""
     # dist_fn = "__esr"
     # dist_fn = "__l1"
     # dist_fn = "__mse"
@@ -365,7 +367,7 @@ if __name__ == "__main__":
     # dist_fn = "__pcc"
     # dist_fn = "__dtw"
     # dist_fn = "__cd"
-    dist_fn = "__fd"
+    # dist_fn = "__fd"
 
     deriv = ""
     # deriv = "_d1"
@@ -374,13 +376,13 @@ if __name__ == "__main__":
     suffix = ""
     # suffix = "__cf_8_hz"
 
-    y_col = f"audio__{metric}{dist_fn}{deriv}{suffix}"
+    # y_col = f"audio__{metric}{dist_fn}{deriv}{suffix}"
 
     # FAD distances ====================================================================
     # y_col = "fad__clap-2023"
     # y_col = "fad__encodec-emb-48k"
     # y_col = "fad__panns-cnn14-32k"
-    y_col = "fad__panns-wavegram-logmel"
+    # y_col = "fad__panns-wavegram-logmel"
 
     trial_col = "seed"
     # trial_col = "wt_name"
@@ -400,7 +402,9 @@ if __name__ == "__main__":
             filter_vals = [wt_name]
         # Plot
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.set_title(f"{y_col}, wt_name: {wt_name}, stage: {stage}, trial_col: {trial_col}")
+        ax.set_title(
+            f"{y_col}, wt_name: {wt_name}, stage: {stage}, trial_col: {trial_col}"
+        )
         for name, tsv_path in tsv_names_and_paths:
             data = prepare_tsv_data(
                 tsv_path,

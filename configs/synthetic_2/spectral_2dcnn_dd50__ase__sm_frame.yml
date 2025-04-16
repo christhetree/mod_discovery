@@ -10,34 +10,23 @@ init_args:
   temp_params:
     add_lfo:
       dim: 1
-      act: none
-      is_spline: true
-      n_segments: 24
-      degree: 3
-      is_bounded: true
-#      use_alpha_noise: true
-      use_alpha_noise: false
-      use_alpha_linear: true
+      act: sigmoid
+      is_spline: false
+      use_alpha_noise: true
       adapt_dim: 0
     sub_lfo:
       dim: 1
       act: none
-      is_spline: true
-      n_segments: 24
-      degree: 3
-      is_bounded: true
+      is_spline: false
       use_alpha_noise: false
-      use_alpha_linear: true
-      adapt_dim: 0
+      adapt_dim: 5
+      adapt_act: none
+      adapt_use_separate: true
     env:
       dim: 1
-      act: none
-      is_spline: true
-      n_segments: 24
-      degree: 3
-      is_bounded: true
+      act: sigmoid
+      is_spline: false
       use_alpha_noise: false
-      use_alpha_linear: true
       adapt_dim: 0
   dropout: 0.0
   n_frames: 1501
