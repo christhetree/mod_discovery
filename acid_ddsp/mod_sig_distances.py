@@ -50,8 +50,8 @@ class DTWDistance(nn.Module):
         assert x.ndim == 2
         assert x.shape == x_target.shape
         bs = x.size(0)
-        x = x.numpy()
-        x_target = x_target.numpy()
+        x = x.cpu().numpy()
+        x_target = x_target.cpu().numpy()
         dists = []
         for idx in range(bs):
             curr_x = x[idx, :]
@@ -99,6 +99,8 @@ class ChamferDistance(XCoordDistance):
         self.p = p
 
     def calc_distance(self, x: T, x_target: T) -> T:
+        x = x.cpu()
+        x_target = x_target.cpu()
         dist, _ = chamfer_distance(x, x_target, norm=self.p, batch_reduction=None)
         return dist
 

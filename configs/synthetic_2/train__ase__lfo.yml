@@ -4,12 +4,13 @@ custom:
   dataset_name: lfo__ase__fm_fold
   cpu_batch_size: 5
   use_wandb_cpu: false
-  use_wandb_gpu: true
+#  use_wandb_gpu: true
+  use_wandb_gpu: false
 
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [4]
+  devices: [0]
   max_epochs: 30
   num_sanity_val_steps: 1
   gradient_clip_val: 0.5
@@ -52,9 +53,6 @@ model:
       - sub_lfo
       - env
     model: spectral_2dcnn_dd50__ase__lfo.yml
-#    model: spectral_2dcnn_dd50__ase__lfo_frame_cf_4.yml
-#    model: spectral_2dcnn_dd50__ase__lfo_frame_32.yml
-#    model: spectral_2dcnn_dd50__ase__lfo_frame_256.yml
     temp_param_names_hat:
       - add_lfo
       - sub_lfo
@@ -72,8 +70,8 @@ model:
 
     fad_model_names:
       - clap-2023
-      - encodec-emb-24k
-      - panns-cnn14-16k
+      - encodec-emb-48k
+      - panns-cnn14-32k
       - panns-wavegram-logmel
 
-#    run_name: testing
+    run_name: mss__s24d3D__lfo__lfo__ase__fm_fold

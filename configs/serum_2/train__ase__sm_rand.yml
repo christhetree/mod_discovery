@@ -56,7 +56,7 @@ model:
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
     synth_opt: ../opt/sf_adam_w__lr_5e-2.yml
     model_opt: ../opt/sf_adam_w__lr_5e-3.yml
-    fad_model_names:  #
+    fad_model_names:
       - clap-2023
       - encodec-emb-48k
       - panns-cnn14-32k

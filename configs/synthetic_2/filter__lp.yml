@@ -1,6 +1,6 @@
 class_path: acid_ddsp.synth_modules.BiquadWQFilter
 init_args:
-  sr: 16000
+  sr: 48000
   min_w_hz: 100
   max_w_hz: 8000
   min_q: 0.7071

@@ -485,6 +485,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         lfo_dist_vals = {}
         lfo_metric_vals = {}
         if stage != "train":
+        # if stage == "test":
             with tr.no_grad():
                 p_hats = [
                     temp_params_hat_raw[p_name]
@@ -659,8 +660,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             for col in self.tsv_cols[curr_tsv_row_len:]:
                 if stage == "test":
                     assert col in tsv_row_vals, f"Missing TSV column: {col}"
-                if stage != "train" and not col.startswith("fad__"):
-                    assert col in tsv_row_vals, f"Missing TSV column: {col}"
+                # if stage != "train" and not col.startswith("fad__"):
+                #     assert col in tsv_row_vals, f"Missing TSV column: {col}"
                 val = tsv_row_vals.get(col)
                 tsv_row.append(val)
             assert len(tsv_row) == len(self.tsv_cols)

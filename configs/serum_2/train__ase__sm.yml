@@ -14,9 +14,7 @@ trainer:
   benchmark: false
   devices: [4]
   max_epochs: 30
-#  max_epochs: 50
   num_sanity_val_steps: 1
-  accumulate_grad_batches: 1
   gradient_clip_val: 0.5
 
 data:
