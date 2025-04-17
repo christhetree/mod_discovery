@@ -514,11 +514,18 @@ class FourierWavetableOsc(WavetableOsc):
         return wt
 
 
-class DDSPHarmonicOsc(nn.Module):
+class DDSPHarmonicOsc(SynthModule):
     """
     A harmonic oscillator from DDSP, largely following:
-    https://github.com/acids-ircam/ddsp_pytorch/blob/master/ddsp/core.py#L135
+    https://github.com/acids-ircam/ddsp_pytorch/blob/9db246f48dba66e9b2133691d7abf4af6ede0279/ddsp/model.py#L88
     """
+    forward_param_names = [
+        "f0_hz",
+        "harmonic_amplitudes",
+        "n_samples",
+        "phase",
+    ]
+    lfo_name = "harmonic_amplitudes"
 
     def __init__(
         self,
@@ -528,11 +535,12 @@ class DDSPHarmonicOsc(nn.Module):
         super().__init__()
         self.sr = sr
         self.n_harmonics = n_harmonics
+        self.is_trainable = False
 
     def forward(
         self,
         f0_hz: T,
-        harmonic_amplitudes: Optional[T] = None,
+        harmonic_amplitudes: T,
         n_samples: Optional[int] = None,
         phase: Optional[T] = None,
         eps: float = 1e-5,
@@ -592,6 +600,93 @@ class DDSPHarmonicOsc(nn.Module):
         )
         aa = (f0_hz_harmonics < self.sr / 2).float()
         return harmonic_amplitudes * aa
+
+
+class DDSPNoiseModule(SynthModule):
+    """
+    Filtered noise module in DDSP, largely following:
+    https://github.com/acids-ircam/ddsp_pytorch/blob/master/ddsp/model.py#L88
+    """
+    forward_param_names = [
+        "noise_amplitudes",
+        "n_samples",
+    ]
+    lfo_name = "noise_amplitudes"
+
+    def __init__(
+        self,
+        sr: int,
+        n_bands: int,
+    ):
+        super().__init__()
+        self.sr = sr
+        self.n_bands = n_bands
+    
+    def forward(
+        self,
+        x: T,
+        noise_amplitudes: T,
+        n_samples: int,
+    ):
+        assert (
+            noise_amplitudes.size(2) == self.n_bands
+        ), f"Noise amplitudes size mismatch, expected {self.n_bands,} but got {noise_amplitudes.size(2)}"
+
+        block_size = round(n_samples / noise_amplitudes.size(1))
+        impulse = DDSPNoiseModule.amp_to_impulse_response(noise_amplitudes, block_size)
+        noise = (
+            tr.rand(
+                impulse.shape[0],
+                impulse.shape[1],
+                block_size,
+            ).to(impulse)
+            * 2
+            - 1
+        )
+
+        noise = DDSPNoiseModule.fft_convolve(noise, impulse)
+        noise = noise.reshape(noise.shape[0], -1)
+
+        # NOTE: there might be residual samples so we trim them accordingly
+        noise = noise[:, :n_samples]
+
+        return x + noise
+
+    def amp_to_impulse_response(amp: T, target_size: int) -> T:
+        amp = tr.stack([amp, tr.zeros_like(amp)], -1)
+        amp = tr.view_as_complex(amp)
+        amp = fft.irfft(amp)
+
+        filter_size = amp.shape[-1]
+
+        amp = tr.roll(amp, filter_size // 2, -1)
+        win = tr.hann_window(filter_size, dtype=amp.dtype, device=amp.device)
+
+        amp = amp * win
+
+        amp = nn.functional.pad(amp, (0, int(target_size) - int(filter_size)))
+        amp = tr.roll(amp, -filter_size // 2, -1)
+
+        return amp
+
+    def fft_convolve(signal: T, kernel: T) -> T:
+        signal = nn.functional.pad(signal, (0, signal.shape[-1]))
+        kernel = nn.functional.pad(kernel, (kernel.shape[-1], 0))
+
+        output = fft.irfft(fft.rfft(signal) * fft.rfft(kernel))
+        output = output[..., output.shape[-1] // 2 :]
+
+        return output
+
+    def scale_function(
+        x_sigmoid: T,
+        eps: float = 1e-7,
+    ):
+        # NOTE: we assume that x_sigmoid already has sigmoid applied by the model
+        assert (
+            x_sigmoid.min() >= 0 and x_sigmoid.max() <= 1
+        ), f"Expected x_sigmoid to be in range [0, 1], but got {x_sigmoid.min(), x_sigmoid.max()}"
+        return 2 * (x_sigmoid ** tr.log(tr.tensor(10).to(x_sigmoid.device))) + eps
 
 
 class BiquadWQFilter(SynthModule):
