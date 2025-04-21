@@ -34,9 +34,12 @@ os.makedirs("wandb_logs", exist_ok=True)
 if __name__ == "__main__":
     # config_name = "synthetic_2/train.yml"
 
-    config_name = "synthetic_2/train__ase__lfo.yml"
+    # config_name = "synthetic_2/train__ase__lfo.yml"
     # config_name = "synthetic_2/train__ase__lfo_frame.yml"
-    # config_name = "synthetic_2/train__ase__lfo_frame_8_hz.yml"
+    config_name = "synthetic_2/train__ase__lfo_frame_8_hz.yml"
+
+    save_dir = config_name.split("/")[-1][:-4]
+    os.makedirs(save_dir, exist_ok=True)
 
     # config_name = "synthetic_2/train__ase__sm.yml"
     # config_name = "synthetic_2/train__ase__sm_frame.yml"
@@ -58,19 +61,11 @@ if __name__ == "__main__":
     log.info(f"Running with seeds: {seeds}")
 
     wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
-
     wt_names = [f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")]
     filtered_wt_names = []
     for wt_name in wt_names:
         if any(wt_name.startswith(n) for n in CONTINUOUS_ABLETON_WTS):
             filtered_wt_names.append(wt_name)
-        # if any(bad_wt_name in wt_name for bad_wt_name in BAD_ABLETON_WTS):
-        #     continue
-        # if not wt_name.startswith("basics__"):
-        #     continue
-        # if not "fm_fold" in wt_name:
-        #     continue
-        # filtered_wt_names.append(wt_name)
     wt_paths = [os.path.join(wt_dir, f"{wt_name}.pt") for wt_name in filtered_wt_names]
     wt_paths = sorted(wt_paths)
     for wt_path in wt_paths:
@@ -78,9 +73,6 @@ if __name__ == "__main__":
         log.info(wt_name)
     log.info(f"\nWavetable directory: {wt_dir}\nFound {len(wt_paths)} wavetables")
     # wt_paths = [None]
-
-    # basic_shapes_wt_path = os.path.join(WAVETABLES_DIR, "ableton_basic_shapes", "basics__basic_shapes__4_1024.pt")
-    # basic_shapes_wt = tr.load(basic_shapes_wt_path, weights_only=True)
 
     config_path = os.path.join(CONFIGS_DIR, config_name)
 
@@ -94,7 +86,7 @@ if __name__ == "__main__":
 
         cli = CustomLightningCLI(
             args=["-c", config_path, "--seed_everything", str(seed)],
-            trainer_defaults=CustomLightningCLI.make_trainer_defaults(),
+            trainer_defaults=CustomLightningCLI.make_trainer_defaults(save_dir=save_dir),
             run=False,
         )
         if wt_path is not None:

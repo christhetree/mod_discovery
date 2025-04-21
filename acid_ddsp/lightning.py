@@ -39,7 +39,7 @@ from mod_sig_metrics import (
     TurningPointsMetric,
     LFORangeMetric,
 )
-from paths import OUT_DIR
+from paths import OUT_DIR, CONFIGS_DIR
 from synths import SynthBase
 
 logging.basicConfig()
@@ -271,6 +271,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
         else:
             self.tsv_path = None
 
+        # x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "serum_2/mod_sig_gen__model.yml")
+        # self.x_hat_mod_gen = util.load_class_from_yaml(x_hat_mod_gen_path)
+
     def state_dict(self, *args, **kwargs) -> Dict[str, T]:
         state_dict = super().state_dict(*args, **kwargs)
         # TODO(cm): exclude more
@@ -461,6 +464,37 @@ class AcidDDSPLightingModule(pl.LightningModule):
         model_out = self.model(
             model_in_dict, alpha_noise=alpha_noise, alpha_linear=alpha_linear
         )
+        # if stage != "test":
+        #     model_out = self.model(
+        #         model_in_dict, alpha_noise=alpha_noise, alpha_linear=alpha_linear
+        #     )
+        # else:
+        #     model_out = {}
+        #     for p_name, tp in self.model.temp_params.items():
+        #         mod_sigs = []
+        #         for idx in range(batch_size):
+        #             mod_sig = self.x_hat_mod_gen(self.temp_param_n_frames)
+        #             mod_sigs.append(mod_sig)
+        #         mod_sig = tr.stack(mod_sigs, dim=0)
+        #         model_out[p_name] = mod_sig
+        #         mod_sig = mod_sig.unsqueeze(2)
+        #
+        #         pos_enc = self.model.pos_enc.expand(batch_size, -1, -1)
+        #         mod_sig = mod_sig.to(pos_enc.device)
+        #         if tp.adapt_dim:
+        #             adapt_in = tr.cat([mod_sig, pos_enc], dim=-1)
+        #             if tp.adapt_use_separate:
+        #                 adapt_outs = []
+        #                 for dim_idx in range(tp.adapt_dim):
+        #                     adapter = self.model.adapters[f"{p_name}_{dim_idx}"]
+        #                     adapt_out = adapter(adapt_in)
+        #                     adapt_outs.append(adapt_out)
+        #                 adapt_out = tr.cat(adapt_outs, dim=-1)
+        #             else:
+        #                 adapt_out = self.model.adapters[p_name](adapt_in)
+        #             adapt_out = self.model.adapter_acts[p_name](adapt_out)
+        #             model_out[f"{p_name}_adapted"] = adapt_out.squeeze(-1)
+
         for p_name in self.temp_param_names_hat:
             p_hat = model_out[p_name]
             assert p_hat.shape == (batch_size, self.temp_param_n_frames)
@@ -511,26 +545,38 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     for dist_name in self.lfo_dists:
                         if stage == "val":
                             # Skip expensive distances during validation
-                            if dist_name in ["dtw", "fd"]:
+                            if dist_name in ["mse", "fft", "dtw", "fd", "cd"]:
                                 continue
                             # Skip derivative distances for now
-                            if "_d1" in dist_name or "_d2" in dist_name:
+                            # if "_d1" in dist_name:
+                            #     continue
+                            if "_d2" in dist_name:
                                 continue
                         dist_fn = self.lfo_dists[dist_name]
 
-                        # Don't calc raw distances during validation and sound matching
-                        # to save time since they will probably be meaningless
-                        should_calc_raw = True
-                        if self.synth_opt is not None and stage == "val":
-                            should_calc_raw = False
+                        # # Don't calc raw distances during validation and sound matching
+                        # # to save time since they will probably be meaningless
+                        # should_calc_raw = True
+                        # if stage == "val" and self.synth_opt is not None:
+                        #     should_calc_raw = False
+                        #
+                        # # if should_calc_raw:
 
-                        if should_calc_raw:
-                            # Calc raw
-                            val = dist_fn(p_hat, p)
-                            self.log(
-                                f"{stage}/{p_name}__{dist_name}", val, prog_bar=False
-                            )
-                            lfo_dist_vals[f"{p_name}__{dist_name}"] = val.item()
+                        # Calc raw
+                        val = dist_fn(p_hat, p)
+                        self.log(
+                            f"{stage}/{p_name}__{dist_name}", val, prog_bar=False
+                        )
+                        lfo_dist_vals[f"{p_name}__{dist_name}"] = val.item()
+
+                        # # Don't calc inv distances during validation and not sound
+                        # # matching to save time since they will prob be meaningless
+                        # should_calc_inv = True
+                        # if stage == "val" and self.synth_opt is None:
+                        #     should_calc_inv = False
+                        #
+                        # if should_calc_inv:
+
                         # Calc inv
                         val = dist_fn(p_hat_inv, p)
                         self.log(
@@ -674,7 +720,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         tsv_row_vals.update(fad_dists)
 
         # TSV logging ==================================================================
-        if self.tsv_path:
+        if stage != "train" and self.tsv_path:
             tsv_row = [
                 tr.random.initial_seed(),
                 self.wt_name,

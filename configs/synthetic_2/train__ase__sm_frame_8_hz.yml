@@ -1,7 +1,7 @@
 custom:
   project_name: acid_ddsp_2
   model_name: mss__frame_8_hz__sm_16_1024
-  dataset_name: lfo__ase__fm_fold
+  dataset_name: ase__ableton_13
   cpu_batch_size: 5
   use_wandb_cpu: false
   use_wandb_gpu: false
@@ -72,4 +72,4 @@ model:
       - panns-cnn14-32k
       - panns-wavegram-logmel
 
-    run_name: mss__frame_8_hz__sm_16_1024__lfo__ase__fm_fold
+    run_name: mss__frame_8_hz__sm_16_1024__ase__ableton_13

@@ -15,8 +15,8 @@ init_args:
       n_segments: 24
       degree: 3
       is_bounded: true
-#      use_alpha_noise: true
-      use_alpha_noise: false
+      use_alpha_noise: true
+#      use_alpha_noise: false
       use_alpha_linear: true
       adapt_dim: 0
     sub_lfo:

@@ -179,7 +179,7 @@ class CustomLightningCLI(LightningCLI):
             )
 
     @staticmethod
-    def make_trainer_defaults() -> Dict[str, Any]:
+    def make_trainer_defaults(save_dir: str = "lightning_logs") -> Dict[str, Any]:
         trainer_defaults = {
             "accelerator": "gpu",
             "callbacks": [
@@ -201,7 +201,7 @@ class CustomLightningCLI(LightningCLI):
             "logger": {
                 "class_path": "pytorch_lightning.loggers.TensorBoardLogger",
                 "init_args": {
-                    "save_dir": "lightning_logs",
+                    "save_dir": save_dir,
                     "name": None,
                 },
             },

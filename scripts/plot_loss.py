@@ -11,7 +11,7 @@ from pandas import DataFrame
 from tqdm import tqdm
 
 from paths import OUT_DIR, WAVETABLES_DIR
-from wavetables import BAD_ABLETON_WTS
+from wavetables import BAD_ABLETON_WTS, CONTINUOUS_ABLETON_WTS
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -56,7 +56,6 @@ def prepare_tsv_data(
 
     # Filter out rows
     if filter_vals is not None:
-        assert False
         assert filter_col is not None
         if len(filter_vals) == 1:
             tsv_col_names = ["filter_col", "filter_val"] + tsv_col_names
@@ -273,30 +272,27 @@ if __name__ == "__main__":
     wt_names = [f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")]
     wt_names = sorted(wt_names)
 
-    filtered_wt_names = []
-    for wt_name in wt_names:
-        # if any(bad_wt_name in wt_name for bad_wt_name in BAD_ABLETON_WTS):
-        #     continue
-        if not wt_name.startswith("basics__"):
-            continue
-        # if not "fm_fold" in wt_name:
-        #     continue
-        filtered_wt_names.append(wt_name)
-
+    # filtered_wt_names = []
+    # for wt_name in wt_names:
+    #     if any(wt_name.startswith(n) for n in CONTINUOUS_ABLETON_WTS):
+    #         filtered_wt_names.append(wt_name)
     # wt_names = filtered_wt_names
     wt_names = [None]
     filtered_wt_names = None
 
     tsv_names_and_paths = [
-        # ("ase", os.path.join(OUT_DIR, f"out_curr/mss__s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        # ("cf_8", os.path.join(OUT_DIR, f"out_curr/mss__frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        # ("frame", os.path.join(OUT_DIR, f"out_curr/mss__frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        # ("rand", os.path.join(OUT_DIR, f"out_curr/mss__s24d3D_rand_adapt__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        # ("shan", os.path.join(OUT_DIR, f"out_curr/mss__s24d3D__sm_16_1024_shan__serum__BA_both_lfo_10.tsv")),
+        ("spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("rand_adapt", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_rand_adapt__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("shan", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("shan_8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("shan_frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
 
-        ("ase", os.path.join(OUT_DIR, f"out_curr/mss__s24d3D__lfo__lfo__ase__fm_fold.tsv")),
-        ("cf_8", os.path.join(OUT_DIR, f"out_curr/mss__frame_8_hz__lfo__lfo__ase__fm_fold.tsv")),
-        ("frame", os.path.join(OUT_DIR, f"out_curr/mss__frame__lfo__lfo__ase__fm_fold.tsv")),
+        # ("spline", os.path.join(OUT_DIR, f"out_curr/mss__s24d3D__sm_16_1024__ase__ableton_13.tsv")),
+        # ("cf_8", os.path.join(OUT_DIR, f"out_curr/mss__frame_8_hz__sm_16_1024__ase__ableton_13.tsv")),
+        # ("frame", os.path.join(OUT_DIR, f"out_curr/mss__frame__sm_16_1024__ase__ableton_13.tsv")),
+        # ("rand", os.path.join(OUT_DIR, f"out_curr/mss__s24d3D_rand__sm__ase__ableton_13.tsv")),
     ]
     # stage = "train"
     # stage = "val"
@@ -309,15 +305,15 @@ if __name__ == "__main__":
     # lfo = "sub_lfo"
     # lfo = "env"
 
-    inv = ""
-    # inv = "_inv"
+    # inv = ""
+    inv = "_inv"
     # inv = "_inv_all"
 
     # dist_fn = "__esr"
-    dist_fn = "__l1"
+    # dist_fn = "__l1"
     # dist_fn = "__mse"
     # dist_fn = "__fft"
-    # dist_fn = "__pcc"
+    dist_fn = "__pcc"
     # dist_fn = "__dtw"
     # dist_fn = "__cd"
     # dist_fn = "__fd"
@@ -377,6 +373,7 @@ if __name__ == "__main__":
     # suffix = "__cf_8_hz"
 
     # y_col = f"audio__{metric}{dist_fn}{deriv}{suffix}"
+    # y_col = "loss"
 
     # FAD distances ====================================================================
     # y_col = "fad__clap-2023"

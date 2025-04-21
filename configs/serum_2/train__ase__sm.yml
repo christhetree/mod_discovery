@@ -1,6 +1,7 @@
 custom:
   project_name: acid_ddsp_2
   model_name: mss__s24d3D__sm_16_1024
+#  model_name: mss__s24d3D_rand__sm_16_1024
 #  model_name: mss__frame__sm_16_1024
 #  model_name: mss__frame_cf_8__sm_16_1024
   dataset_name: serum__BA_both_lfo_10
@@ -12,7 +13,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [4]
+  devices: [3]
   max_epochs: 30
   num_sanity_val_steps: 1
   gradient_clip_val: 0.5
@@ -70,6 +71,7 @@ model:
       - panns-wavegram-logmel
 
     run_name: mss__s24d3D__sm_16_1024__serum__BA_both_lfo_10
+#    run_name: mss__s24d3D_rand__sm_16_1024__serum__BA_both_lfo_10
 #    run_name: mss__s36d3__sm_16_1024__serum_frame__BA_both_lfo_10
 #    run_name: mss__s36d3__sm_16_1024_shan_16_frame__serum__BA_both_lfo_10
 #    run_name: mss__s36d3__sm_16_1024_shan__serum__BA_both_lfo_10
