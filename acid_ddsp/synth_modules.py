@@ -566,7 +566,8 @@ class DDSPHarmonicOsc(SynthModule):
             harmonic_amplitudes = tr.ones(
                 f0_hz.size(0), f0_hz.size(1), self.n_harmonics + 1
             ).to(f0_hz.device)
-
+        
+        harmonic_amplitudes = util.scale_function(harmonic_amplitudes)
         f0_hz = f0_hz.unsqueeze(-1)
 
         total_amplitude = harmonic_amplitudes[..., :1]
@@ -632,6 +633,10 @@ class DDSPNoiseModule(SynthModule):
             noise_amplitudes.size(2) == self.n_bands
         ), f"Noise amplitudes size mismatch, expected {self.n_bands,} but got {noise_amplitudes.size(2)}"
 
+        # NOTE: there is a mysterious `- 5` in the original code for the noise part
+        # we follow as-is, but it is not clear why this exists
+        noise_amplitudes = util.scale_function(noise_amplitudes - 5)
+
         block_size = round(n_samples / noise_amplitudes.size(1))
         impulse = DDSPNoiseModule.amp_to_impulse_response(noise_amplitudes, block_size)
         noise = (
@@ -646,11 +651,10 @@ class DDSPNoiseModule(SynthModule):
 
         noise = DDSPNoiseModule.fft_convolve(noise, impulse)
         noise = noise.reshape(noise.shape[0], -1)
-
-        # NOTE: there might be residual samples so we trim them accordingly
         noise = noise[:, :n_samples]
 
-        return x + noise
+        signal = x + noise
+        return signal
 
     @staticmethod
     def amp_to_impulse_response(amp: T, target_size: int) -> T:
@@ -679,16 +683,6 @@ class DDSPNoiseModule(SynthModule):
         output = output[..., output.shape[-1] // 2 :]
 
         return output
-
-    def scale_function(
-        x_sigmoid: T,
-        eps: float = 1e-7,
-    ):
-        # NOTE: we assume that x_sigmoid already has sigmoid applied by the model
-        assert (
-            x_sigmoid.min() >= 0 and x_sigmoid.max() <= 1
-        ), f"Expected x_sigmoid to be in range [0, 1], but got {x_sigmoid.min(), x_sigmoid.max()}"
-        return 2 * (x_sigmoid ** tr.log(tr.tensor(10).to(x_sigmoid.device))) + eps
 
 
 class BiquadWQFilter(SynthModule):
@@ -848,19 +842,19 @@ if __name__ == "__main__":
     # plt.savefig("audio.png")
     # plt.close()
 
-    note_off = tr.tensor([0.75, 0.75])
-    attack = tr.tensor([0.1, 0.2])
-    decay = tr.tensor([0.0, 0.2])
-    sustain = tr.tensor([0.5, 0.3])
-    release = tr.tensor([2.0, 0.2])
-    # floor = tr.tensor([0.1, 0.2])
-    # peak = tr.tensor([0.3, 0.5])
-    pow = tr.tensor([1.0, 2.5])
-    note_on_duration = tr.tensor([0.1, 1.0])
-    n_samples = 10
+    # note_off = tr.tensor([0.75, 0.75])
+    # attack = tr.tensor([0.1, 0.2])
+    # decay = tr.tensor([0.0, 0.2])
+    # sustain = tr.tensor([0.5, 0.3])
+    # release = tr.tensor([2.0, 0.2])
+    # # floor = tr.tensor([0.1, 0.2])
+    # # peak = tr.tensor([0.3, 0.5])
+    # pow = tr.tensor([1.0, 2.5])
+    # note_on_duration = tr.tensor([0.1, 1.0])
+    # n_samples = 10
 
-    adsr = ADSR(100)
-    envelope = adsr(note_off, attack, decay, sustain, release, pow=pow)
+    # adsr = ADSR(100)
+    # envelope = adsr(note_off, attack, decay, sustain, release, pow=pow)
 
     # adsr = ADSREnvelope()
     # envelope = adsr(
@@ -902,13 +896,35 @@ if __name__ == "__main__":
         torchaudio.save(f"../out/out_wave_{idx}.wav", audio, sr)
 
     # ============ Test DDSPHarmonicOsc ============
-    # import soundfile as sf
-    # bs = 3
-    # sr = 48000
-    # n_sec = 4.0
-    # n_samples = int(sr * n_sec)
-    # f0_hz = tr.tensor([220.0, 440.0, 880.0])
+    bs = 3
+    sr = 48000
+    n_sec = 4.0
+    n_samples = int(sr * n_sec)
+    f0_hz = tr.tensor([220.0, 440.0, 880.0])
 
-    # osc = DDSPHarmonicOsc(sr, n_harmonics=16)
-    # audio = osc(f0_hz=f0_hz, harmonic_amplitudes=None, n_samples=n_samples)
-    # audio = audio.reshape(-1, audio.size(-1))
+    osc = DDSPHarmonicOsc(sr, n_harmonics=16)
+    harm_audios = osc(f0_hz=f0_hz, harmonic_amplitudes=None, n_samples=n_samples)
+    harm_audios = harm_audios.reshape(-1, harm_audios.size(-1))
+
+    for idx, audio in enumerate(harm_audios):
+        audio = audio.unsqueeze(0)
+        torchaudio.save(f"harm_{idx}.wav", audio, sr)
+
+    # ============ Test DDSPNoiseModule ============
+    # NoiseModule acts like "subtractive" synthesis within the ComposableSynth framework
+    # hence it takes the output of the DDSPHarmonicOsc as input
+    osc = DDSPNoiseModule(sr, n_bands=16)
+
+    # the original ddsp code uses block_size = 160 => num_blocks = 300
+    num_blocks = 300
+    noise_amplitudes = tr.rand(bs, num_blocks, 16)
+
+    full_audios = osc(
+        x=harm_audios,
+        noise_amplitudes=noise_amplitudes,
+        n_samples=n_samples,
+    )
+
+    for idx, audio in enumerate(full_audios):
+        audio = audio.unsqueeze(0)
+        torchaudio.save(f"full_{idx}.wav", audio, sr)
