@@ -14,10 +14,10 @@ init_args:
       is_spline: true
       n_segments: 24
       degree: 3
-      is_bounded: true
-      use_alpha_noise: true
+      is_bounded: false
+      use_alpha_noise: false
       use_alpha_linear: true
-      adapt_dim: 100
+      adapt_dim: 101
       adapt_act: none
       adapt_use_separate: true
     sub_lfo:

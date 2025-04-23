@@ -43,7 +43,7 @@ model:
   init_args:
     ac: audio_config.yml
     spectral_visualizer: log_mel_spec.yml
-    synth: synth__ase__ddsp.yml
+    synth: synth__ase.yml
     temp_param_names:
       - add_lfo
       - sub_lfo
@@ -52,8 +52,7 @@ model:
       - add_lfo
       - sub_lfo
       - env
-    # model: spectral_2dcnn_dd50__ase__lfo.yml
-    model: spectral_2dcnn_dd50__ase__sm.yml
+    model: spectral_2dcnn_dd50__ase__ddsp.yml
     temp_param_names_hat:
       - add_lfo
       - sub_lfo

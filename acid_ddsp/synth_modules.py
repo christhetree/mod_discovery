@@ -581,7 +581,7 @@ class DDSPHarmonicOsc(SynthModule):
 
         omega = tr.cumsum(2 * tr.pi * f0_hz / self.sr, dim=1)
         if phase is not None:
-            phase = phase.unsqueeze(-1)
+            phase = phase.view(-1, 1, 1)
             assert len(phase.shape) == len(
                 omega.shape
             ), f"Size mismatch, phase: {phase.shape}, omega: {omega.shape}"
@@ -652,10 +652,11 @@ class DDSPNoiseModule(SynthModule):
 
         return x + noise
 
+    @staticmethod
     def amp_to_impulse_response(amp: T, target_size: int) -> T:
         amp = tr.stack([amp, tr.zeros_like(amp)], -1)
         amp = tr.view_as_complex(amp)
-        amp = fft.irfft(amp)
+        amp = tr.fft.irfft(amp)
 
         filter_size = amp.shape[-1]
 
@@ -669,11 +670,12 @@ class DDSPNoiseModule(SynthModule):
 
         return amp
 
+    @staticmethod
     def fft_convolve(signal: T, kernel: T) -> T:
         signal = nn.functional.pad(signal, (0, signal.shape[-1]))
         kernel = nn.functional.pad(kernel, (kernel.shape[-1], 0))
 
-        output = fft.irfft(fft.rfft(signal) * fft.rfft(kernel))
+        output = tr.fft.irfft(tr.fft.rfft(signal) * tr.fft.rfft(kernel))
         output = output[..., output.shape[-1] // 2 :]
 
         return output
