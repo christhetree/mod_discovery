@@ -517,7 +517,7 @@ class FourierWavetableOsc(WavetableOsc):
 class DDSPHarmonicOsc(SynthModule):
     """
     A harmonic oscillator from DDSP, largely following:
-    https://github.com/acids-ircam/ddsp_pytorch/blob/9db246f48dba66e9b2133691d7abf4af6ede0279/ddsp/model.py#L88
+    https://github.com/acids-ircam/ddsp_pytorch/blob/master/ddsp/core.py#L135
     """
     forward_param_names = [
         "f0_hz",
