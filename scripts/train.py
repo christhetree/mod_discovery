@@ -35,10 +35,6 @@ if __name__ == "__main__":
     # config_name = "synthetic_2/train.yml"
 
     # config_name = "synthetic_2/train__ase__lfo.yml"
-<<<<<<< HEAD
-=======
-    config_name = "synthetic_2/train__ase__ddsp.yml"
->>>>>>> 608ab58 ([cm] DDSP training working)
     # config_name = "synthetic_2/train__ase__lfo_frame.yml"
     config_name = "synthetic_2/train__ase__lfo_frame_8_hz.yml"
 
