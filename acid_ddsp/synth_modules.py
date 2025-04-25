@@ -514,11 +514,18 @@ class FourierWavetableOsc(WavetableOsc):
         return wt
 
 
-class DDSPHarmonicOsc(nn.Module):
+class DDSPHarmonicOsc(SynthModule):
     """
     A harmonic oscillator from DDSP, largely following:
     https://github.com/acids-ircam/ddsp_pytorch/blob/master/ddsp/core.py#L135
     """
+    forward_param_names = [
+        "f0_hz",
+        "harmonic_amplitudes",
+        "n_samples",
+        "phase",
+    ]
+    lfo_name = "harmonic_amplitudes"
 
     def __init__(
         self,
@@ -528,11 +535,12 @@ class DDSPHarmonicOsc(nn.Module):
         super().__init__()
         self.sr = sr
         self.n_harmonics = n_harmonics
+        self.is_trainable = False
 
     def forward(
         self,
         f0_hz: T,
-        harmonic_amplitudes: Optional[T] = None,
+        harmonic_amplitudes: T,
         n_samples: Optional[int] = None,
         phase: Optional[T] = None,
         eps: float = 1e-5,
@@ -558,7 +566,8 @@ class DDSPHarmonicOsc(nn.Module):
             harmonic_amplitudes = tr.ones(
                 f0_hz.size(0), f0_hz.size(1), self.n_harmonics + 1
             ).to(f0_hz.device)
-
+        
+        harmonic_amplitudes = util.scale_function(harmonic_amplitudes)
         f0_hz = f0_hz.unsqueeze(-1)
 
         total_amplitude = harmonic_amplitudes[..., :1]
@@ -573,7 +582,7 @@ class DDSPHarmonicOsc(nn.Module):
 
         omega = tr.cumsum(2 * tr.pi * f0_hz / self.sr, dim=1)
         if phase is not None:
-            phase = phase.unsqueeze(-1)
+            phase = phase.view(-1, 1, 1)
             assert len(phase.shape) == len(
                 omega.shape
             ), f"Size mismatch, phase: {phase.shape}, omega: {omega.shape}"
@@ -592,6 +601,88 @@ class DDSPHarmonicOsc(nn.Module):
         )
         aa = (f0_hz_harmonics < self.sr / 2).float()
         return harmonic_amplitudes * aa
+
+
+class DDSPNoiseModule(SynthModule):
+    """
+    Filtered noise module in DDSP, largely following:
+    https://github.com/acids-ircam/ddsp_pytorch/blob/master/ddsp/model.py#L88
+    """
+    forward_param_names = [
+        "noise_amplitudes",
+        "n_samples",
+    ]
+    lfo_name = "noise_amplitudes"
+
+    def __init__(
+        self,
+        sr: int,
+        n_bands: int,
+    ):
+        super().__init__()
+        self.sr = sr
+        self.n_bands = n_bands
+    
+    def forward(
+        self,
+        x: T,
+        noise_amplitudes: T,
+        n_samples: int,
+    ):
+        assert (
+            noise_amplitudes.size(2) == self.n_bands
+        ), f"Noise amplitudes size mismatch, expected {self.n_bands,} but got {noise_amplitudes.size(2)}"
+
+        # NOTE: there is a mysterious `- 5` in the original code for the noise part
+        # we follow as-is, but it is not clear why this exists
+        noise_amplitudes = util.scale_function(noise_amplitudes - 5)
+
+        block_size = round(n_samples / noise_amplitudes.size(1))
+        impulse = DDSPNoiseModule.amp_to_impulse_response(noise_amplitudes, block_size)
+        noise = (
+            tr.rand(
+                impulse.shape[0],
+                impulse.shape[1],
+                block_size,
+            ).to(impulse)
+            * 2
+            - 1
+        )
+
+        noise = DDSPNoiseModule.fft_convolve(noise, impulse)
+        noise = noise.reshape(noise.shape[0], -1)
+        noise = noise[:, :n_samples]
+
+        signal = x + noise
+        return signal
+
+    @staticmethod
+    def amp_to_impulse_response(amp: T, target_size: int) -> T:
+        amp = tr.stack([amp, tr.zeros_like(amp)], -1)
+        amp = tr.view_as_complex(amp)
+        amp = tr.fft.irfft(amp)
+
+        filter_size = amp.shape[-1]
+
+        amp = tr.roll(amp, filter_size // 2, -1)
+        win = tr.hann_window(filter_size, dtype=amp.dtype, device=amp.device)
+
+        amp = amp * win
+
+        amp = nn.functional.pad(amp, (0, int(target_size) - int(filter_size)))
+        amp = tr.roll(amp, -filter_size // 2, -1)
+
+        return amp
+
+    @staticmethod
+    def fft_convolve(signal: T, kernel: T) -> T:
+        signal = nn.functional.pad(signal, (0, signal.shape[-1]))
+        kernel = nn.functional.pad(kernel, (kernel.shape[-1], 0))
+
+        output = tr.fft.irfft(tr.fft.rfft(signal) * tr.fft.rfft(kernel))
+        output = output[..., output.shape[-1] // 2 :]
+
+        return output
 
 
 class BiquadWQFilter(SynthModule):
@@ -751,19 +842,19 @@ if __name__ == "__main__":
     # plt.savefig("audio.png")
     # plt.close()
 
-    note_off = tr.tensor([0.75, 0.75])
-    attack = tr.tensor([0.1, 0.2])
-    decay = tr.tensor([0.0, 0.2])
-    sustain = tr.tensor([0.5, 0.3])
-    release = tr.tensor([2.0, 0.2])
-    # floor = tr.tensor([0.1, 0.2])
-    # peak = tr.tensor([0.3, 0.5])
-    pow = tr.tensor([1.0, 2.5])
-    note_on_duration = tr.tensor([0.1, 1.0])
-    n_samples = 10
+    # note_off = tr.tensor([0.75, 0.75])
+    # attack = tr.tensor([0.1, 0.2])
+    # decay = tr.tensor([0.0, 0.2])
+    # sustain = tr.tensor([0.5, 0.3])
+    # release = tr.tensor([2.0, 0.2])
+    # # floor = tr.tensor([0.1, 0.2])
+    # # peak = tr.tensor([0.3, 0.5])
+    # pow = tr.tensor([1.0, 2.5])
+    # note_on_duration = tr.tensor([0.1, 1.0])
+    # n_samples = 10
 
-    adsr = ADSR(100)
-    envelope = adsr(note_off, attack, decay, sustain, release, pow=pow)
+    # adsr = ADSR(100)
+    # envelope = adsr(note_off, attack, decay, sustain, release, pow=pow)
 
     # adsr = ADSREnvelope()
     # envelope = adsr(
@@ -805,13 +896,35 @@ if __name__ == "__main__":
         torchaudio.save(f"../out/out_wave_{idx}.wav", audio, sr)
 
     # ============ Test DDSPHarmonicOsc ============
-    # import soundfile as sf
-    # bs = 3
-    # sr = 48000
-    # n_sec = 4.0
-    # n_samples = int(sr * n_sec)
-    # f0_hz = tr.tensor([220.0, 440.0, 880.0])
+    bs = 3
+    sr = 48000
+    n_sec = 4.0
+    n_samples = int(sr * n_sec)
+    f0_hz = tr.tensor([220.0, 440.0, 880.0])
 
-    # osc = DDSPHarmonicOsc(sr, n_harmonics=16)
-    # audio = osc(f0_hz=f0_hz, harmonic_amplitudes=None, n_samples=n_samples)
-    # audio = audio.reshape(-1, audio.size(-1))
+    osc = DDSPHarmonicOsc(sr, n_harmonics=16)
+    harm_audios = osc(f0_hz=f0_hz, harmonic_amplitudes=None, n_samples=n_samples)
+    harm_audios = harm_audios.reshape(-1, harm_audios.size(-1))
+
+    for idx, audio in enumerate(harm_audios):
+        audio = audio.unsqueeze(0)
+        torchaudio.save(f"harm_{idx}.wav", audio, sr)
+
+    # ============ Test DDSPNoiseModule ============
+    # NoiseModule acts like "subtractive" synthesis within the ComposableSynth framework
+    # hence it takes the output of the DDSPHarmonicOsc as input
+    osc = DDSPNoiseModule(sr, n_bands=16)
+
+    # the original ddsp code uses block_size = 160 => num_blocks = 300
+    num_blocks = 300
+    noise_amplitudes = tr.rand(bs, num_blocks, 16)
+
+    full_audios = osc(
+        x=harm_audios,
+        noise_amplitudes=noise_amplitudes,
+        n_samples=n_samples,
+    )
+
+    for idx, audio in enumerate(full_audios):
+        audio = audio.unsqueeze(0)
+        torchaudio.save(f"full_{idx}.wav", audio, sr)

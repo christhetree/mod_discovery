@@ -170,3 +170,10 @@ def load_class_from_yaml(config_path: str) -> Any:
     cls = getattr(module, class_name)
     cls_instantiated = cls(**config["init_args"])
     return cls_instantiated
+
+
+def scale_function(x: T, eps: float = 1e-7) -> T:
+    """
+    Scale function as per DDSP paper Section B.5, equation 5
+    """
+    return 2 * (tr.sigmoid(x) ** tr.log(tr.tensor(10).to(x.device))) + eps

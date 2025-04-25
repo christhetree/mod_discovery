@@ -1,0 +1,4 @@
+class_path: acid_ddsp.synth_modules.DDSPNoiseModule
+init_args:
+  sr: 48000
+  n_bands: 65     # default value from original DDSP
