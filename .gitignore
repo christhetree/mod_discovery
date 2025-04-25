@@ -567,3 +567,7 @@ wandb_logs/
 scratch.py
 /ableton
 #/models
+
+/train__ase_lfo
+/train__ase_lfo_frame
+/train__ase_lfo_frame_8_hz

@@ -16,9 +16,11 @@ init_args:
       degree: 3
       is_bounded: false
       use_alpha_linear: true
-      adapt_dim: 16
+#      adapt_dim: 16
+      adapt_dim: 100
       adapt_act: softmax
-      adapt_use_separate: true
+#      adapt_use_separate: true
+      adapt_use_separate: false
     sub_lfo:
       dim: 1
       act: none

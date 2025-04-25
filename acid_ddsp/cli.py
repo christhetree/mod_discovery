@@ -179,7 +179,10 @@ class CustomLightningCLI(LightningCLI):
             )
 
     @staticmethod
-    def make_trainer_defaults(save_dir: str = "lightning_logs") -> Dict[str, Any]:
+    def make_trainer_defaults(save_dir: Optional[str] = None) -> Dict[str, Any]:
+        if save_dir is None:
+            save_dir = "lightning_logs"
+
         trainer_defaults = {
             "accelerator": "gpu",
             "callbacks": [
