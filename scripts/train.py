@@ -32,6 +32,8 @@ os.makedirs("wandb_logs", exist_ok=True)
 
 
 if __name__ == "__main__":
+    # save_dir = None
+
     # config_name = "synthetic_2/train.yml"
 
     # config_name = "synthetic_2/train__ase__lfo.yml"
@@ -42,8 +44,10 @@ if __name__ == "__main__":
     os.makedirs(save_dir, exist_ok=True)
 
     # config_name = "synthetic_2/train__ase__sm.yml"
+    # config_name = "synthetic_2/train__ase__sm_nn.yml"
     # config_name = "synthetic_2/train__ase__sm_frame.yml"
     # config_name = "synthetic_2/train__ase__sm_frame_8_hz.yml"
+    # config_name = "synthetic_2/train__ase__sm_rand.yml"
     # config_name = "synthetic_2/test__ase__sm_rand.yml"
 
     # config_name = "serum_2/train__ase__sm.yml"
@@ -56,7 +60,8 @@ if __name__ == "__main__":
     # config_name = "serum_2/train__ase__sm_shan_frame_8_hz.yml"
 
     # seeds = [42]
-    seeds = list(range(10))
+    # seeds = list(range(10))
+    seeds = list(range(6, 11))
     # seeds = list(range(20))
     log.info(f"Running with seeds: {seeds}")
 
@@ -103,7 +108,7 @@ if __name__ == "__main__":
             # wt_module_hat = WavetableOsc(sr=sr, wt=basic_shapes_wt, is_trainable=True)
             # synth_hat.register_module("add_synth_module", wt_module_hat)
 
-            if isinstance(synth_hat.add_synth_module, WavetableOsc) and  not synth_hat.add_synth_module.is_trainable:
+            if isinstance(synth_hat.add_synth_module, WavetableOsc) and not synth_hat.add_synth_module.is_trainable:
                 wt_module_hat = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
                 synth_hat.register_module("add_synth_module", wt_module_hat)
 

@@ -1,18 +1,18 @@
 custom:
   project_name: acid_ddsp_2
-  model_name: mss__s24d3D_shan_100_not_sep__sm_16_1024
+  model_name: mss__s24d3D_rand__sm_16_1024
   dataset_name: serum__BA_both_lfo_10
   cpu_batch_size: 5
   use_wandb_cpu: false
+#  use_wandb_gpu: true
   use_wandb_gpu: false
 
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [1]
+  devices: [2]
   max_epochs: 30
   num_sanity_val_steps: 1
-  accumulate_grad_batches: 1
   gradient_clip_val: 0.5
 
 data:
@@ -44,7 +44,7 @@ model:
   init_args:
     ac: audio_config.yml
     spectral_visualizer: log_mel_spec.yml
-    model: spectral_2dcnn_dd50__ase__sm_shan.yml
+    model: spectral_2dcnn_dd50__ase__sm.yml
     temp_param_names_hat:
       - add_lfo
       - sub_lfo
@@ -52,7 +52,7 @@ model:
     interp_temp_param_names_hat:
       - add_lfo
       - env
-    synth_hat: synth__ase__sm_shan.yml
+    synth_hat: synth__ase__sm.yml
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
     synth_opt: ../opt/sf_adam_w__lr_5e-2.yml
     model_opt: ../opt/sf_adam_w__lr_5e-3.yml
@@ -62,4 +62,4 @@ model:
       - panns-cnn14-32k
       - panns-wavegram-logmel
 
-    run_name: mss__s24d3D_shan_100_not_sep__sm_16_1024__serum__BA_both_lfo_10
+    run_name: mss__s24d3D_rand__sm_16_1024__serum__BA_both_lfo_10

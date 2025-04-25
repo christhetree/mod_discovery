@@ -271,6 +271,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         else:
             self.tsv_path = None
 
+        # x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__model.yml")
         # x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "serum_2/mod_sig_gen__model.yml")
         # self.x_hat_mod_gen = util.load_class_from_yaml(x_hat_mod_gen_path)
 
@@ -476,11 +477,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
         #             mod_sig = self.x_hat_mod_gen(self.temp_param_n_frames)
         #             mod_sigs.append(mod_sig)
         #         mod_sig = tr.stack(mod_sigs, dim=0)
-        #         model_out[p_name] = mod_sig
-        #         mod_sig = mod_sig.unsqueeze(2)
-        #
         #         pos_enc = self.model.pos_enc.expand(batch_size, -1, -1)
         #         mod_sig = mod_sig.to(pos_enc.device)
+        #         model_out[p_name] = mod_sig
+        #         mod_sig = mod_sig.unsqueeze(2)
         #         if tp.adapt_dim:
         #             adapt_in = tr.cat([mod_sig, pos_enc], dim=-1)
         #             if tp.adapt_use_separate:
@@ -602,6 +602,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
                                 f"{stage}/{p_name}__{metric_name}", val, prog_bar=False
                             )
                             lfo_metric_vals[f"{p_name}__{metric_name}"] = val.item()
+                if stage != "train":
                     # Calc LFO metrics raw hat
                     for p_name in self.temp_param_names_hat:
                         p_hat = temp_params_hat_raw[p_name]

@@ -284,8 +284,10 @@ if __name__ == "__main__":
         ("spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         ("8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         ("frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("rand", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_rand__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         ("rand_adapt", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_rand_adapt__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         ("shan", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("shan_100", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_100_not_sep_s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         ("shan_8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         ("shan_frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
 
@@ -322,7 +324,7 @@ if __name__ == "__main__":
     # deriv = "_d1"
     # deriv = "_d2"
 
-    y_col = f"{lfo}{inv}{dist_fn}{deriv}"
+    # y_col = f"{lfo}{inv}{dist_fn}{deriv}"
 
     # Mod signal metrics ===============================================================
     lfo = "add_lfo"
@@ -378,7 +380,7 @@ if __name__ == "__main__":
     # FAD distances ====================================================================
     # y_col = "fad__clap-2023"
     # y_col = "fad__encodec-emb-48k"
-    # y_col = "fad__panns-cnn14-32k"
+    y_col = "fad__panns-cnn14-32k"
     # y_col = "fad__panns-wavegram-logmel"
 
     trial_col = "seed"

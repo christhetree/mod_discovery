@@ -1,6 +1,6 @@
 custom:
   project_name: acid_ddsp_2
-  model_name: mss__frame_8_hz__lfo
+  model_name: mss__frame_8_hz_nn__lfo
   dataset_name: ase__ableton_13
   cpu_batch_size: 5
   use_wandb_cpu: false
@@ -9,7 +9,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [4]
+  devices: [3]
   max_epochs: 30
   num_sanity_val_steps: 1
   gradient_clip_val: 0.5
@@ -67,10 +67,10 @@ model:
 
     model_opt: ../opt/sf_adam_w__lr_5e-3.yml
 
-#    fad_model_names:
-#      - clap-2023
+    fad_model_names:
+      - clap-2023
 #      - encodec-emb-48k
-#      - panns-cnn14-32k
-#      - panns-wavegram-logmel
+      - panns-cnn14-32k
+      - panns-wavegram-logmel
 
-    run_name: mss__frame_8_hz__lfo__ase__ableton_13
+    run_name: mss__frame_8_hz_nn__lfo__ase__ableton_13

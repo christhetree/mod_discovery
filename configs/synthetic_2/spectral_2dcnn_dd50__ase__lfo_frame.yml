@@ -12,7 +12,7 @@ init_args:
       dim: 1
       act: sigmoid
       is_spline: false
-      use_alpha_noise: true
+      use_alpha_noise: false
       adapt_dim: 0
     sub_lfo:
       dim: 1
