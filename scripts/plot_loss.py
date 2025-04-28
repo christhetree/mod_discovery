@@ -281,15 +281,41 @@ if __name__ == "__main__":
     filtered_wt_names = None
 
     tsv_names_and_paths = [
+        # ("spline_n", os.path.join(OUT_DIR, f"out_curr/lfo/noise/mss__s24d3D__lfo__ase__ableton_13.tsv")),
+        # ("8_hz_n", os.path.join(OUT_DIR, f"out_curr/lfo/noise/mss__frame_8_hz__lfo__ase__ableton_13.tsv")),
+        # ("frame_n", os.path.join(OUT_DIR, f"out_curr/lfo/noise/mss__frame__lfo__ase__ableton_13.tsv")),
+        # ("spline", os.path.join(OUT_DIR, f"out_curr/lfo/mss__s24d3D_nn__lfo__ase__ableton_13.tsv")),
+        # ("8_hz", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_8_hz_nn__lfo__ase__ableton_13.tsv")),
+        # ("frame", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_nn__lfo__ase__ableton_13.tsv")),
+
+        # ("oracle", os.path.join(OUT_DIR, f"out_curr/sm/mss__oracle__sm_16_1024__ase__ableton_13.tsv")),
+        # ("spline", os.path.join(OUT_DIR, f"out_curr/sm/mss__s24d3D__sm_16_1024__ase__ableton_13.tsv")),
+        # ("8_hz", os.path.join(OUT_DIR, f"out_curr/sm/mss__frame_8_hz__sm_16_1024__ase__ableton_13.tsv")),
+        # ("frame", os.path.join(OUT_DIR, f"out_curr/sm/mss__frame__sm_16_1024__ase__ableton_13.tsv")),
+        # ("rand", os.path.join(OUT_DIR, f"out_curr/sm/mss__s24d3D_rand__sm__ase__ableton_13.tsv")),
+        # ("rand_sm", os.path.join(OUT_DIR, f"out_curr/sm/mss__s24d3D_rand__sm_16_1024__ase__ableton_13.tsv")),
+        # ("spline_nn", os.path.join(OUT_DIR, f"out_curr/sm/no_noise/mss__s24d3D_nn__sm_16_1024__ase__ableton_13.tsv")),
+        # ("8_hz_nn", os.path.join(OUT_DIR, f"out_curr/sm/no_noise/mss__frame_8_hz_nn__sm_16_1024__ase__ableton_13.tsv")),
+        # ("frame_nn", os.path.join(OUT_DIR, f"out_curr/sm/no_noise/mss__frame_nn__sm_16_1024__ase__ableton_13.tsv")),
+
         ("spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         ("8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         ("frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("rand", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_rand__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("rand_sm", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_rand__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         ("rand_adapt", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_rand_adapt__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("shan", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("shan_100", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_100_not_sep_s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("frame_8_hz_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_8_hz_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("shan_spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         ("shan_8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         ("shan_frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("shan_spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_s24d3D_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("shan_frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("ddsp_spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_s24d3D__sm__serum__BA_both_lfo_10.tsv")),
+        ("ddsp_frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame__sm__serum__BA_both_lfo_10.tsv")),
+        ("ddsp_frame_8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame_8_hz__sm__serum__BA_both_lfo_10.tsv")),
+        ("ddsp_spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_s24d3D_gran__sm__serum__BA_both_lfo_10.tsv")),
+        ("ddsp_frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame_gran__sm__serum__BA_both_lfo_10.tsv")),
 
         # ("spline", os.path.join(OUT_DIR, f"out_curr/mss__s24d3D__sm_16_1024__ase__ableton_13.tsv")),
         # ("cf_8", os.path.join(OUT_DIR, f"out_curr/mss__frame_8_hz__sm_16_1024__ase__ableton_13.tsv")),
@@ -312,10 +338,10 @@ if __name__ == "__main__":
     # inv = "_inv_all"
 
     # dist_fn = "__esr"
-    # dist_fn = "__l1"
+    dist_fn = "__l1"
     # dist_fn = "__mse"
     # dist_fn = "__fft"
-    dist_fn = "__pcc"
+    # dist_fn = "__pcc"
     # dist_fn = "__dtw"
     # dist_fn = "__cd"
     # dist_fn = "__fd"
@@ -349,9 +375,9 @@ if __name__ == "__main__":
     # y_col = f"{lfo}{hat}{inv}__{metric}"
 
     # Audio distances ==================================================================
-    metric = "mss"
+    # metric = "mss"
     # metric = "mel_stft"
-    # metric = "mfcc"
+    metric = "mfcc"
     # metric = "rms"
     # metric = "sc"
     # metric = "sb"
@@ -375,12 +401,12 @@ if __name__ == "__main__":
     # suffix = "__cf_8_hz"
 
     # y_col = f"audio__{metric}{dist_fn}{deriv}{suffix}"
-    # y_col = "loss"
+    y_col = "loss"
 
     # FAD distances ====================================================================
     # y_col = "fad__clap-2023"
     # y_col = "fad__encodec-emb-48k"
-    y_col = "fad__panns-cnn14-32k"
+    # y_col = "fad__panns-cnn14-32k"
     # y_col = "fad__panns-wavegram-logmel"
 
     trial_col = "seed"

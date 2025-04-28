@@ -32,52 +32,63 @@ os.makedirs("wandb_logs", exist_ok=True)
 
 
 if __name__ == "__main__":
-    # save_dir = None
+    save_dir = None
 
     # config_name = "synthetic_2/train.yml"
 
     # config_name = "synthetic_2/train__ase__lfo.yml"
     # config_name = "synthetic_2/train__ase__lfo_frame.yml"
-    config_name = "synthetic_2/train__ase__lfo_frame_8_hz.yml"
+    # config_name = "synthetic_2/train__ase__lfo_frame_8_hz.yml"
 
-    save_dir = config_name.split("/")[-1][:-4]
-    os.makedirs(save_dir, exist_ok=True)
+    # save_dir = config_name.split("/")[-1][:-4]
+    # os.makedirs(save_dir, exist_ok=True)
 
     # config_name = "synthetic_2/train__ase__sm.yml"
     # config_name = "synthetic_2/train__ase__sm_nn.yml"
     # config_name = "synthetic_2/train__ase__sm_frame.yml"
     # config_name = "synthetic_2/train__ase__sm_frame_8_hz.yml"
     # config_name = "synthetic_2/train__ase__sm_rand.yml"
+    # config_name = "synthetic_2/train__ase__sm_oracle.yml"
     # config_name = "synthetic_2/test__ase__sm_rand.yml"
 
     # config_name = "serum_2/train__ase__sm.yml"
     # config_name = "serum_2/train__ase__sm_frame.yml"
     # config_name = "serum_2/train__ase__sm_frame_8_hz.yml"
     # config_name = "serum_2/train__ase__sm_rand.yml"
+    # config_name = "serum_2/train__ase__sm_gran.yml"
+    # config_name = "serum_2/train__ase__sm_frame_gran.yml"
+    config_name = "serum_2/train__ase__sm_frame_8_hz_gran.yml"
 
     # config_name = "serum_2/train__ase__sm_shan.yml"
     # config_name = "serum_2/train__ase__sm_shan_frame.yml"
     # config_name = "serum_2/train__ase__sm_shan_frame_8_hz.yml"
+    # config_name = "serum_2/train__ase__sm_shan_gran.yml"
+    # config_name = "serum_2/train__ase__sm_shan_frame_gran.yml"
+
+    # config_name = "serum_2/train__ase__sm_ddsp.yml"
+    # config_name = "serum_2/train__ase__sm_ddsp_frame.yml"
+    # config_name = "serum_2/train__ase__sm_ddsp_frame_8_hz.yml"
+    # config_name = "serum_2/train__ase__sm_ddsp_gran.yml"
+    # config_name = "serum_2/train__ase__sm_ddsp_frame_gran.yml"
 
     # seeds = [42]
     # seeds = list(range(10))
-    seeds = list(range(6, 11))
-    # seeds = list(range(20))
+    seeds = list(range(20))
     log.info(f"Running with seeds: {seeds}")
 
-    wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
-    wt_names = [f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")]
-    filtered_wt_names = []
-    for wt_name in wt_names:
-        if any(wt_name.startswith(n) for n in CONTINUOUS_ABLETON_WTS):
-            filtered_wt_names.append(wt_name)
-    wt_paths = [os.path.join(wt_dir, f"{wt_name}.pt") for wt_name in filtered_wt_names]
-    wt_paths = sorted(wt_paths)
-    for wt_path in wt_paths:
-        wt_name = os.path.basename(wt_path)
-        log.info(wt_name)
-    log.info(f"\nWavetable directory: {wt_dir}\nFound {len(wt_paths)} wavetables")
-    # wt_paths = [None]
+    # wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
+    # wt_names = [f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")]
+    # filtered_wt_names = []
+    # for wt_name in wt_names:
+    #     if any(wt_name.startswith(n) for n in CONTINUOUS_ABLETON_WTS):
+    #         filtered_wt_names.append(wt_name)
+    # wt_paths = [os.path.join(wt_dir, f"{wt_name}.pt") for wt_name in filtered_wt_names]
+    # wt_paths = sorted(wt_paths)
+    # for wt_path in wt_paths:
+    #     wt_name = os.path.basename(wt_path)
+    #     log.info(wt_name)
+    # log.info(f"\nWavetable directory: {wt_dir}\nFound {len(wt_paths)} wavetables")
+    wt_paths = [None]
 
     config_path = os.path.join(CONFIGS_DIR, config_name)
 

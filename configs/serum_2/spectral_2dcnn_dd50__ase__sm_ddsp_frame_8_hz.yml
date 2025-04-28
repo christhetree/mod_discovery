@@ -11,35 +11,24 @@ init_args:
     add_lfo:
       dim: 1
       act: none
-      is_spline: true
-      n_segments: 24
-      degree: 3
-      is_bounded: false
-      use_alpha_linear: true
-      adapt_dim: 16
-      adapt_act: softmax
+      is_spline: false
+      adapt_dim: 101
+      adapt_act: none
       adapt_use_separate: true
     sub_lfo:
       dim: 1
       act: none
-      is_spline: true
-      n_segments: 24
-      degree: 3
-      is_bounded: false
-      use_alpha_linear: true
-      adapt_dim: 5
+      is_spline: false
+      adapt_dim: 65
       adapt_act: none
       adapt_use_separate: true
     env:
       dim: 1
-      act: none
-      is_spline: true
-      n_segments: 24
-      degree: 3
-      is_bounded: true
-      use_alpha_linear: true
+      act: sigmoid
+      is_spline: false
       adapt_dim: 0
   dropout: 0.0
   n_frames: 1501
   cnn_act: prelu
   fc_act: prelu
+  filter_cf_hz: 8.0

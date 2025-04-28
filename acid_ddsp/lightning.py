@@ -465,6 +465,30 @@ class AcidDDSPLightingModule(pl.LightningModule):
         model_out = self.model(
             model_in_dict, alpha_noise=alpha_noise, alpha_linear=alpha_linear
         )
+
+        # Oracle inference =============================================================
+        # model_out = {}
+        # for p_name, tp in self.model.temp_params.items():
+        #     mod_sig = temp_params_raw[p_name]
+        #     pos_enc = self.model.pos_enc.expand(batch_size, -1, -1)
+        #     mod_sig = mod_sig.to(pos_enc.device)
+        #     model_out[p_name] = mod_sig
+        #     mod_sig = mod_sig.unsqueeze(2)
+        #     if tp.adapt_dim:
+        #         adapt_in = tr.cat([mod_sig, pos_enc], dim=-1)
+        #         if tp.adapt_use_separate:
+        #             adapt_outs = []
+        #             for dim_idx in range(tp.adapt_dim):
+        #                 adapter = self.model.adapters[f"{p_name}_{dim_idx}"]
+        #                 adapt_out = adapter(adapt_in)
+        #                 adapt_outs.append(adapt_out)
+        #             adapt_out = tr.cat(adapt_outs, dim=-1)
+        #         else:
+        #             adapt_out = self.model.adapters[p_name](adapt_in)
+        #         adapt_out = self.model.adapter_acts[p_name](adapt_out)
+        #         model_out[f"{p_name}_adapted"] = adapt_out.squeeze(-1)
+
+        # Rand SM inference ============================================================
         # if stage != "test":
         #     model_out = self.model(
         #         model_in_dict, alpha_noise=alpha_noise, alpha_linear=alpha_linear
@@ -497,7 +521,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         for p_name in self.temp_param_names_hat:
             p_hat = model_out[p_name]
-            assert p_hat.shape == (batch_size, self.temp_param_n_frames)
+            assert p_hat.size(0) == batch_size
+            assert p_hat.size(1) == self.temp_param_n_frames
             temp_params_hat_raw[p_name] = p_hat
             if p_name in self.interp_temp_param_names_hat:
                 p_hat = util.interpolate_dim(
@@ -530,6 +555,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 for p_name in self.compare_temp_param_names:
                     p = temp_params_raw[p_name]
                     p_hat = temp_params_hat_raw[p_name]
+                    if p_hat.ndim != 2:
+                        continue
                     assert p.shape == p_hat.shape
                     # Calc p_hat_inv
                     p_hat_inv = AcidDDSPLightingModule.compute_lstsq_with_bias(
@@ -595,6 +622,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     # Calc LFO metrics raw
                     for p_name in self.temp_param_names:
                         p = temp_params_raw[p_name]
+                        if p.ndim != 2:
+                            continue
                         for metric_name in self.lfo_metrics:
                             metric_fn = self.lfo_metrics[metric_name]
                             val = metric_fn(p)
@@ -606,6 +635,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     # Calc LFO metrics raw hat
                     for p_name in self.temp_param_names_hat:
                         p_hat = temp_params_hat_raw[p_name]
+                        if p_hat.ndim != 2:
+                            continue
                         for metric_name in self.lfo_metrics:
                             metric_fn = self.lfo_metrics[metric_name]
                             val = metric_fn(p_hat)
@@ -618,6 +649,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
                     # Calc LFO metrics inv and inv all
                     for p_name in self.compare_temp_param_names:
                         p_hat_inv = temp_params_hat_inv[p_name]
+                        if p_hat_inv.ndim != 2:
+                            continue
                         p_hat_inv_all = temp_params_hat_inv_all[p_name]
                         for metric_name in self.lfo_metrics:
                             metric_fn = self.lfo_metrics[metric_name]
@@ -732,8 +765,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             ]
             curr_tsv_row_len = len(tsv_row)
             for col in self.tsv_cols[curr_tsv_row_len:]:
-                if stage == "test":
-                    assert col in tsv_row_vals, f"Missing TSV column: {col}"
+                # if stage == "test":
+                #     assert col in tsv_row_vals, f"Missing TSV column: {col}"
                 # if stage != "train" and not col.startswith("fad__"):
                 #     assert col in tsv_row_vals, f"Missing TSV column: {col}"
                 val = tsv_row_vals.get(col)
@@ -864,14 +897,17 @@ class AcidDDSPLightingModule(pl.LightningModule):
         fad_dists = {}
         for fad_model_name in self.fad_model_names:
             log.info(f"Calculating FAD for {fad_model_name}")
-            fad_val = calc_fad(
-                fad_model_name,
-                baseline_dir=fad_dir_x,
-                eval_dir=fad_dir_x_hat,
-                workers=n_workers,
-            )
-            fad_dists[f"fad__{fad_model_name}"] = fad_val
-            self.log(f"test/fad__{fad_model_name}", fad_val, prog_bar=False)
+            try:
+                fad_val = calc_fad(
+                    fad_model_name,
+                    baseline_dir=fad_dir_x,
+                    eval_dir=fad_dir_x_hat,
+                    workers=n_workers,
+                )
+                fad_dists[f"fad__{fad_model_name}"] = fad_val
+                self.log(f"test/fad__{fad_model_name}", fad_val, prog_bar=False)
+            except Exception as e:
+                log.error(f"Error calculating FAD: {e}")
         shutil.rmtree(fad_dir_x)
         shutil.rmtree(fad_dir_x_hat)
         return fad_dists

@@ -230,7 +230,7 @@ class Spectral2DCNN(nn.Module):
             out_dim = tp.dim
             mean_pooling_layer = nn.Identity()
             if tp.is_spline:
-                out_dim = 2  # For PiecewiseBezier2D
+                out_dim = 2 * tp.dim  # For PiecewiseBezier2D
                 mean_pooling_layer = MeanPooling(tp.n_segments * tp.degree + 1)
             n_hidden = (self.latent_dim + out_dim) // 2
             self.out_temp[name] = nn.Sequential(
@@ -332,8 +332,10 @@ class Spectral2DCNN(nn.Module):
             if tp_name is not None and name != tp_name:
                 continue
             if tp.is_spline:
-                assert tp.dim == 1
                 x = self.out_temp[name](latent)
+                bs = x.size(0)
+                # TODO(cm): check this doesn't mess up temporal order
+                x = x.view(-1, x.size(1), 2)
                 logits_x = x[:, :, 0]
                 cp_x = self.process_bezier_logits_x(
                     logits_x,
@@ -356,7 +358,7 @@ class Spectral2DCNN(nn.Module):
                     eps=self.spline_eps,
                 )
                 cp = tr.stack([cp_x, cp_y], dim=-1)
-                cp = cp.unsqueeze(1)
+                cp = cp.view(bs, tp.dim, tp.n_segments, tp.degree + 1, 2)
                 assert cp.ndim == 5
                 x = self.splines[name](cp=cp, cp_are_logits=False)
                 x = tr.swapaxes(x, 1, 2)
@@ -373,8 +375,12 @@ class Spectral2DCNN(nn.Module):
             if self.filter_cf_hz is not None:
                 h = self.filter
                 x = tr.swapaxes(x, 1, 2)
+                bs = x.size(0)
+                if x.size(1) != 1:
+                    x = tr.flatten(x, start_dim=0, end_dim=1).unsqueeze(1)
                 x = F.pad(x, (self.n_pad, self.n_pad, 0, 0), mode="replicate")
                 x = F.conv1d(x, h, padding="valid")
+                x = x.view(bs, -1, x.size(2))
                 x = tr.swapaxes(x, 1, 2)
 
             if self.interp_n_frames is not None:

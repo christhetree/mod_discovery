@@ -1,0 +1,4 @@
+class_path: acid_ddsp.synth_modules.DDSPHarmonicOsc
+init_args:
+  sr: 48000
+  n_harmonics: 100    # default value from original DDSP

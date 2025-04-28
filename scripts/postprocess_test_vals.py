@@ -4,6 +4,7 @@ from typing import Optional
 
 import pandas as pd
 from pandas import DataFrame
+from tqdm import tqdm
 
 from paths import OUT_DIR
 
@@ -31,31 +32,43 @@ def extract_test_vals(
 
 if __name__ == "__main__":
     tsv_names_and_paths = [
-        # ("spline", os.path.join(OUT_DIR, f"out_lfo_noise/mss__s24d3D__lfo__ase__ableton_13.tsv")),
-        # ("8_hz", os.path.join(OUT_DIR, f"out_lfo_noise/mss__frame_8_hz__lfo__ase__ableton_13.tsv")),
-        # ("frame", os.path.join(OUT_DIR, f"out_lfo_noise/mss__frame__lfo__ase__ableton_13.tsv")),
-        # ("spline_nn", os.path.join(OUT_DIR, f"out/mss__s24d3D_nn__lfo__ase__ableton_13.tsv")),
-        # ("8_hz_nn", os.path.join(OUT_DIR, f"out/mss__frame_8_hz_nn__lfo__ase__ableton_13.tsv")),
-        # ("frame_nn", os.path.join(OUT_DIR, f"out/mss__frame_nn__lfo__ase__ableton_13.tsv")),
+        ("spline_n", os.path.join(OUT_DIR, f"out_curr/lfo/noise/mss__s24d3D__lfo__ase__ableton_13.tsv")),
+        ("8_hz_n", os.path.join(OUT_DIR, f"out_curr/lfo/noise/mss__frame_8_hz__lfo__ase__ableton_13.tsv")),
+        ("frame_n", os.path.join(OUT_DIR, f"out_curr/lfo/noise/mss__frame__lfo__ase__ableton_13.tsv")),
+        ("spline", os.path.join(OUT_DIR, f"out_curr/lfo/mss__s24d3D_nn__lfo__ase__ableton_13.tsv")),
+        ("8_hz", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_8_hz_nn__lfo__ase__ableton_13.tsv")),
+        ("frame", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_nn__lfo__ase__ableton_13.tsv")),
 
-        ("spline", os.path.join(OUT_DIR, f"out_curr/sm/mss__s24d3D__sm_16_1024__ase__ableton_13.tsv")),
-        ("8_hz", os.path.join(OUT_DIR, f"out_curr/sm/mss__frame_8_hz__sm_16_1024__ase__ableton_13.tsv")),
-        ("frame", os.path.join(OUT_DIR, f"out_curr/sm/mss__frame__sm_16_1024__ase__ableton_13.tsv")),
-        ("rand", os.path.join(OUT_DIR, f"out_curr/sm/mss__s24d3D_rand__sm__ase__ableton_13.tsv")),
-        ("rand_sm", os.path.join(OUT_DIR, f"out_curr/sm/mss__s24d3D_rand__sm_16_1024__ase__ableton_13.tsv")),
-        # ("spline_nn", os.path.join(OUT_DIR, f"out/mss__s24d3D_nn__sm_16_1024__ase__ableton_13.tsv")),
-        # ("8_hz_nn", os.path.join(OUT_DIR, f"out/mss__frame_8_hz_nn__sm_16_1024__ase__ableton_13.tsv")),
-        # ("frame_nn", os.path.join(OUT_DIR, f"out/mss__frame_nn__sm_16_1024__ase__ableton_13.tsv")),
+        # ("oracle", os.path.join(OUT_DIR, f"out_curr/sm/mss__oracle__sm_16_1024__ase__ableton_13.tsv")),
+        # ("spline", os.path.join(OUT_DIR, f"out_curr/sm/mss__s24d3D__sm_16_1024__ase__ableton_13.tsv")),
+        # ("8_hz", os.path.join(OUT_DIR, f"out_curr/sm/mss__frame_8_hz__sm_16_1024__ase__ableton_13.tsv")),
+        # ("frame", os.path.join(OUT_DIR, f"out_curr/sm/mss__frame__sm_16_1024__ase__ableton_13.tsv")),
+        # ("rand", os.path.join(OUT_DIR, f"out_curr/sm/mss__s24d3D_rand__sm__ase__ableton_13.tsv")),
+        # ("rand_sm", os.path.join(OUT_DIR, f"out_curr/sm/mss__s24d3D_rand__sm_16_1024__ase__ableton_13.tsv")),
+        # ("spline_nn", os.path.join(OUT_DIR, f"out_curr/sm/no_noise/mss__s24d3D_nn__sm_16_1024__ase__ableton_13.tsv")),
+        # ("8_hz_nn", os.path.join(OUT_DIR, f"out_curr/sm/no_noise/mss__frame_8_hz_nn__sm_16_1024__ase__ableton_13.tsv")),
+        # ("frame_nn", os.path.join(OUT_DIR, f"out_curr/sm/no_noise/mss__frame_nn__sm_16_1024__ase__ableton_13.tsv")),
 
         # ("spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         # ("8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         # ("frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         # ("rand_sm", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_rand__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         # ("rand_adapt", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_rand_adapt__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        # ("shan", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        # ("shan_100", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_100_not_sep_s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("frame_8_hz_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_8_hz_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("shan_spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         # ("shan_8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         # ("shan_frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("shan_spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_s24d3D_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("shan_frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("ddsp_spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_s24d3D__sm__serum__BA_both_lfo_10.tsv")),
+        # ("ddsp_frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame__sm__serum__BA_both_lfo_10.tsv")),
+        # ("ddsp_frame_8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame_8_hz__sm__serum__BA_both_lfo_10.tsv")),
+        # ("ddsp_spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_s24d3D_gran__sm__serum__BA_both_lfo_10.tsv")),
+        # ("ddsp_frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame_gran__sm__serum__BA_both_lfo_10.tsv")),
+
+        # ("shan_100", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_100_not_sep_s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
 
         # ("spline", os.path.join(OUT_DIR, f"out_curr/fm_fold/mss__s24d3D__lfo__lfo__ase__fm_fold.tsv")),
         # ("spline_nn", os.path.join(OUT_DIR, f"out_curr/fm_fold/mss__s24d3D_nn__lfo__lfo__ase__fm_fold.tsv")),
@@ -66,7 +79,7 @@ if __name__ == "__main__":
     # wt_name = "basics__fm_fold__78_1024"
 
     test_df_s = []
-    for name, tsv_path in tsv_names_and_paths:
+    for name, tsv_path in tqdm(tsv_names_and_paths):
         test_df = extract_test_vals(name, tsv_path, wt_name=wt_name)
         test_df_s.append(test_df)
 
@@ -93,19 +106,26 @@ if __name__ == "__main__":
     # df = df[~df["name"].str.contains("audio__")]
     # df = df[~df["name"].str.contains("_inv__")]
     # df = df[~df["name"].str.contains("_inv_all")]
-    # df = df[~df["name"].str.contains("_d2")]
-    # df = df[~df["name"].str.contains("__ent")]
+    df = df[~df["name"].str.contains("__esr")]
+    df = df[~df["name"].str.contains("__mse")]
+    df = df[~df["name"].str.contains("__fft")]
+    df = df[~df["name"].str.contains("__pcc")]
+    df = df[~df["name"].str.contains("__cd")]
+    df = df[~df["name"].str.contains("__dtw")]
+    df = df[~df["name"].str.contains("_d2")]
+    df = df[~df["name"].str.contains("__ent")]
     # df = df[~df["name"].str.contains("__spec_ent")]
     # df = df[~df["name"].str.contains("__tv")]
     # df = df[~df["name"].str.contains("__tp")]
     # df = df[~df["name"].str.contains("__range_mean")]
-    # df = df[~df["name"].str.contains("__min_val")]
-    # df = df[~df["name"].str.contains("__max_val")]
+    df = df[~df["name"].str.contains("__min_val")]
+    df = df[~df["name"].str.contains("__max_val")]
     # df = df[~df["name"].str.contains("fad__")]
 
     # df = df[df["name"].str.contains("_inv_")]
     # df = df[df["name"].str.contains("_inv_all")]
     # df = df[df["name"].str.contains("audio__")]
+    # df = df[df["name"].str.contains("__esr")]
     # df = df[df["name"].str.contains("__l1")]
     # df = df[df["name"].str.contains("__pcc")]
     # df = df[df["name"].str.contains("__fd")]
@@ -117,6 +137,7 @@ if __name__ == "__main__":
     # df = df[df[0] == "frame"]
     # df = df[df[0] == "rand"]
     # df = df[df[2] == "frame"]
+    # df = df[df[0] == "oracle"]
     # df = df[(df[0] == "spline") | (df[1] == "spline")]
-    # print(df.to_string())
-    # print(f"len(df) = {len(df)}")
+    print(df.to_string())
+    print(f"len(df) = {len(df)}")
