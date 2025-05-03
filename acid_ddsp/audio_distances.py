@@ -11,6 +11,8 @@ from torch import nn
 from torch.nn import functional as F
 from torchaudio.transforms import MFCC
 
+import util
+
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
@@ -72,8 +74,10 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
 
         self.filter = None
         filter_sr = sr / hop_len
-        assert filter_sr == 80.0  # TODO(cm): tmp
-        n_filter = 11
+        # assert filter_sr == 80.0  # TODO(cm): tmp
+        # n_filter = 11
+        assert filter_sr == 500.0  # TODO(cm): tmp
+        n_filter = 63
         filter_support = 2 * (tr.arange(n_filter) - (n_filter - 1) / 2) / filter_sr
         filter_window = tr.blackman_window(n_filter, periodic=False)
         if filter_cf_hz is not None:
@@ -86,6 +90,7 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
         pass
 
     def maybe_filter_feature(self, x: T) -> T:
+        assert self.filter_cf_hz is not None  # TODO(cm): tmp
         if self.filter_cf_hz is not None:
             x = F.pad(
                 x,
@@ -95,7 +100,7 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
             x = F.conv1d(x.unsqueeze(1), self.filter, padding="valid").squeeze(1)
         return x
 
-    def forward(self, x: T, x_target: T) -> Dict[str, T]:
+    def forward(self, x: T, x_target: T, p_hats: Optional[T] = None) -> Dict[str, T]:
         assert x.ndim == 3
         assert x.shape == x_target.shape
         if self.average_channels:
@@ -108,15 +113,35 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
         x_target = self.calc_feature(x_target)
         assert x.ndim == x_target.ndim == 2
 
-        # from matplotlib import pyplot as plt
-        # plt.plot(x[0].cpu().numpy(), label="x")
-        # plt.plot(x_target[0].cpu().numpy(), label="x_target")
+
 
         assert self.filter_cf_hz is not None
         x_filtered = self.maybe_filter_feature(x)
         x_target_filtered = self.maybe_filter_feature(x_target)
 
-        # plt.plot(x_target[0].cpu().numpy(), label="x_target_f")
+        # from matplotlib import pyplot as plt
+        # plt.plot(x[0].cpu().numpy(), label="x")
+        # plt.plot(x_target[0].cpu().numpy(), label="x_target")
+        # plt.plot(x_target_filtered[0].cpu().numpy(), label="x_target_f")
+
+        p_hats_inv_all = None
+        p_hats_filtered_inv_all = None
+        x_target_frames = None
+        x_target_filtered_frames = None
+        if p_hats is not None:
+            n_frames = p_hats.size(2)
+            x_target_frames = util.interpolate_dim(x_target, n_frames, dim=1)
+            x_target_filtered_frames = util.interpolate_dim(x_target_filtered, n_frames, dim=1)
+            p_hats = p_hats.to(x_target_frames.device)
+            p_hats_inv_all = util.compute_lstsq_with_bias(
+                x_hat=p_hats, x=x_target_frames.unsqueeze(1)
+            ).squeeze(1)
+            p_hats_filtered_inv_all = util.compute_lstsq_with_bias(
+                x_hat=p_hats, x=x_target_filtered_frames.unsqueeze(1)
+            ).squeeze(1)
+
+        # plt.plot(p_hats_inv_all[0].cpu().numpy(), label="inv_all")
+        # plt.plot(p_hats_filtered_inv_all[0].cpu().numpy(), label="inv_all_f")
         # plt.title(f"{self.__class__.__name__} {self.filter_cf_hz} Hz")
         # plt.legend()
         # plt.show()
@@ -130,6 +155,27 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
             dist_filtered = dist_fn(x_filtered, x_target_filtered)
             dist_filtered = dist_filtered.mean()
             dists[f"{dist_name}__cf_{self.filter_cf_hz:.0f}_hz"] = dist_filtered
+            if p_hats is not None:
+                # try:
+                dist_inv_all = dist_fn(p_hats_inv_all, x_target_frames)
+                dist_filtered_inv_all = dist_fn(
+                    p_hats_filtered_inv_all, x_target_filtered_frames
+                )
+                # except AssertionError:
+                #     p_hats_inv_all = util.interpolate_dim(
+                #         p_hats_inv_all, dist_fn.n_frames, dim=1
+                #     )
+                #     p_hats_filtered_inv_all = util.interpolate_dim(
+                #         p_hats_filtered_inv_all, dist_fn.n_frames, dim=1
+                #     )
+                #     dist_inv_all = dist_fn(p_hats_inv_all, x_target)
+                #     dist_filtered_inv_all = dist_fn(
+                #         p_hats_filtered_inv_all, x_target_filtered
+                #     )
+                dist_inv_all = dist_inv_all.mean()
+                dists[f"{dist_name}__inv_all"] = dist_inv_all
+                dist_filtered_inv_all = dist_filtered_inv_all.mean()
+                dists[f"{dist_name}__cf_{self.filter_cf_hz:.0f}_hz__inv_all"] = dist_filtered_inv_all
         return dists
 
 

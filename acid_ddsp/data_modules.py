@@ -515,6 +515,7 @@ class SerumDataModule(pl.LightningDataModule):
             self.val_ds,
             batch_size=self.batch_size,
             shuffle=False,
+            # shuffle=True,
             num_workers=self.num_workers,
             drop_last=False,
         )

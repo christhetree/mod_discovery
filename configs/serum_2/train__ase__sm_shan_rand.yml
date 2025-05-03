@@ -1,6 +1,6 @@
 custom:
   project_name: acid_ddsp_2
-  model_name: mss__shan_s24d3D__sm_16_1024
+  model_name: mss__shan_s24d3D_rand__sm_16_1024
   dataset_name: serum__BA_both_lfo_10
   cpu_batch_size: 5
   use_wandb_cpu: false
@@ -9,7 +9,7 @@ custom:
 trainer:
   accelerator: gpu
   benchmark: false
-  devices: [1]
+  devices: [2]
   max_epochs: 30
   num_sanity_val_steps: 1
   accumulate_grad_batches: 1
@@ -62,4 +62,4 @@ model:
       - panns-cnn14-32k
       - panns-wavegram-logmel
 
-    run_name: mss__shan_s24d3D__sm_16_1024__serum__BA_both_lfo_10
+    run_name: mss__shan_s24d3D_rand__sm_16_1024__serum__BA_both_lfo_10

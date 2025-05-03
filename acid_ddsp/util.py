@@ -177,3 +177,51 @@ def scale_function(x: T, eps: float = 1e-7) -> T:
     Scale function as per DDSP paper Section B.5, equation 5
     """
     return 2 * (tr.sigmoid(x) ** tr.log(tr.tensor(10).to(x.device))) + eps
+
+
+def compute_lstsq_with_bias(x_hat: T, x: T) -> T:
+    """
+    Given x and x_hat of shape (bs, n_signals, n_samples), compute the best
+    linear combination matrix W and bias vector b (per batch) such that:
+        x ≈ W @ x_hat + b
+    using a batched least-squares approach.
+
+    Args:
+        x (Tensor): Target tensor of shape (bs, n_signals, n_samples).
+        x_hat (Tensor): Basis tensor of shape (bs, n_signals, n_samples).
+
+    Returns:
+
+    """
+    bs, n_signals, n_samples = x_hat.shape
+    assert x.ndim == 3
+    assert x.size(0) == bs
+    assert x.size(2) == n_samples
+
+    # Augment x_hat with a row of ones to account for the bias term.
+    # ones shape: (bs, 1, n_samples)
+    ones = tr.ones(bs, 1, n_samples, device=x_hat.device, dtype=x_hat.dtype)
+    x_hat_aug = tr.cat([x_hat, ones], dim=1)  # shape: (bs, n_signals+1, n_samples)
+
+    # Transpose the last two dimensions so that we set up the least-squares problem as:
+    # A @ (solution) ≈ B
+    A = x_hat_aug.transpose(1, 2)  # shape: (bs, n_samples, n_signals+1)
+    B = x.transpose(1, 2)  # shape: (bs, n_samples, n_signals)
+
+    # Solve the least-squares problem for the augmented system.
+    lstsq_result = tr.linalg.lstsq(A, B)
+    solution = lstsq_result.solution  # shape: (bs, n_signals+1, n_signals)
+
+    # The solution consists of weights and bias:
+    # The first n_signals rows correspond to the weight matrix (transposed), and the last row is the bias.
+    W_t = solution[:, :-1, :]  # shape: (bs, n_signals, n_signals)
+    bias_t = solution[:, -1:, :]  # shape: (bs, 1, n_signals)
+
+    # Transpose to obtain the weight matrix in the right orientation.
+    W = W_t.transpose(1, 2)  # shape: (bs, n_signals, n_signals)
+    bias = bias_t.transpose(1, 2)  # shape: (bs, n_signals, 1)
+
+    # Compute the predicted x using the estimated weights and bias.
+    # Note: bias is added to each sample in the time dimension.
+    x_pred = tr.bmm(W, x_hat) + bias  # shape: (bs, n_signals, n_samples)
+    return x_pred

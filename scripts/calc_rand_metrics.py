@@ -47,13 +47,13 @@ if __name__ == "__main__":
     x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__model.yml")
 
     dist_fn_s = {
-        "esr": ESRLoss(eps=eps),
+        # "esr": ESRLoss(eps=eps),
         "l1": nn.L1Loss(),
-        "mse": nn.MSELoss(),
-        "fft": FFTMagDist(ignore_dc=True),
+        # "mse": nn.MSELoss(),
+        # "fft": FFTMagDist(ignore_dc=True),
         "pcc": PCCDistance(),
-        "dtw": DTWDistance(),
-        "cd": ChamferDistance(n_frames),
+        # "dtw": DTWDistance(),
+        # "cd": ChamferDistance(n_frames),
         "fd": FrechetDistance(n_frames),
     }
     d1_dist_fn_s = {
@@ -65,20 +65,20 @@ if __name__ == "__main__":
         # "fd_d2": SecondDerivativeDistance(FrechetDistance(n_frames - 4)),
     }
     metric_fn_s = {
-        "range_mean": LFORangeMetric(agg_fn="mean"),
-        "min_val": LFORangeMetric(agg_fn="min_val"),
-        "max_val": LFORangeMetric(agg_fn="max_val"),
-        "ent": EntropyMetric(eps=eps, normalize=True),
-        "spec_ent": SpectralEntropyMetric(eps=eps, normalize=True),
-        "tv": TotalVariationMetric(eps=eps, normalize=True),
-        "tp": TurningPointsMetric(),
+        # "range_mean": LFORangeMetric(agg_fn="mean"),
+        # "min_val": LFORangeMetric(agg_fn="min_val"),
+        # "max_val": LFORangeMetric(agg_fn="max_val"),
+        # "ent": EntropyMetric(eps=eps, normalize=True),
+        # "spec_ent": SpectralEntropyMetric(eps=eps, normalize=True),
+        # "tv": TotalVariationMetric(eps=eps, normalize=True),
+        # "tp": TurningPointsMetric(),
     }
 
     for dist_name, dist_fn in dist_fn_s.items():
-        if dist_name in ["dtw", "cd", "fd"]:
+        if dist_name in ["dtw", "cd", "fd", "pcc"]:
             continue
         d1_dist_fn_s[f"{dist_name}_d1"] = FirstDerivativeDistance(dist_fn)
-        d2_dist_fn_s[f"{dist_name}_d2"] = SecondDerivativeDistance(dist_fn)
+        # d2_dist_fn_s[f"{dist_name}_d2"] = SecondDerivativeDistance(dist_fn)
     dist_fn_s.update(d1_dist_fn_s)
     dist_fn_s.update(d2_dist_fn_s)
 
@@ -107,7 +107,7 @@ if __name__ == "__main__":
                 metric = metric_fn(x_hat.squeeze(1))
                 results[f"lfo_hat__{metric_name}"].append(metric)
 
-        x_inv = AcidDDSPLightingModule.compute_lstsq_with_bias(x_hat, x)
+        x_inv = util.compute_lstsq_with_bias(x_hat, x)
         for idx in range(x_n_signals):
             curr_x = x[:, idx, :]
             curr_x_inv = x_inv[:, idx, :]
@@ -117,20 +117,21 @@ if __name__ == "__main__":
 
     log.info(f"n_iter: {n_iter}, bs: {bs}, n_frames: {n_frames}, ")
     log.info(f"x_n_signals: {x_n_signals}, x_hat_n_signals: {x_hat_n_signals}")
-    df_cols = ["name", "mean", "std", "min", "max", "n"]
+    df_cols = ["name", "mean", "ci95", "std", "min", "max", "n"]
     df_rows = [df_cols]
     for dist_name, dists in results.items():
         dists = tr.stack(dists, dim=0)
         n = dists.size(0)
         dist = dists.mean().item()
         dist_std = dists.std().item()
+        ci95 = 1.96 * dist_std / (n**0.5)
         dist_min = dists.min().item()
         dist_max = dists.max().item()
         # log.info(
         #     f"{dist_name:12}: {dist:6.4f}, std: {dist_std:6.4f}, "
         #     f"min: {dist_min:6.4f}, max: {dist_max:6.4f}, n: {n}"
         # )
-        df_rows.append([dist_name, dist, dist_std, dist_min, dist_max, n])
+        df_rows.append([dist_name, dist, ci95, dist_std, dist_min, dist_max, n])
 
     df = pd.DataFrame.from_records(df_rows)
     print(df.to_string())
@@ -208,3 +209,24 @@ if __name__ == "__main__":
 # 16         mse_d2_inv_3       0.000001           0.0     0.000001      0.000001  100
 # 17         fft_d2_inv_3       0.017821      0.001742     0.014164       0.02191  100
 # 18         pcc_d2_inv_3       0.000692      0.006115    -0.010805      0.019657  100
+
+
+
+
+#              0         1         2         3         4         5    6
+# 0         name      mean      ci95       std       min       max    n
+# 1           l1  0.234476  0.001512  0.007714  0.210253  0.252167  100
+# 2          pcc    0.0005  0.007182  0.036642 -0.058259  0.117849  100
+# 3           fd  0.564713  0.005613  0.028638  0.507373  0.642912  100
+# 4        l1_d1  0.008714  0.000026  0.000134  0.008405  0.009002  100
+# 5     l1_inv_1  0.138495  0.001536  0.007838   0.11929  0.154117  100
+# 6    pcc_inv_1  0.153447  0.004002  0.020418  0.097529  0.200308  100
+# 7     fd_inv_1  0.364707  0.004458  0.022746  0.291902  0.428538  100
+# 8  l1_d1_inv_1  0.001908  0.000039  0.000198  0.001328    0.0023  100
+
+#              0         1         2         3         4         5    6
+# 0         name      mean      ci95       std       min       max    n
+# 1     l1_inv_3  0.133125  0.001602  0.008175  0.112516  0.152996  100
+# 2    pcc_inv_3  0.303219  0.003942  0.020112  0.255647  0.342783  100
+# 3     fd_inv_3  0.347224  0.004619  0.023565  0.300457   0.40381  100
+# 4  l1_d1_inv_3  0.002826  0.000044  0.000223  0.002289  0.003438  100

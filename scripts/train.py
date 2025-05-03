@@ -3,8 +3,6 @@ import logging
 import os
 import warnings
 
-from wavetables import CONTINUOUS_ABLETON_WTS
-
 # Prevents a bug with PyTorch and CUDA_VISIBLE_DEVICES
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 # Prevent FADTK from going crazy with CPU usage
@@ -13,9 +11,8 @@ os.environ["OMP_NUM_THREADS"] = "4"
 import torch as tr
 
 from acid_ddsp.cli import CustomLightningCLI
-from acid_ddsp.paths import CONFIGS_DIR, WAVETABLES_DIR
+from acid_ddsp.paths import CONFIGS_DIR
 from acid_ddsp.synth_modules import WavetableOsc
-from acid_ddsp.wavetables import BAD_ABLETON_WTS
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -51,29 +48,32 @@ if __name__ == "__main__":
     # config_name = "synthetic_2/train__ase__sm_oracle.yml"
     # config_name = "synthetic_2/test__ase__sm_rand.yml"
 
-    # config_name = "serum_2/train__ase__sm.yml"
+    config_name = "serum_2/train__ase__sm.yml"
     # config_name = "serum_2/train__ase__sm_frame.yml"
     # config_name = "serum_2/train__ase__sm_frame_8_hz.yml"
     # config_name = "serum_2/train__ase__sm_rand.yml"
-    # config_name = "serum_2/train__ase__sm_gran.yml"
     # config_name = "serum_2/train__ase__sm_frame_gran.yml"
-    config_name = "serum_2/train__ase__sm_frame_8_hz_gran.yml"
+    # config_name = "serum_2/train__ase__sm_gran.yml"
+    # config_name = "serum_2/train__ase__sm_frame_8_hz_gran.yml"
 
     # config_name = "serum_2/train__ase__sm_shan.yml"
     # config_name = "serum_2/train__ase__sm_shan_frame.yml"
     # config_name = "serum_2/train__ase__sm_shan_frame_8_hz.yml"
-    # config_name = "serum_2/train__ase__sm_shan_gran.yml"
+    # config_name = "serum_2/train__ase__sm_shan_rand.yml"
     # config_name = "serum_2/train__ase__sm_shan_frame_gran.yml"
+    # config_name = "serum_2/train__ase__sm_shan_gran.yml"
 
     # config_name = "serum_2/train__ase__sm_ddsp.yml"
     # config_name = "serum_2/train__ase__sm_ddsp_frame.yml"
     # config_name = "serum_2/train__ase__sm_ddsp_frame_8_hz.yml"
-    # config_name = "serum_2/train__ase__sm_ddsp_gran.yml"
+    # config_name = "serum_2/train__ase__sm_ddsp_rand.yml"
     # config_name = "serum_2/train__ase__sm_ddsp_frame_gran.yml"
+    # config_name = "serum_2/train__ase__sm_ddsp_gran.yml"
 
-    # seeds = [42]
+    # seeds = [0]
     # seeds = list(range(10))
-    seeds = list(range(20))
+    # seeds = list(range(20))
+    seeds = list(range(20, 40))
     log.info(f"Running with seeds: {seeds}")
 
     # wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
@@ -124,6 +124,7 @@ if __name__ == "__main__":
                 synth_hat.register_module("add_synth_module", wt_module_hat)
 
         # use_wandb = idx == 0 and tr.cuda.is_available()
+        # use_wandb = True
         use_wandb = None
         cli.before_fit(use_wandb=use_wandb)
         cli.trainer.fit(model=cli.model, datamodule=cli.datamodule)

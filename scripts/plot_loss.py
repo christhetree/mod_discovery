@@ -60,9 +60,13 @@ def prepare_tsv_data(
         if len(filter_vals) == 1:
             tsv_col_names = ["filter_col", "filter_val"] + tsv_col_names
             print_tsv_vals = [filter_col, filter_vals[0]] + print_tsv_vals
+        log.debug(f"Number of rows before filtering: {len(df)}")
         df = df[df[filter_col].isin(filter_vals)]
+        log.debug(f"Number of rows after filtering: {len(df)}")
     if len(df) == 0:
         return {}
+
+    # df = df[df["seed"] == 1]
 
     # Filter out stage
     df = df[df["stage"] == stage]
@@ -272,13 +276,16 @@ if __name__ == "__main__":
     wt_names = [f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")]
     wt_names = sorted(wt_names)
 
-    # filtered_wt_names = []
-    # for wt_name in wt_names:
-    #     if any(wt_name.startswith(n) for n in CONTINUOUS_ABLETON_WTS):
-    #         filtered_wt_names.append(wt_name)
-    # wt_names = filtered_wt_names
+    filtered_wt_names = []
+    for wt_name in wt_names:
+        if any(wt_name.startswith(n) for n in CONTINUOUS_ABLETON_WTS):
+            filtered_wt_names.append(wt_name)
+    wt_names = filtered_wt_names
     wt_names = [None]
     filtered_wt_names = None
+
+    if filtered_wt_names is not None:
+        log.info(f"{len(filtered_wt_names)} filtered_wt_names: {filtered_wt_names}")
 
     tsv_names_and_paths = [
         # ("spline_n", os.path.join(OUT_DIR, f"out_curr/lfo/noise/mss__s24d3D__lfo__ase__ableton_13.tsv")),
@@ -288,39 +295,37 @@ if __name__ == "__main__":
         # ("8_hz", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_8_hz_nn__lfo__ase__ableton_13.tsv")),
         # ("frame", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_nn__lfo__ase__ableton_13.tsv")),
 
-        # ("oracle", os.path.join(OUT_DIR, f"out_curr/sm/mss__oracle__sm_16_1024__ase__ableton_13.tsv")),
-        # ("spline", os.path.join(OUT_DIR, f"out_curr/sm/mss__s24d3D__sm_16_1024__ase__ableton_13.tsv")),
-        # ("8_hz", os.path.join(OUT_DIR, f"out_curr/sm/mss__frame_8_hz__sm_16_1024__ase__ableton_13.tsv")),
         # ("frame", os.path.join(OUT_DIR, f"out_curr/sm/mss__frame__sm_16_1024__ase__ableton_13.tsv")),
-        # ("rand", os.path.join(OUT_DIR, f"out_curr/sm/mss__s24d3D_rand__sm__ase__ableton_13.tsv")),
+        # ("8_hz", os.path.join(OUT_DIR, f"out_curr/sm/mss__frame_8_hz__sm_16_1024__ase__ableton_13.tsv")),
+        # ("spline", os.path.join(OUT_DIR, f"out_curr/sm/mss__s24d3D__sm_16_1024__ase__ableton_13.tsv")),
+        # ("oracle", os.path.join(OUT_DIR, f"out_curr/sm/mss__oracle__sm_16_1024__ase__ableton_13.tsv")),
         # ("rand_sm", os.path.join(OUT_DIR, f"out_curr/sm/mss__s24d3D_rand__sm_16_1024__ase__ableton_13.tsv")),
+        # ("rand", os.path.join(OUT_DIR, f"out_curr/sm/mss__s24d3D_rand__sm__ase__ableton_13.tsv")),
         # ("spline_nn", os.path.join(OUT_DIR, f"out_curr/sm/no_noise/mss__s24d3D_nn__sm_16_1024__ase__ableton_13.tsv")),
         # ("8_hz_nn", os.path.join(OUT_DIR, f"out_curr/sm/no_noise/mss__frame_8_hz_nn__sm_16_1024__ase__ableton_13.tsv")),
         # ("frame_nn", os.path.join(OUT_DIR, f"out_curr/sm/no_noise/mss__frame_nn__sm_16_1024__ase__ableton_13.tsv")),
 
-        ("spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         ("frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        ("spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         ("rand_sm", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_rand__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("rand_adapt", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_rand_adapt__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("frame_8_hz_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_8_hz_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("shan_spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("shan_8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("shan_frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("shan_spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_s24d3D_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("shan_frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("ddsp_spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_s24d3D__sm__serum__BA_both_lfo_10.tsv")),
-        ("ddsp_frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame__sm__serum__BA_both_lfo_10.tsv")),
-        ("ddsp_frame_8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame_8_hz__sm__serum__BA_both_lfo_10.tsv")),
-        ("ddsp_spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_s24d3D_gran__sm__serum__BA_both_lfo_10.tsv")),
-        ("ddsp_frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame_gran__sm__serum__BA_both_lfo_10.tsv")),
+        # ("spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("8_hz_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_8_hz_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
 
-        # ("spline", os.path.join(OUT_DIR, f"out_curr/mss__s24d3D__sm_16_1024__ase__ableton_13.tsv")),
-        # ("cf_8", os.path.join(OUT_DIR, f"out_curr/mss__frame_8_hz__sm_16_1024__ase__ableton_13.tsv")),
-        # ("frame", os.path.join(OUT_DIR, f"out_curr/mss__frame__sm_16_1024__ase__ableton_13.tsv")),
-        # ("rand", os.path.join(OUT_DIR, f"out_curr/mss__s24d3D_rand__sm__ase__ableton_13.tsv")),
+        # ("shan_frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("shan_frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("shan_8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("shan_spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("shan_rand_sm", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_s24d3D_rand__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("shan_spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_s24d3D_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+
+        # ("ddsp_frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame_gran__sm__serum__BA_both_lfo_10.tsv")),
+        # ("ddsp_frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame__sm__serum__BA_both_lfo_10.tsv")),
+        # ("ddsp_8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame_8_hz__sm__serum__BA_both_lfo_10.tsv")),
+        # ("ddsp_spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_s24d3D__sm__serum__BA_both_lfo_10.tsv")),
+        # ("ddsp_rand_sm", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_s24d3D_rand__sm__serum__BA_both_lfo_10.tsv")),
+        # ("ddsp_spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_s24d3D_gran__sm__serum__BA_both_lfo_10.tsv")),
     ]
     # stage = "train"
     # stage = "val"
@@ -399,9 +404,11 @@ if __name__ == "__main__":
 
     suffix = ""
     # suffix = "__cf_8_hz"
+    # suffix = "__inv_all"
+    # suffix = "__cf_8_hz__inv_all"
 
-    # y_col = f"audio__{metric}{dist_fn}{deriv}{suffix}"
-    y_col = "loss"
+    y_col = f"audio__{metric}{dist_fn}{deriv}{suffix}"
+    # y_col = "loss"
 
     # FAD distances ====================================================================
     # y_col = "fad__clap-2023"
@@ -465,4 +472,10 @@ if __name__ == "__main__":
             plt.pause(0.20)
 
     df = pd.DataFrame(df_rows, columns=df_cols)
+    # const_factor = 10
+    # const_factor = 100
+    # const_factor = 1000
+    # df["y_mean"] = df["y_mean"] * const_factor
+    # df["y_95ci"] = df["y_95ci"] * const_factor
+    pd.set_option("display.float_format", lambda x: "%.2f" % x)
     print(df.to_string(index=False))

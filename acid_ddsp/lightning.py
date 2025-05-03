@@ -159,7 +159,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             n_mels=self.metrics_n_mels,
         )
         ad_tsv_cols.append("mfcc")
-        metrics_n_frames = self.ac.n_samples // self.metrics_hop_len + 1
+        # metrics_n_frames = self.ac.n_samples // self.metrics_hop_len + 1
+        # TODO(cm): add to config
+        metrics_n_frames = self.ac.n_samples // self.spectral_visualizer.hop_len + 1
         ad_dist_fn_s = {
             "esr": ESRLoss(eps=eps),
             "esr_d1": FirstDerivativeDistance(ESRLoss(eps=eps)),
@@ -189,8 +191,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
             cf_hz = 8.0  # TODO(cm): add to config
             self.audio_dists[feat_name] = feat_cls(
                 sr=self.ac.sr,
-                win_len=self.metrics_win_len,
-                hop_len=self.metrics_hop_len,
+                # win_len=self.metrics_win_len,
+                win_len=self.spectral_visualizer.n_fft,
+                # hop_len=self.metrics_hop_len,
+                hop_len=self.spectral_visualizer.hop_len,
                 dist_fn_s=ad_dist_fn_s,
                 average_channels=True,
                 filter_cf_hz=cf_hz,
@@ -198,6 +202,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             for dist_name in ad_dist_fn_s:
                 ad_tsv_cols.append(f"{feat_name}__{dist_name}")
                 ad_tsv_cols.append(f"{feat_name}__{dist_name}__cf_{cf_hz:.0f}_hz")
+                ad_tsv_cols.append(f"{feat_name}__{dist_name}__inv_all")
+                ad_tsv_cols.append(f"{feat_name}__{dist_name}__cf_{cf_hz:.0f}_hz__inv_all")
         ad_tsv_cols = [f"audio__{v}" for v in ad_tsv_cols]
 
         # LFO distances ================================================================
@@ -446,7 +452,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # TSV logging
         tsv_row_vals = {}
 
-        # Perform model forward pass ===================================================
+        # Calculate alpha =========--===================================================
         alpha_linear = None
         alpha_noise = None
         # Use alpha_linear and alpha_noise for train and val, but not test
@@ -462,6 +468,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             )
             alpha_linear = max(alpha_linear, 0.0)
             self.log(f"{stage}/alpha_linear", alpha_linear, prog_bar=False)
+
+        # Regular inference ============================================================
         model_out = self.model(
             model_in_dict, alpha_noise=alpha_noise, alpha_linear=alpha_linear
         )
@@ -559,12 +567,12 @@ class AcidDDSPLightingModule(pl.LightningModule):
                         continue
                     assert p.shape == p_hat.shape
                     # Calc p_hat_inv
-                    p_hat_inv = AcidDDSPLightingModule.compute_lstsq_with_bias(
+                    p_hat_inv = util.compute_lstsq_with_bias(
                         x_hat=p_hat.unsqueeze(1), x=p.unsqueeze(1)
                     ).squeeze(1)
                     temp_params_hat_inv[p_name] = p_hat_inv
                     # Calc p_hat_inv_all
-                    p_hat_inv_all = AcidDDSPLightingModule.compute_lstsq_with_bias(
+                    p_hat_inv_all = util.compute_lstsq_with_bias(
                         x_hat=p_hats, x=p.unsqueeze(1)
                     ).squeeze(1)
                     temp_params_hat_inv_all[p_name] = p_hat_inv_all
@@ -726,6 +734,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # Compute audio distances ======================================================
         audio_dist_vals = {}
+        p_hats = tr.stack([p for p in temp_params_hat_raw.values()], dim=1)
+        # p_hats = None
         if stage != "train":
             with tr.no_grad():
                 for feat_name, feat_fn in self.audio_dists.items():
@@ -733,7 +743,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
                         if feat_name in ["rms", "sc", "sb", "sf"]:
                             # Skip expensive distances during validation
                             continue
-                    vals = feat_fn(x_hat, x)
+                    if feat_name in ["rms", "sc", "sb", "sf"]:
+                        vals = feat_fn(x_hat, x, p_hats)
+                    else:
+                        vals = feat_fn(x_hat, x)
                     if isinstance(vals, dict):
                         vals = {f"{feat_name}__{k}": v for k, v in vals.items()}
                     else:
@@ -826,54 +839,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 f"\n - synth_opt initial LR: {self.synth_opt.defaults['lr']:.6f}"
             )
             return self.model_opt, self.synth_opt
-
-    @staticmethod
-    def compute_lstsq_with_bias(x_hat: T, x: T) -> T:
-        """
-        Given x and x_hat of shape (bs, n_signals, n_samples), compute the best
-        linear combination matrix W and bias vector b (per batch) such that:
-            x ≈ W @ x_hat + b
-        using a batched least-squares approach.
-
-        Args:
-            x (Tensor): Target tensor of shape (bs, n_signals, n_samples).
-            x_hat (Tensor): Basis tensor of shape (bs, n_signals, n_samples).
-
-        Returns:
-
-        """
-        bs, n_signals, n_samples = x_hat.shape
-        assert x.ndim == 3
-        assert x.size(0) == bs
-        assert x.size(2) == n_samples
-
-        # Augment x_hat with a row of ones to account for the bias term.
-        # ones shape: (bs, 1, n_samples)
-        ones = tr.ones(bs, 1, n_samples, device=x_hat.device, dtype=x_hat.dtype)
-        x_hat_aug = tr.cat([x_hat, ones], dim=1)  # shape: (bs, n_signals+1, n_samples)
-
-        # Transpose the last two dimensions so that we set up the least-squares problem as:
-        # A @ (solution) ≈ B
-        A = x_hat_aug.transpose(1, 2)  # shape: (bs, n_samples, n_signals+1)
-        B = x.transpose(1, 2)  # shape: (bs, n_samples, n_signals)
-
-        # Solve the least-squares problem for the augmented system.
-        lstsq_result = tr.linalg.lstsq(A, B)
-        solution = lstsq_result.solution  # shape: (bs, n_signals+1, n_signals)
-
-        # The solution consists of weights and bias:
-        # The first n_signals rows correspond to the weight matrix (transposed), and the last row is the bias.
-        W_t = solution[:, :-1, :]  # shape: (bs, n_signals, n_signals)
-        bias_t = solution[:, -1:, :]  # shape: (bs, 1, n_signals)
-
-        # Transpose to obtain the weight matrix in the right orientation.
-        W = W_t.transpose(1, 2)  # shape: (bs, n_signals, n_signals)
-        bias = bias_t.transpose(1, 2)  # shape: (bs, n_signals, 1)
-
-        # Compute the predicted x using the estimated weights and bias.
-        # Note: bias is added to each sample in the time dimension.
-        x_pred = tr.bmm(W, x_hat) + bias  # shape: (bs, n_signals, n_samples)
-        return x_pred
 
     def calc_fad_distances(
         self, x_hat: T, x: T, n_workers: int = 0
