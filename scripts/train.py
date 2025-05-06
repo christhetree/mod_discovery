@@ -3,6 +3,8 @@ import logging
 import os
 import warnings
 
+from wavetables import CONTINUOUS_ABLETON_WTS
+
 # Prevents a bug with PyTorch and CUDA_VISIBLE_DEVICES
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 # Prevent FADTK from going crazy with CPU usage
@@ -11,7 +13,7 @@ os.environ["OMP_NUM_THREADS"] = "4"
 import torch as tr
 
 from acid_ddsp.cli import CustomLightningCLI
-from acid_ddsp.paths import CONFIGS_DIR
+from acid_ddsp.paths import CONFIGS_DIR, OUT_DIR, WAVETABLES_DIR, MODELS_DIR
 from acid_ddsp.synth_modules import WavetableOsc
 
 logging.basicConfig()
@@ -30,25 +32,31 @@ os.makedirs("wandb_logs", exist_ok=True)
 
 if __name__ == "__main__":
     save_dir = None
+    config_basename = None
 
     # config_name = "synthetic_2/train.yml"
 
     # config_name = "synthetic_2/train__ase__lfo.yml"
     # config_name = "synthetic_2/train__ase__lfo_frame.yml"
     # config_name = "synthetic_2/train__ase__lfo_frame_8_hz.yml"
+    # config_name = "synthetic_2/test_vital__ase__lfo.yml"
+    # config_name = "synthetic_2/test_vital__ase__lfo_frame.yml"
+    # config_name = "synthetic_2/test_vital__ase__lfo_frame_8_hz.yml"
+
+    # config_basename = os.path.basename(config_name)[:-4]
+    # config_basename = config_basename.replace("test_vital", "train")
 
     # save_dir = config_name.split("/")[-1][:-4]
     # os.makedirs(save_dir, exist_ok=True)
 
-    # config_name = "synthetic_2/train__ase__sm.yml"
-    # config_name = "synthetic_2/train__ase__sm_nn.yml"
+    config_name = "synthetic_2/train__ase__sm.yml"
     # config_name = "synthetic_2/train__ase__sm_frame.yml"
     # config_name = "synthetic_2/train__ase__sm_frame_8_hz.yml"
     # config_name = "synthetic_2/train__ase__sm_rand.yml"
     # config_name = "synthetic_2/train__ase__sm_oracle.yml"
     # config_name = "synthetic_2/test__ase__sm_rand.yml"
 
-    config_name = "serum_2/train__ase__sm.yml"
+    # config_name = "serum_2/train__ase__sm.yml"
     # config_name = "serum_2/train__ase__sm_frame.yml"
     # config_name = "serum_2/train__ase__sm_frame_8_hz.yml"
     # config_name = "serum_2/train__ase__sm_rand.yml"
@@ -71,24 +79,24 @@ if __name__ == "__main__":
     # config_name = "serum_2/train__ase__sm_ddsp_gran.yml"
 
     # seeds = [0]
-    # seeds = list(range(10))
+    seeds = list(range(10))
     # seeds = list(range(20))
-    seeds = list(range(20, 40))
+    # seeds = list(range(20, 40))
     log.info(f"Running with seeds: {seeds}")
 
-    # wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
-    # wt_names = [f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")]
-    # filtered_wt_names = []
-    # for wt_name in wt_names:
-    #     if any(wt_name.startswith(n) for n in CONTINUOUS_ABLETON_WTS):
-    #         filtered_wt_names.append(wt_name)
-    # wt_paths = [os.path.join(wt_dir, f"{wt_name}.pt") for wt_name in filtered_wt_names]
-    # wt_paths = sorted(wt_paths)
-    # for wt_path in wt_paths:
-    #     wt_name = os.path.basename(wt_path)
-    #     log.info(wt_name)
-    # log.info(f"\nWavetable directory: {wt_dir}\nFound {len(wt_paths)} wavetables")
-    wt_paths = [None]
+    wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
+    wt_names = [f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")]
+    filtered_wt_names = []
+    for wt_name in wt_names:
+        if any(wt_name.startswith(n) for n in CONTINUOUS_ABLETON_WTS):
+            filtered_wt_names.append(wt_name)
+    wt_paths = [os.path.join(wt_dir, f"{wt_name}.pt") for wt_name in filtered_wt_names]
+    wt_paths = sorted(wt_paths)
+    for wt_path in wt_paths:
+        wt_name = os.path.basename(wt_path)
+        log.info(wt_name)
+    log.info(f"\nWavetable directory: {wt_dir}\nFound {len(wt_paths)} wavetables")
+    # wt_paths = [None]
 
     config_path = os.path.join(CONFIGS_DIR, config_name)
 
@@ -137,3 +145,21 @@ if __name__ == "__main__":
 
         cli.trainer.test(model=cli.model, datamodule=cli.datamodule, ckpt_path="best")
         # cli.trainer.test(model=cli.model, datamodule=cli.datamodule)
+
+        # def get_ckpt_path(idx: int, config_basename: str) -> str:
+        #     ckpt_dir = os.path.join(
+        #         MODELS_DIR,
+        #         config_basename,
+        #         "acid_ddsp_2",
+        #         f"version_{idx}/checkpoints/",
+        #     )
+        #     ckpt_files = [
+        #         f for f in os.listdir(ckpt_dir) if f.endswith(".ckpt")
+        #     ]
+        #     assert len(ckpt_files) == 1, f"Found {len(ckpt_files)} files in {ckpt_dir}"
+        #     ckpt_path = os.path.join(ckpt_dir, ckpt_files[0])
+        #     log.info(f"Checkpoint path: {ckpt_path}")
+        #     return ckpt_path
+        #
+        # ckpt_path = get_ckpt_path(idx, config_basename)
+        # cli.trainer.test(model=cli.model, datamodule=cli.datamodule, ckpt_path=ckpt_path)

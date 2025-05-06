@@ -1,0 +1,2 @@
+class_path: acid_ddsp.modulations.ModSignalGenRandomUniformFrame
+init_args: {}

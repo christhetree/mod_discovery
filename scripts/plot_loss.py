@@ -50,6 +50,10 @@ def prepare_tsv_data(
     filter_vals: Optional[List[str]] = None,
     allow_var_n: bool = False,
 ) -> Dict[str, np.ndarray]:
+    y_col = y_col.replace("add_lfo_hat__", "")
+    y_col = y_col.replace("sub_lfo_hat__", "")
+    y_col = y_col.replace("env_hat__", "")
+
     tsv_col_names = ["stage", "x_col", "y_col"]
     print_tsv_vals = [stage, x_col, y_col]
     df = pd.read_csv(tsv_path, sep="\t", index_col=False)
@@ -97,6 +101,7 @@ def prepare_tsv_data(
         x_val_mins.append(x_val_min)
         x_val_maxs.append(x_val_max)
         x_val_ranges.append(x_val_max - x_val_min)
+        group[y_col] = (group[f"add_lfo_hat__{y_col}"] + group[f"sub_lfo_hat__{y_col}"] + group[f"env_hat__{y_col}"]) / 3.0
         # Take mean of y values if there are multiple for each x value (e.g. val / test or grad accumulation)
         grouped_x = group.groupby(x_col).agg({y_col: "mean"})
         for x_val, y_val in grouped_x.itertuples():
@@ -282,7 +287,7 @@ if __name__ == "__main__":
             filtered_wt_names.append(wt_name)
     wt_names = filtered_wt_names
     wt_names = [None]
-    filtered_wt_names = None
+    # filtered_wt_names = None
 
     if filtered_wt_names is not None:
         log.info(f"{len(filtered_wt_names)} filtered_wt_names: {filtered_wt_names}")
@@ -294,6 +299,12 @@ if __name__ == "__main__":
         # ("spline", os.path.join(OUT_DIR, f"out_curr/lfo/mss__s24d3D_nn__lfo__ase__ableton_13.tsv")),
         # ("8_hz", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_8_hz_nn__lfo__ase__ableton_13.tsv")),
         # ("frame", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_nn__lfo__ase__ableton_13.tsv")),
+        ("frame_2", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_nn__lfo__ase__ableton_13__test.tsv")),
+        ("8_hz_2", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_8_hz_nn__lfo__ase__ableton_13__test.tsv")),
+        ("spline_2", os.path.join(OUT_DIR, f"out_curr/lfo/mss__s24d3D_nn__lfo__ase__ableton_13__test.tsv")),
+        ("frame_v", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_nn__lfo__ase__ableton_13__vital_curves.tsv")),
+        ("8_hz_v", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_8_hz_nn__lfo__ase__ableton_13__vital_curves.tsv")),
+        ("spline_v", os.path.join(OUT_DIR, f"out_curr/lfo/mss__s24d3D_nn__lfo__ase__ableton_13__vital_curves.tsv")),
 
         # ("frame", os.path.join(OUT_DIR, f"out_curr/sm/mss__frame__sm_16_1024__ase__ableton_13.tsv")),
         # ("8_hz", os.path.join(OUT_DIR, f"out_curr/sm/mss__frame_8_hz__sm_16_1024__ase__ableton_13.tsv")),
@@ -306,10 +317,10 @@ if __name__ == "__main__":
         # ("frame_nn", os.path.join(OUT_DIR, f"out_curr/sm/no_noise/mss__frame_nn__sm_16_1024__ase__ableton_13.tsv")),
 
         # ("frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        ("rand_sm", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_rand__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
+        # ("rand_sm", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_rand__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         # ("spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         # ("8_hz_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_8_hz_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
 
@@ -338,8 +349,8 @@ if __name__ == "__main__":
     # lfo = "sub_lfo"
     # lfo = "env"
 
-    # inv = ""
-    inv = "_inv"
+    inv = ""
+    # inv = "_inv"
     # inv = "_inv_all"
 
     # dist_fn = "__esr"
@@ -372,12 +383,12 @@ if __name__ == "__main__":
     # metric = "range_mean"
     # metric = "min_val"
     # metric = "max_val"
-    metric = "ent"
-    # metric = "spec_ent"
+    # metric = "ent"
+    metric = "spec_ent"
     # metric = "tv"
     # metric = "tp"
 
-    # y_col = f"{lfo}{hat}{inv}__{metric}"
+    y_col = f"{lfo}{hat}{inv}__{metric}"
 
     # Audio distances ==================================================================
     # metric = "mss"
@@ -407,7 +418,7 @@ if __name__ == "__main__":
     # suffix = "__inv_all"
     # suffix = "__cf_8_hz__inv_all"
 
-    y_col = f"audio__{metric}{dist_fn}{deriv}{suffix}"
+    # y_col = f"audio__{metric}{dist_fn}{deriv}{suffix}"
     # y_col = "loss"
 
     # FAD distances ====================================================================
@@ -472,10 +483,14 @@ if __name__ == "__main__":
             plt.pause(0.20)
 
     df = pd.DataFrame(df_rows, columns=df_cols)
+    # const_factor = 0.001
+    # const_factor = 0.01
+    # const_factor = 0.1
     # const_factor = 10
     # const_factor = 100
     # const_factor = 1000
+    # const_factor = 10000
     # df["y_mean"] = df["y_mean"] * const_factor
     # df["y_95ci"] = df["y_95ci"] * const_factor
-    pd.set_option("display.float_format", lambda x: "%.2f" % x)
+    # pd.set_option("display.float_format", lambda x: "%.3f" % x)
     print(df.to_string(index=False))

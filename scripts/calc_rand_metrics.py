@@ -43,18 +43,20 @@ if __name__ == "__main__":
     x_n_signals = 1
     x_hat_n_signals = 1
     # x_hat_n_signals = 3
-    x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier_1d.yml")
-    x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__model.yml")
+    # x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__bezier_1d.yml")
+    x_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__vital_curves.yml")
+    # x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__model.yml")
+    x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__rand_uniform_frame.yml")
 
     dist_fn_s = {
         # "esr": ESRLoss(eps=eps),
-        "l1": nn.L1Loss(),
+        # "l1": nn.L1Loss(),
         # "mse": nn.MSELoss(),
         # "fft": FFTMagDist(ignore_dc=True),
-        "pcc": PCCDistance(),
+        # "pcc": PCCDistance(),
         # "dtw": DTWDistance(),
         # "cd": ChamferDistance(n_frames),
-        "fd": FrechetDistance(n_frames),
+        # "fd": FrechetDistance(n_frames),
     }
     d1_dist_fn_s = {
         # "cd_d1": FirstDerivativeDistance(ChamferDistance(n_frames - 2)),
@@ -65,13 +67,13 @@ if __name__ == "__main__":
         # "fd_d2": SecondDerivativeDistance(FrechetDistance(n_frames - 4)),
     }
     metric_fn_s = {
-        # "range_mean": LFORangeMetric(agg_fn="mean"),
-        # "min_val": LFORangeMetric(agg_fn="min_val"),
-        # "max_val": LFORangeMetric(agg_fn="max_val"),
-        # "ent": EntropyMetric(eps=eps, normalize=True),
-        # "spec_ent": SpectralEntropyMetric(eps=eps, normalize=True),
-        # "tv": TotalVariationMetric(eps=eps, normalize=True),
-        # "tp": TurningPointsMetric(),
+        "range_mean": LFORangeMetric(agg_fn="mean"),
+        "min_val": LFORangeMetric(agg_fn="min_val"),
+        "max_val": LFORangeMetric(agg_fn="max_val"),
+        "ent": EntropyMetric(eps=eps, normalize=True),
+        "spec_ent": SpectralEntropyMetric(eps=eps, normalize=True),
+        "tv": TotalVariationMetric(eps=eps, normalize=True),
+        "tp": TurningPointsMetric(),
     }
 
     for dist_name, dist_fn in dist_fn_s.items():
@@ -107,13 +109,13 @@ if __name__ == "__main__":
                 metric = metric_fn(x_hat.squeeze(1))
                 results[f"lfo_hat__{metric_name}"].append(metric)
 
-        x_inv = util.compute_lstsq_with_bias(x_hat, x)
-        for idx in range(x_n_signals):
-            curr_x = x[:, idx, :]
-            curr_x_inv = x_inv[:, idx, :]
-            for dist_name, dist_fn in dist_fn_s.items():
-                dist = dist_fn(curr_x_inv, curr_x)
-                results[f"{dist_name}_inv_{x_hat_n_signals}"].append(dist)
+        # x_inv = util.compute_lstsq_with_bias(x_hat, x)
+        # for idx in range(x_n_signals):
+        #     curr_x = x[:, idx, :]
+        #     curr_x_inv = x_inv[:, idx, :]
+        #     for dist_name, dist_fn in dist_fn_s.items():
+        #         dist = dist_fn(curr_x_inv, curr_x)
+        #         results[f"{dist_name}_inv_{x_hat_n_signals}"].append(dist)
 
     log.info(f"n_iter: {n_iter}, bs: {bs}, n_frames: {n_frames}, ")
     log.info(f"x_n_signals: {x_n_signals}, x_hat_n_signals: {x_hat_n_signals}")
@@ -230,3 +232,56 @@ if __name__ == "__main__":
 # 2    pcc_inv_3  0.303219  0.003942  0.020112  0.255647  0.342783  100
 # 3     fd_inv_3  0.347224  0.004619  0.023565  0.300457   0.40381  100
 # 4  l1_d1_inv_3  0.002826  0.000044  0.000223  0.002289  0.003438  100
+
+
+
+
+# Vital curves, random spline model
+#        0         1         2         3         4         5    6
+# 0   name      mean      ci95       std       min       max    n
+# 1     l1  0.335006  0.001932  0.009855  0.313744  0.367837  100
+# 2    pcc  0.000402   0.00667  0.034033 -0.098051  0.073261  100
+# 3     fd  0.710313   0.00532  0.027144  0.645413   0.77754  100
+# 4  l1_d1  0.008958  0.000037  0.000191   0.00857  0.009527  100
+
+#                       0         1         2         3         4         5    6
+# 0                  name      mean      ci95       std       min       max    n
+# 1       lfo__range_mean  0.905662  0.005213  0.026595   0.83306  0.963623  100
+# 2   lfo_hat__range_mean  0.909797  0.001666  0.008501  0.891698  0.931125  100
+# 3          lfo__min_val       0.0       0.0       0.0       0.0       0.0  100
+# 4      lfo_hat__min_val  0.005197  0.000533  0.002717  0.000394  0.012243  100
+# 5          lfo__max_val       1.0       0.0       0.0       1.0       1.0  100
+# 6      lfo_hat__max_val  0.995247  0.000525  0.002679  0.986449  0.998949  100
+# 7              lfo__ent  0.952599  0.001054  0.005377  0.940962  0.965042  100
+# 8          lfo_hat__ent  0.986448  0.000109  0.000557  0.985066  0.988123  100
+# 9         lfo__spec_ent  0.463675  0.006448  0.032897  0.375649  0.527341  100
+# 10    lfo_hat__spec_ent  0.559849  0.001378  0.007032  0.544765  0.577993  100
+# 11              lfo__tv  0.001689  0.000055  0.000282   0.00109   0.00231  100
+# 12          lfo_hat__tv  0.009503  0.000025  0.000125  0.009104  0.009795  100
+# 13              lfo__tp  0.001203  0.000064  0.000326  0.000459  0.001897  100
+# 14          lfo_hat__tp  0.026876  0.000084  0.000428  0.025871  0.028123  100
+
+# Vital curves, random uniform frame
+#        0         1         2         3         4         5    6
+# 0   name      mean      ci95       std       min       max    n
+# 1     l1  0.369138  0.001065  0.005433  0.354514  0.384839  100
+# 2    pcc  0.000194  0.000792  0.004038 -0.010752  0.011774  100
+# 3     fd  0.776771  0.005031   0.02567  0.697766   0.83272  100
+# 4  l1_d1  0.166795  0.000131  0.000669  0.164749   0.16853  100
+
+#                       0         1         2         3         4         5    6
+# 0                  name      mean      ci95       std       min       max    n
+# 1       lfo__range_mean  0.909942  0.005201  0.026537  0.841509  0.961764  100
+# 2   lfo_hat__range_mean  0.998657  0.000031   0.00016  0.998206  0.998996  100
+# 3          lfo__min_val       0.0       0.0       0.0       0.0       0.0  100
+# 4      lfo_hat__min_val  0.000017  0.000003  0.000016       0.0  0.000078  100
+# 5          lfo__max_val       1.0       0.0       0.0       1.0       1.0  100
+# 6      lfo_hat__max_val  0.999975  0.000005  0.000026  0.999861  0.999999  100
+# 7              lfo__ent  0.953454  0.001141  0.005824  0.940052  0.968404  100
+# 8          lfo_hat__ent    0.9735  0.000034  0.000175  0.972991  0.974012  100
+# 9         lfo__spec_ent  0.468449  0.006489  0.033109  0.396999  0.554188  100
+# 10    lfo_hat__spec_ent  0.935404  0.000052  0.000267  0.934797  0.936131  100
+# 11              lfo__tv  0.001692  0.000054  0.000277  0.001156  0.002401  100
+# 12          lfo_hat__tv   0.33361  0.000254  0.001298  0.329906  0.336125  100
+# 13              lfo__tp   0.00121  0.000058  0.000298  0.000584  0.002022  100
+# 14          lfo_hat__tp  0.666794  0.000362  0.001845  0.661045  0.670051  100

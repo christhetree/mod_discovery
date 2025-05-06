@@ -566,7 +566,7 @@ lightning_logs/
 wandb_logs/
 scratch.py
 /ableton
-#/models
+/models
 
 /train__ase_lfo
 /train__ase_lfo_frame

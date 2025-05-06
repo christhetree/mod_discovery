@@ -3,11 +3,12 @@ Render modulation curve from Vital based on given points and power value.
 Point values must be between 0 and 1.
 """
 import os
+from typing import List
 
 import torch
 import torch as tr
 
-from paths import DATA_DIR
+from paths import DATA_DIR, OUT_DIR
 
 
 def power_scale(value, power):
@@ -64,6 +65,30 @@ def render(
     return buffer
 
 
+def calc_range_and_pct_flat(points: List[float], eps: float = 0.01) -> (float, float):
+    assert len(points) >= 2
+    assert len(points) % 2 == 0
+    points_x = points[0::2]
+    points_y = points[1::2]
+    assert points_x[0] == 0.0
+    assert points_x[-1] == 1.0, f"points_x[-1]: {points_x[-1]} != 1.0"
+    min_y = min(points_y)
+    max_y = max(points_y)
+    range_y = max_y - min_y
+    assert min_y >= 0.0
+    assert max_y <= 1.0
+    flat_frac = 0.0
+    for idx in range(len(points_y) - 1):
+        curr_x = points_x[idx]
+        next_x = points_x[idx + 1]
+        curr_y = points_y[idx]
+        next_y = points_y[idx + 1]
+        if abs(curr_y - next_y) < eps:
+            flat_frac += (next_x - curr_x)
+
+    return range_y, flat_frac
+
+
 if __name__ == "__main__":
     import json
     curves_path = os.path.join(DATA_DIR, "vital_curves.json")
@@ -71,14 +96,22 @@ if __name__ == "__main__":
     with open(curves_path, "r") as f:
         curves = json.load(f)
 
-    idx = 10
     resolution = 1501
     counter = 0
 
+    rendered_curves = []
+
     for curve in curves:
         n_points = curve["num_points"]
-        # if n_points > 25:
-        #     continue
+        points = curve["points"]
+        y_range, flat_frac = calc_range_and_pct_flat(points)
+        if n_points > 25:
+            continue
+        if y_range < 0.5:
+            continue
+        if flat_frac > 0.5:
+            continue
+
         plot = render(curve, resolution=resolution)
 
         x = plot.unsqueeze(0)
@@ -87,15 +120,19 @@ if __name__ == "__main__":
         ddiffs = diffs[:, 1:] * diffs[:, :-1]
         turning_points = (ddiffs < 0).sum(dim=1).float()
         turning_points = turning_points.squeeze().long().item()
+        print(f"n_points: {n_points}, turning_points: {turning_points}, y_range: {y_range:.3f}, flat_frac: {flat_frac:.3f}")
 
-        print(f"n_points: {n_points}, turning_points: {turning_points}")
+        # plot = plot.numpy()
+        # import matplotlib.pyplot as plt
+        # plt.plot(plot)
+        # plt.title(f"n_points: {n_points}, turning_points: {turning_points}, y_range: {y_range:.3f}, flat_frac: {flat_frac:.3f}")
+        # plt.ylim(0.0, 1.0)
+        # plt.show()
+        # plt.pause(0.20)
 
-        plot = plot.numpy()
-        import matplotlib.pyplot as plt
-        plt.plot(plot)
-        plt.title(f"n_points={n_points}, turning_points={turning_points}")
-        plt.show()
-        plt.pause(0.20)
+        rendered_curves.append(plot)
         counter += 1
 
+    c = torch.stack(rendered_curves, dim=0)
+    tr.save(c, os.path.join(OUT_DIR, f"vital_curves__{c.size(0)}_{c.size(1)}.pt"))
     print(f"Finished rendering {counter} curves.")

@@ -39,6 +39,12 @@ if __name__ == "__main__":
         # ("spline", os.path.join(OUT_DIR, f"out_curr/lfo/mss__s24d3D_nn__lfo__ase__ableton_13.tsv")),
         # ("8_hz", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_8_hz_nn__lfo__ase__ableton_13.tsv")),
         # ("frame", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_nn__lfo__ase__ableton_13.tsv")),
+        ("spline", os.path.join(OUT_DIR, f"out_curr/lfo/mss__s24d3D_nn__lfo__ase__ableton_13__test.tsv")),
+        ("8_hz", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_8_hz_nn__lfo__ase__ableton_13__test.tsv")),
+        ("frame", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_nn__lfo__ase__ableton_13__test.tsv")),
+        ("spline_v", os.path.join(OUT_DIR, f"out_curr/lfo/mss__s24d3D_nn__lfo__ase__ableton_13__vital_curves.tsv")),
+        ("8_hz_v", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_8_hz_nn__lfo__ase__ableton_13__vital_curves.tsv")),
+        ("frame_v", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_nn__lfo__ase__ableton_13__vital_curves.tsv")),
 
         # ("oracle", os.path.join(OUT_DIR, f"out_curr/sm/mss__oracle__sm_16_1024__ase__ableton_13.tsv")),
         # ("spline", os.path.join(OUT_DIR, f"out_curr/sm/mss__s24d3D__sm_16_1024__ase__ableton_13.tsv")),
@@ -65,10 +71,10 @@ if __name__ == "__main__":
         # ("frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         # ("spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_s24d3D_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
 
-        ("spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_s24d3D__sm__serum__BA_both_lfo_10.tsv")),
-        ("8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame_8_hz__sm__serum__BA_both_lfo_10.tsv")),
-        ("frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame__sm__serum__BA_both_lfo_10.tsv")),
-        ("rand_sm", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_s24d3D_rand__sm__serum__BA_both_lfo_10.tsv")),
+        # ("spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_s24d3D__sm__serum__BA_both_lfo_10.tsv")),
+        # ("8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame_8_hz__sm__serum__BA_both_lfo_10.tsv")),
+        # ("frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame__sm__serum__BA_both_lfo_10.tsv")),
+        # ("rand_sm", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_s24d3D_rand__sm__serum__BA_both_lfo_10.tsv")),
         # ("frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame_gran__sm__serum__BA_both_lfo_10.tsv")),
         # ("spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_s24d3D_gran__sm__serum__BA_both_lfo_10.tsv")),
 
@@ -76,15 +82,15 @@ if __name__ == "__main__":
         # ("shan_100", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_100_not_sep_s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
     ]
 
-    # wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
-    # wt_names = [f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")]
-    # wt_names = sorted(wt_names)
-    # filtered_wt_names = []
-    # for wt_name in wt_names:
-    #     if any(wt_name.startswith(n) for n in CONTINUOUS_ABLETON_WTS):
-    #         filtered_wt_names.append(wt_name)
-    # wt_names = filtered_wt_names
-    wt_names = None
+    wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
+    wt_names = [f[:-3] for f in os.listdir(wt_dir) if f.endswith(".pt")]
+    wt_names = sorted(wt_names)
+    filtered_wt_names = []
+    for wt_name in wt_names:
+        if any(wt_name.startswith(n) for n in CONTINUOUS_ABLETON_WTS):
+            filtered_wt_names.append(wt_name)
+    wt_names = filtered_wt_names
+    # wt_names = None
 
     test_df_s = []
     for name, tsv_path in tqdm(tsv_names_and_paths):
@@ -131,6 +137,12 @@ if __name__ == "__main__":
     # df = df[~df["name"].str.contains("fad__")]
     df = df[~df["name"].str.contains("__cf_8_hz")]
 
+    nan_rows = df[df.isna().any(axis=1)].index
+    for i in nan_rows:
+        if i > 0:
+            df = df.drop(i - 1)
+            df = df.drop(i)
+
     # df = df[df["name"].str.contains("_inv_")]
     # df = df[df["name"].str.contains("__inv_all")]
     # df = df[df["name"].str.contains("__cf_8_hz__inv_all")]
@@ -149,7 +161,7 @@ if __name__ == "__main__":
     # df = df[df[0] == "rand"]
     # df = df[df[2] == "frame"]
     # df = df[df[0] == "oracle"]
-    df = df[(df[0] == "spline") | (df[1] == "spline")]
-    # df = df[(df[0] == "spline") | (df[0] == "8_hz")]
+    # df = df[(df[0] == "spline") | (df[1] == "spline")]
+    df = df[(df[0] == "spline") | (df[0] == "8_hz")]
     print(df.to_string())
     print(f"len(df) = {len(df)}")

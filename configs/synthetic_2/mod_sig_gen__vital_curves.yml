@@ -1,0 +1,3 @@
+class_path: acid_ddsp.modulations.ModSignalGenVitalCurves
+init_args:
+  curves_path: ../data/vital_curves__52_1501.pt

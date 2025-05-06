@@ -120,9 +120,9 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
         x_target_filtered = self.maybe_filter_feature(x_target)
 
         # from matplotlib import pyplot as plt
-        # plt.plot(x[0].cpu().numpy(), label="x")
-        # plt.plot(x_target[0].cpu().numpy(), label="x_target")
-        # plt.plot(x_target_filtered[0].cpu().numpy(), label="x_target_f")
+        # # plt.plot(x[0].cpu().numpy(), label="x")
+        # plt.plot(x_target[0].cpu().numpy(), label="x_target", color="orange")
+        # plt.plot(x_target_filtered[0].cpu().numpy(), label="x_target_f", color="red")
 
         p_hats_inv_all = None
         p_hats_filtered_inv_all = None
@@ -140,8 +140,8 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
                 x_hat=p_hats, x=x_target_filtered_frames.unsqueeze(1)
             ).squeeze(1)
 
-        # plt.plot(p_hats_inv_all[0].cpu().numpy(), label="inv_all")
-        # plt.plot(p_hats_filtered_inv_all[0].cpu().numpy(), label="inv_all_f")
+        # plt.plot(p_hats_inv_all[0].cpu().numpy(), label="inv_all", color="blue")
+        # # plt.plot(p_hats_filtered_inv_all[0].cpu().numpy(), label="inv_all_f", color="purple]")
         # plt.title(f"{self.__class__.__name__} {self.filter_cf_hz} Hz")
         # plt.legend()
         # plt.show()

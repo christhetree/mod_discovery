@@ -22,6 +22,32 @@ class ModSignalGenerator(ABC, nn.Module):
         pass
 
 
+class ModSignalGenVitalCurves(ModSignalGenerator):
+    def __init__(self, curves_path: str):
+        super().__init__()
+        assert os.path.exists(curves_path), f"File {curves_path} does not exist"
+        self.curves_path = curves_path
+
+        self.curves = tr.load(curves_path)
+        log.info(f"Loaded {self.curves.shape} curves from {curves_path}")
+        self.n_curves = self.curves.size(0)
+        self.n_frames = self.curves.size(1)
+
+    def forward(self, n_frames: int, rand_gen: Optional[tr.Generator] = None) -> T:
+        assert n_frames == self.n_frames
+        idx = tr.randint(
+            0, self.n_curves, (1,), generator=rand_gen
+        ).item()
+        mod_sig = self.curves[idx]
+        return mod_sig
+
+
+class ModSignalGenRandomUniformFrame(ModSignalGenerator):
+    def forward(self, n_frames: int, rand_gen: Optional[tr.Generator] = None) -> T:
+        mod_sig = tr.rand(n_frames, generator=rand_gen)
+        return mod_sig
+
+
 class ModSignalGenRandomBezier2D(ModSignalGenerator):
     def __init__(
         self,
