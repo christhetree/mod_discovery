@@ -2,6 +2,7 @@
 Render modulation curve from Vital based on given points and power value.
 Point values must be between 0 and 1.
 """
+
 import os
 from typing import List
 
@@ -27,11 +28,7 @@ def power_scale(value, power):
     return torch.where(mask, value, result)
 
 
-def render(
-        curve,
-        resolution=2048,
-        epsilon=1e-6
-):
+def render(curve, resolution=2048, epsilon=1e-6):
     """
     PyTorch implementation of Vital's render function of LineGenerator:
     https://github.com/mtytel/vital/blob/main/src/common/line_generator.cpp#L165
@@ -84,13 +81,14 @@ def calc_range_and_pct_flat(points: List[float], eps: float = 0.01) -> (float, f
         curr_y = points_y[idx]
         next_y = points_y[idx + 1]
         if abs(curr_y - next_y) < eps:
-            flat_frac += (next_x - curr_x)
+            flat_frac += next_x - curr_x
 
     return range_y, flat_frac
 
 
 if __name__ == "__main__":
     import json
+
     curves_path = os.path.join(DATA_DIR, "vital_curves.json")
     # curves_path = os.path.join(DATA_DIR, "vital_envelopes.json")
     with open(curves_path, "r") as f:
@@ -120,7 +118,9 @@ if __name__ == "__main__":
         ddiffs = diffs[:, 1:] * diffs[:, :-1]
         turning_points = (ddiffs < 0).sum(dim=1).float()
         turning_points = turning_points.squeeze().long().item()
-        print(f"n_points: {n_points}, turning_points: {turning_points}, y_range: {y_range:.3f}, flat_frac: {flat_frac:.3f}")
+        print(
+            f"n_points: {n_points}, turning_points: {turning_points}, y_range: {y_range:.3f}, flat_frac: {flat_frac:.3f}"
+        )
 
         # plot = plot.numpy()
         # import matplotlib.pyplot as plt

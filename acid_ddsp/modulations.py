@@ -35,9 +35,7 @@ class ModSignalGenVitalCurves(ModSignalGenerator):
 
     def forward(self, n_frames: int, rand_gen: Optional[tr.Generator] = None) -> T:
         assert n_frames == self.n_frames
-        idx = tr.randint(
-            0, self.n_curves, (1,), generator=rand_gen
-        ).item()
+        idx = tr.randint(0, self.n_curves, (1,), generator=rand_gen).item()
         mod_sig = self.curves[idx]
         return mod_sig
 

@@ -1,5 +1,0 @@
-class_path: synths.DDSPSynth
-init_args:
-  ac: audio_config.yml
-  n_harmonics: 100
-  n_bands: 65

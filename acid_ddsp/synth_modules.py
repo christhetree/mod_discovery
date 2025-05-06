@@ -519,6 +519,7 @@ class DDSPHarmonicOsc(SynthModule):
     A harmonic oscillator from DDSP, largely following:
     https://github.com/acids-ircam/ddsp_pytorch/blob/master/ddsp/core.py#L135
     """
+
     forward_param_names = [
         "f0_hz",
         "harmonic_amplitudes",
@@ -566,7 +567,7 @@ class DDSPHarmonicOsc(SynthModule):
             harmonic_amplitudes = tr.ones(
                 f0_hz.size(0), f0_hz.size(1), self.n_harmonics + 1
             ).to(f0_hz.device)
-        
+
         harmonic_amplitudes = util.scale_function(harmonic_amplitudes)
         f0_hz = f0_hz.unsqueeze(-1)
 
@@ -608,6 +609,7 @@ class DDSPNoiseModule(SynthModule):
     Filtered noise module in DDSP, largely following:
     https://github.com/acids-ircam/ddsp_pytorch/blob/master/ddsp/model.py#L88
     """
+
     forward_param_names = [
         "noise_amplitudes",
         "n_samples",
@@ -622,7 +624,7 @@ class DDSPNoiseModule(SynthModule):
         super().__init__()
         self.sr = sr
         self.n_bands = n_bands
-    
+
     def forward(
         self,
         x: T,

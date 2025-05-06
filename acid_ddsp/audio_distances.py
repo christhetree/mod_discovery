@@ -113,8 +113,6 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
         x_target = self.calc_feature(x_target)
         assert x.ndim == x_target.ndim == 2
 
-
-
         assert self.filter_cf_hz is not None
         x_filtered = self.maybe_filter_feature(x)
         x_target_filtered = self.maybe_filter_feature(x_target)
@@ -131,7 +129,9 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
         if p_hats is not None:
             n_frames = p_hats.size(2)
             x_target_frames = util.interpolate_dim(x_target, n_frames, dim=1)
-            x_target_filtered_frames = util.interpolate_dim(x_target_filtered, n_frames, dim=1)
+            x_target_filtered_frames = util.interpolate_dim(
+                x_target_filtered, n_frames, dim=1
+            )
             p_hats = p_hats.to(x_target_frames.device)
             p_hats_inv_all = util.compute_lstsq_with_bias(
                 x_hat=p_hats, x=x_target_frames.unsqueeze(1)
@@ -175,7 +175,9 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
                 dist_inv_all = dist_inv_all.mean()
                 dists[f"{dist_name}__inv_all"] = dist_inv_all
                 dist_filtered_inv_all = dist_filtered_inv_all.mean()
-                dists[f"{dist_name}__cf_{self.filter_cf_hz:.0f}_hz__inv_all"] = dist_filtered_inv_all
+                dists[f"{dist_name}__cf_{self.filter_cf_hz:.0f}_hz__inv_all"] = (
+                    dist_filtered_inv_all
+                )
         return dists
 
 

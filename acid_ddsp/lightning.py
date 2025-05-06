@@ -203,7 +203,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
                 ad_tsv_cols.append(f"{feat_name}__{dist_name}")
                 ad_tsv_cols.append(f"{feat_name}__{dist_name}__cf_{cf_hz:.0f}_hz")
                 ad_tsv_cols.append(f"{feat_name}__{dist_name}__inv_all")
-                ad_tsv_cols.append(f"{feat_name}__{dist_name}__cf_{cf_hz:.0f}_hz__inv_all")
+                ad_tsv_cols.append(
+                    f"{feat_name}__{dist_name}__cf_{cf_hz:.0f}_hz__inv_all"
+                )
         ad_tsv_cols = [f"audio__{v}" for v in ad_tsv_cols]
 
         # LFO distances ================================================================
@@ -599,9 +601,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
                         # Calc raw
                         val = dist_fn(p_hat, p)
-                        self.log(
-                            f"{stage}/{p_name}__{dist_name}", val, prog_bar=False
-                        )
+                        self.log(f"{stage}/{p_name}__{dist_name}", val, prog_bar=False)
                         lfo_dist_vals[f"{p_name}__{dist_name}"] = val.item()
 
                         # # Don't calc inv distances during validation and not sound
