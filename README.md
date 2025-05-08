@@ -1,4 +1,4 @@
-# ACID DDSP
+# Modulation Discovery with Differentiable Digital Signal Processing
 TBD
 
 <hr>

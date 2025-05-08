@@ -12,15 +12,15 @@ log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 CONTINUOUS_ABLETON_WTS = [
     "basics__fm_fold",
     "basics__harmonic_series",
-    # "basics__quad_saw",
+    "basics__quad_saw",
     "basics__sub_3",
     "basics__galactica",
     "collection__aureolin",
     "collection__squash",
     "complex__bit_ring",
-    # "complex__bitten_sync",
+    "complex__bitten_sync",
     "complex__kicked",
-    # "complex__octa_phase",
+    "complex__octa_phase",
     "distortion__dp_fold",
     "distortion__phased",
 ]

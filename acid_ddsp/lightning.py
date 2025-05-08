@@ -20,7 +20,7 @@ from audio_distances import (
     SpectralFlatnessDistance,
     MFCCDistance,
 )
-from fad import save_and_concat_fad_audio, calc_fad
+# from fad import save_and_concat_fad_audio, calc_fad
 from feature_extraction import LogMelSpecFeatureExtractor
 from mod_sig_distances import (
     FirstDerivativeDistance,
@@ -163,23 +163,23 @@ class AcidDDSPLightingModule(pl.LightningModule):
         # TODO(cm): add to config
         metrics_n_frames = self.ac.n_samples // self.spectral_visualizer.hop_len + 1
         ad_dist_fn_s = {
-            "esr": ESRLoss(eps=eps),
-            "esr_d1": FirstDerivativeDistance(ESRLoss(eps=eps)),
-            "esr_d2": SecondDerivativeDistance(ESRLoss(eps=eps)),
+            # "esr": ESRLoss(eps=eps),
+            # "esr_d1": FirstDerivativeDistance(ESRLoss(eps=eps)),
+            # "esr_d2": SecondDerivativeDistance(ESRLoss(eps=eps)),
             "l1": nn.L1Loss(),
             "l1_d1": FirstDerivativeDistance(nn.L1Loss()),
-            "l1_d2": SecondDerivativeDistance(nn.L1Loss()),
-            "mse": nn.MSELoss(),
-            "mse_d1": FirstDerivativeDistance(nn.MSELoss()),
-            "mse_d2": SecondDerivativeDistance(nn.MSELoss()),
-            "fft": FFTMagDist(),
-            "fft_d1": FirstDerivativeDistance(FFTMagDist()),
-            "fft_d2": SecondDerivativeDistance(FFTMagDist()),
+            # "l1_d2": SecondDerivativeDistance(nn.L1Loss()),
+            # "mse": nn.MSELoss(),
+            # "mse_d1": FirstDerivativeDistance(nn.MSELoss()),
+            # "mse_d2": SecondDerivativeDistance(nn.MSELoss()),
+            # "fft": FFTMagDist(),
+            # "fft_d1": FirstDerivativeDistance(FFTMagDist()),
+            # "fft_d2": SecondDerivativeDistance(FFTMagDist()),
             "pcc": PCCDistance(),
-            "pcc_d1": FirstDerivativeDistance(PCCDistance()),
-            "pcc_d2": SecondDerivativeDistance(PCCDistance()),
-            "dtw": DTWDistance(),
-            "cd": ChamferDistance(n_frames=metrics_n_frames),
+            # "pcc_d1": FirstDerivativeDistance(PCCDistance()),
+            # "pcc_d2": SecondDerivativeDistance(PCCDistance()),
+            # "dtw": DTWDistance(),
+            # "cd": ChamferDistance(n_frames=metrics_n_frames),
             "fd": FrechetDistance(n_frames=metrics_n_frames),
         }
         for feat_name, feat_cls in [
@@ -210,24 +210,24 @@ class AcidDDSPLightingModule(pl.LightningModule):
 
         # LFO distances ================================================================
         self.lfo_dists = nn.ModuleDict()
-        self.lfo_dists["esr"] = ESRLoss(eps=eps)
-        self.lfo_dists["esr_d1"] = FirstDerivativeDistance(dist_fn=ESRLoss(eps=eps))
-        self.lfo_dists["esr_d2"] = SecondDerivativeDistance(dist_fn=ESRLoss(eps=eps))
+        # self.lfo_dists["esr"] = ESRLoss(eps=eps)
+        # self.lfo_dists["esr_d1"] = FirstDerivativeDistance(dist_fn=ESRLoss(eps=eps))
+        # self.lfo_dists["esr_d2"] = SecondDerivativeDistance(dist_fn=ESRLoss(eps=eps))
         self.lfo_dists["l1"] = nn.L1Loss()
         self.lfo_dists["l1_d1"] = FirstDerivativeDistance(dist_fn=nn.L1Loss())
-        self.lfo_dists["l1_d2"] = SecondDerivativeDistance(dist_fn=nn.L1Loss())
-        self.lfo_dists["mse"] = nn.MSELoss()
-        self.lfo_dists["mse_d1"] = FirstDerivativeDistance(dist_fn=nn.MSELoss())
-        self.lfo_dists["mse_d2"] = SecondDerivativeDistance(dist_fn=nn.MSELoss())
-        self.lfo_dists["fft_l1"] = FFTMagDist()
-        self.lfo_dists["fft_l1_d1"] = FirstDerivativeDistance(dist_fn=FFTMagDist())
-        self.lfo_dists["fft_l1_d2"] = SecondDerivativeDistance(dist_fn=FFTMagDist())
+        # self.lfo_dists["l1_d2"] = SecondDerivativeDistance(dist_fn=nn.L1Loss())
+        # self.lfo_dists["mse"] = nn.MSELoss()
+        # self.lfo_dists["mse_d1"] = FirstDerivativeDistance(dist_fn=nn.MSELoss())
+        # self.lfo_dists["mse_d2"] = SecondDerivativeDistance(dist_fn=nn.MSELoss())
+        # self.lfo_dists["fft_l1"] = FFTMagDist()
+        # self.lfo_dists["fft_l1_d1"] = FirstDerivativeDistance(dist_fn=FFTMagDist())
+        # self.lfo_dists["fft_l1_d2"] = SecondDerivativeDistance(dist_fn=FFTMagDist())
         self.lfo_dists["pcc"] = PCCDistance()
-        self.lfo_dists["pcc_d1"] = FirstDerivativeDistance(dist_fn=PCCDistance())
-        self.lfo_dists["pcc_d2"] = SecondDerivativeDistance(dist_fn=PCCDistance())
+        # self.lfo_dists["pcc_d1"] = FirstDerivativeDistance(dist_fn=PCCDistance())
+        # self.lfo_dists["pcc_d2"] = SecondDerivativeDistance(dist_fn=PCCDistance())
 
-        self.lfo_dists["dtw"] = DTWDistance()
-        self.lfo_dists["cd"] = ChamferDistance(n_frames=temp_param_n_frames)
+        # self.lfo_dists["dtw"] = DTWDistance()
+        # self.lfo_dists["cd"] = ChamferDistance(n_frames=temp_param_n_frames)
         self.lfo_dists["fd"] = FrechetDistance(n_frames=temp_param_n_frames)
 
         # LFO metrics ==================================================================
@@ -235,7 +235,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.lfo_metrics["range_mean"] = LFORangeMetric(agg_fn="mean")
         self.lfo_metrics["min_val"] = LFORangeMetric(agg_fn="min_val")
         self.lfo_metrics["max_val"] = LFORangeMetric(agg_fn="max_val")
-        self.lfo_metrics["ent"] = EntropyMetric(eps=eps, normalize=True)
+        # self.lfo_metrics["ent"] = EntropyMetric(eps=eps, normalize=True)
         self.lfo_metrics["spec_ent"] = SpectralEntropyMetric(eps=eps, normalize=True)
         self.lfo_metrics["tv"] = TotalVariationMetric(eps=eps, normalize=True)
         self.lfo_metrics["tp"] = TurningPointsMetric()
@@ -803,6 +803,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
             out_dict[f"{p_name}_hat_inv"] = p
         for p_name, p in temp_params_hat_inv_all.items():
             out_dict[f"{p_name}_hat_inv_all"] = p
+        assert not any(k in out_dict for k in lfo_dist_vals)
+        out_dict.update(lfo_dist_vals)
 
         return out_dict
 
