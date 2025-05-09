@@ -20,11 +20,11 @@ def get_fad_model(model_name: str) -> fadtk.ModelLoader:
         "clap-2023": fadtk.CLAPModel("2023"),
         # "clap-laion-audio": fadtk.CLAPLaionModel("audio"),
         # "clap-laion-music": fadtk.CLAPLaionModel("music"),
-        "encodec-emb-24k": fadtk.EncodecEmbModel("24k"),
+        # "encodec-emb-24k": fadtk.EncodecEmbModel("24k"),
         "encodec-emb-48k": fadtk.EncodecEmbModel("48k"),
-        "panns-cnn14-16k": fadtk.PANNsModel("cnn14-16k"),
-        "panns-cnn14-32k": fadtk.PANNsModel("cnn14-32k"),
-        "panns-wavegram-logmel": fadtk.PANNsModel("wavegram-logmel"),
+        # "panns-cnn14-16k": fadtk.PANNsModel("cnn14-16k"),
+        # "panns-cnn14-32k": fadtk.PANNsModel("cnn14-32k"),
+        # "panns-wavegram-logmel": fadtk.PANNsModel("wavegram-logmel"),
     }
     assert model_name in fad_models
     return fad_models[model_name]

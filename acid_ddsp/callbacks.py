@@ -3,15 +3,13 @@ import math
 import os
 from collections import defaultdict
 from contextlib import suppress
-from typing import Any, Dict, List
+from typing import Dict, List
 
 import numpy as np
 import torch as tr
 import wandb
-from auraloss.time import ESRLoss
 from matplotlib import pyplot as plt
 from pytorch_lightning import Trainer, Callback
-from pytorch_lightning.callbacks import LearningRateMonitor
 from torch import Tensor as T, nn
 
 from acid_ddsp.plotting import fig2img, plot_waveforms_stacked, plot_wavetable
@@ -23,24 +21,11 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-class ConsoleLRMonitor(LearningRateMonitor):
-    # TODO(cm): enable every n steps
-    def on_train_epoch_start(self, trainer: Trainer, *args: Any, **kwargs: Any) -> None:
-        super().on_train_epoch_start(trainer, *args, **kwargs)
-        if self.logging_interval != "step":
-            interval = "epoch" if self.logging_interval is None else "any"
-            latest_stat = self._extract_stats(trainer, interval)
-            latest_stat_str = {k: f"{v:.8f}" for k, v in latest_stat.items()}
-            if latest_stat:
-                log.info(f"\nCurrent LR: {latest_stat_str}")
-
-
 class LogModSigAndSpecCallback(Callback):
     def __init__(self, n_examples: int = 5) -> None:
         super().__init__()
         self.n_examples = n_examples
         self.out_dicts = {}
-        self.esr = ESRLoss()
         self.l1 = nn.L1Loss()
 
     def on_validation_batch_end(
@@ -174,17 +159,7 @@ class LogModSigAndSpecCallback(Callback):
             ax[-1].set_xlabel("n_samples")
             ax[-1].set_ylabel("Amplitude")
             ax[-1].set_ylim(-0.1, 1.1)
-            ax[-1].set_title(
-                # f"env (blu), ms (blk), ms_hat (orange), p{degree}s{n_segments} (red)\n"
-                # f"env (blue), mod_sig (black), mod_sig_hat (orange)\n"
-                f"env (purple), add_lfo (red), sub_lfo (blue)\n"
-                # f"ms_l1: {mod_sig_l1:.3f}, ms_esr: {mod_sig_esr:.3f}\n"
-                # f"q: {q[0]:.2f}, q': {q_hat[0]:.2f}, "
-                # f"dg: {dist_gain[0]:.2f}, dg': {dist_gain_hat[0]:.2f}, "
-                # f"la: {learned_alpha[0]:.2f}, la': {learned_alpha_hat[0]:.2f}\n"
-                # f"os: {osc_shape[0]:.2f}, os': {osc_shape_hat[0]:.2f}, "
-                # f"og: {osc_gain[0]:.2f}, og': {osc_gain_hat[0]:.2f}"
-            )
+            ax[-1].set_title(f"env (purple), add_lfo (red), sub_lfo (blue)\n")
 
             v_line_x = np.linspace(0, n_frames, 13)
             ax[-1].vlines(
@@ -257,7 +232,6 @@ class LogAudioCallback(Callback):
         add_audio_waveforms = []
         x_waveforms = []
         x_hat_waveforms = []
-        x_eval_waveforms = []
         for example_idx in range(self.n_examples):
             if example_idx not in self.out_dicts:
                 log.warning(f"example_idx={example_idx} not in out_dicts")
@@ -272,9 +246,6 @@ class LogAudioCallback(Callback):
             x_hat = out_dict.get("x_hat")
             if x_hat is not None:
                 x_hat = x_hat.squeeze(1)
-            x_eval = out_dict.get("x_eval")
-            if x_eval is not None:
-                x_eval = x_eval.squeeze(1)
             waveforms = []
             labels = []
 
@@ -301,12 +272,6 @@ class LogAudioCallback(Callback):
                 labels.append("x_hat")
                 x_hat = x_hat.repeat(1, n_repeat)
                 x_hat_waveforms.append(x_hat.swapaxes(0, 1).numpy())
-            if x_eval is not None:
-                x_eval = x_eval[0:1]
-                waveforms.append(x_eval)
-                labels.append("x_eval")
-                x_eval = x_eval.repeat(1, n_repeat)
-                x_eval_waveforms.append(x_eval.swapaxes(0, 1).numpy())
 
             fig = plot_waveforms_stacked(waveforms, pl_module.ac.sr, title, labels)
             img = fig2img(fig)
@@ -351,16 +316,6 @@ class LogAudioCallback(Callback):
                     sample_rate=int(pl_module.ac.sr),
                 )
             )
-        if x_eval_waveforms:
-            data["x_eval"].append(f"{trainer.global_step}_x_eval")
-        for idx, curr_wet_eval in enumerate(x_eval_waveforms):
-            data["x_eval"].append(
-                wandb.Audio(
-                    curr_wet_eval,
-                    caption=f"{trainer.global_step}_x_eval_{idx}",
-                    sample_rate=int(pl_module.ac.sr),
-                )
-            )
         data = list(data.values())
         for row in data:
             self.rows.append(row)
@@ -383,7 +338,7 @@ class LogWavetablesCallback(Callback):
         wt_pitch_hz = tr.tensor([osc.wt_pitch_hz]).unsqueeze(1).to(osc.window.device)
         wt_bounded = osc.get_maybe_aa_maybe_bounded_wt(wt_pitch_hz).detach().cpu()
         wt_bounded = wt_bounded[0]
-        fig = plot_wavetable(wt_bounded, f"{title}__aa_bounded")
+        fig = plot_wavetable(wt_bounded, f"{title}__maybe_aa_maybe_bounded")
         img = fig2img(fig)
         images.append(img)
         return images
@@ -401,11 +356,6 @@ class LogWavetablesCallback(Callback):
             title = f"{trainer.global_step}_wt_hat"
             osc_hat = pl_module.synth_hat.add_synth_module
             images += self.create_wt_images(osc_hat, title)
-
-        with suppress(Exception):
-            title = f"{trainer.global_step}_wt_eval"
-            osc_eval = pl_module.synth_eval.add_synth_module
-            images += self.create_wt_images(osc_eval, title)
 
         if images and wandb.run:
             wandb.log(

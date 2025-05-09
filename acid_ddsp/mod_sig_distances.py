@@ -217,24 +217,3 @@ class SecondDerivativeDistance(nn.Module):
         d1 = FirstDerivativeDistance.calc_first_derivative(x)
         d2 = FirstDerivativeDistance.calc_first_derivative(d1)
         return d2
-
-
-if __name__ == "__main__":
-    n_frames = 1501
-    t = tr.linspace(0.0, 2 * tr.pi, steps=n_frames)
-    x = tr.sin(t)
-    x_target = tr.roll(x, 750)
-    # x_target = tr.roll(x, 0)
-    x = x.view(1, -1).repeat(2, 1)
-    x_target = x_target.view(1, -1).repeat(2, 1)
-    # x_target[0, :] = x[0, :]
-    # x_target[1, :] = x[1, :]
-    # x.fill_(0.0)
-    # x_target.fill_(1.0)
-
-    # dist_fn = DTWDistance()
-    # dist_fn = ChamferDistance(n_frames, p=1)
-    dist_fn = FrechetDistance(n_frames)
-    # dist = dist_fn(x, x_target)
-    dist = dist_fn(x_target, x)
-    print(f"dist = {dist}")

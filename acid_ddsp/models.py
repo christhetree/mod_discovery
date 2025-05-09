@@ -151,8 +151,10 @@ class Spectral2DCNN(nn.Module):
         fc_act: str = "prelu",
         noise_std: float = 0.33,
         spline_eps: float = 1e-3,
-        interp_n_frames: Optional[int] = None,
+        softmax_tau: float = 0.25,
         filter_cf_hz: Optional[float] = None,
+        filter_sr: float = 500.0,
+        n_filter: int = 63,
     ) -> None:
         super().__init__()
         self.fe = fe
@@ -167,13 +169,14 @@ class Spectral2DCNN(nn.Module):
         self.fc_act = fc_act
         self.noise_std = noise_std
         self.spline_eps = spline_eps
-        self.interp_n_frames = interp_n_frames
+        self.softmax_tau = softmax_tau
         self.filter_cf_hz = filter_cf_hz
+        self.filter_sr = filter_sr
+        self.n_filter = n_filter
 
         self.n_pad = None
-        filter_sr = n_frames // 3
-        assert filter_sr == 500
-        n_filter = 63
+        # assert filter_sr == 500.0
+        # assert n_filter == 63
         filter_support = 2 * (tr.arange(n_filter) - (n_filter - 1) / 2) / filter_sr
         filter_window = tr.blackman_window(n_filter, periodic=False)
         if filter_cf_hz is not None:
@@ -247,7 +250,6 @@ class Spectral2DCNN(nn.Module):
             self.out_temp_acts[name] = util.get_activation(tp.act)
             # Make adapters (changes dimensions of mod sig from N to M)
             if tp.adapt_dim:
-                # adapt_in_dim = tp.dim
                 adapt_in_dim = tp.dim + 1
                 if tp.adapt_use_latent:
                     adapt_in_dim += self.latent_dim
@@ -284,18 +286,11 @@ class Spectral2DCNN(nn.Module):
                     eps=self.spline_eps,
                 )
 
-        if self.interp_n_frames is None:
-            self.register_buffer(
-                "pos_enc",
-                tr.linspace(0, 1, self.n_frames).view(1, -1, 1),
-                persistent=False,
-            )
-        else:
-            self.register_buffer(
-                "pos_enc",
-                tr.linspace(0, 1, self.interp_n_frames).view(1, -1, 1),
-                persistent=False,
-            )
+        self.register_buffer(
+            "pos_enc",
+            tr.linspace(0, 1, self.n_frames).view(1, -1, 1),
+            persistent=False,
+        )
 
     def forward(
         self,
@@ -344,7 +339,7 @@ class Spectral2DCNN(nn.Module):
                     alpha_noise=None,
                     noise_std=self.noise_std,
                     alpha_linear=alpha_linear if tp.use_alpha_linear else None,
-                    softmax_tau=0.25,  # TODO(cm): add to config
+                    softmax_tau=self.softmax_tau,
                 )
                 logits_y = x[:, :, 1]
                 cp_y = self.process_bezier_logits_y(
@@ -382,11 +377,6 @@ class Spectral2DCNN(nn.Module):
                 x = F.conv1d(x, h, padding="valid")
                 x = x.view(bs, -1, x.size(2))
                 x = tr.swapaxes(x, 1, 2)
-
-            if self.interp_n_frames is not None:
-                assert False
-                assert self.filter_cf_hz is None
-                x = util.interpolate_dim(x, self.interp_n_frames, dim=1)
 
             out_dict[name] = x.squeeze(-1)
 

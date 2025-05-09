@@ -26,13 +26,20 @@ class MFCCDistance(nn.Module):
         n_fft: int = 2048,
         hop_len: int = 512,
         n_mels: int = 128,
+        n_mfcc: int = 40,
         p: int = 1,
     ):
         super().__init__()
+        self.sr = sr
+        self.n_fft = n_fft
+        self.hop_len = hop_len
+        self.n_mels = n_mels
+        self.n_mfcc = n_mfcc
         self.p = p
+
         self.mfcc = MFCC(
             sample_rate=sr,
-            n_mfcc=40,
+            n_mfcc=n_mfcc,
             log_mels=log_mels,
             melkwargs={
                 "n_fft": n_fft,
@@ -63,6 +70,7 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
         dist_fn_s: Dict[str, Callable[[T, T], T]],
         average_channels: bool = True,
         filter_cf_hz: Optional[float] = 8.0,
+        n_filter: int = 63,
     ):
         super().__init__()
         self.sr = sr
@@ -71,13 +79,12 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
         self.average_channels = average_channels
         self.dist_fn_s = dist_fn_s
         self.filter_cf_hz = filter_cf_hz
+        self.n_filter = n_filter
 
         self.filter = None
         filter_sr = sr / hop_len
-        # assert filter_sr == 80.0  # TODO(cm): tmp
-        # n_filter = 11
-        assert filter_sr == 500.0  # TODO(cm): tmp
-        n_filter = 63
+        # assert filter_sr == 500.0
+        # assert n_filter == 63
         filter_support = 2 * (tr.arange(n_filter) - (n_filter - 1) / 2) / filter_sr
         filter_window = tr.blackman_window(n_filter, periodic=False)
         if filter_cf_hz is not None:
@@ -90,7 +97,7 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
         pass
 
     def maybe_filter_feature(self, x: T) -> T:
-        assert self.filter_cf_hz is not None  # TODO(cm): tmp
+        # assert self.filter_cf_hz is not None
         if self.filter_cf_hz is not None:
             x = F.pad(
                 x,
@@ -219,39 +226,3 @@ class SpectralFlatnessDistance(OneDimensionalAudioDistance):
         ).squeeze(1)
         x = tr.from_numpy(x).float()
         return x
-
-
-# import librosa
-# import numpy as np
-# from dtw import dtw
-#
-# def compute_mfcc(target: np.ndarray, sample_rate: float = 44100.0) -> np.ndarray:
-#     window_length = int(0.05 * sample_rate)
-#     hop_length = int(0.01 * sample_rate)
-#
-#     mfcc = librosa.feature.mfcc(
-#         y=target,
-#         sr=sample_rate,
-#         n_mfcc=20,
-#         n_fft=window_length,
-#         hop_length=hop_length,
-#         n_mels=128,
-#     )
-#
-#     return mfcc
-#
-#
-# def compute_wmfcc(target: np.ndarray, pred: np.ndarray) -> float:
-#     logger.info("Computing wMFCC...")
-#
-#     target_mfcc = compute_mfcc(target)
-#     pred_mfcc = compute_mfcc(pred)
-#
-#     target_mfcc = target_mfcc.reshape(-1, target_mfcc.shape[-1])
-#     pred_mfcc = pred_mfcc.reshape(-1, pred_mfcc.shape[-1])
-#
-#     def l1(a, b):
-#         return np.mean(np.abs(a - b))
-#
-#     dist = dtw(target_mfcc.T, pred_mfcc.T, dist_method=l1, distance_only=True)
-#     return dist.normalizedDistance

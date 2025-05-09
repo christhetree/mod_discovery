@@ -78,33 +78,6 @@ def calc_logits_to_biquad_a_coeff_triangle(a_logits: T, eps: float = 1e-3) -> T:
     return a
 
 
-def calc_logits_to_biquad_coeff_pole_zero(
-    q_real: T, q_imag: T, p_real: T, p_imag: T, eps: float = 1e-3
-) -> Tuple[T, T]:
-    assert q_real.ndim == 2
-    assert q_real.shape == q_imag.shape == p_real.shape == p_imag.shape
-    stability_factor = 1.0 - eps
-    p_abs = tr.sqrt(p_real**2 + p_imag**2)
-    p_scaling_factor = tr.tanh(p_abs) * stability_factor / p_abs
-    p_real = p_real * p_scaling_factor
-    p_imag = p_imag * p_scaling_factor
-
-    a1 = -2.0 * p_real
-    a2 = p_real**2 + p_imag**2
-    assert (a1.abs() < 2.0).all()
-    assert (a2 < 1.0).all()
-    assert (a1 < a2 + 1.0).all()
-    assert (a1 > -(a2 + 1.0)).all()
-    a = tr.stack([a1, a2], dim=2)
-
-    b0 = tr.ones_like(q_real)
-    b1 = -2.0 * q_real
-    b2 = q_real**2 + q_imag**2
-    b = tr.stack([b0, b1, b2], dim=2)
-
-    return a, b
-
-
 def _calc_a_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T, T, T, T, T):
     stability_factor = 1.0 - eps
     sin_w = tr.sin(w)
@@ -266,29 +239,6 @@ class TimeVaryingBiquad(nn.Module):
             q = util.interpolate_dim(q, n_samples, dim=1)
             assert x.shape == w.shape == q.shape
         a_coeff, b_coeff = calc_biquad_coeff(filter_type, w, q, eps=self.eps)
-
-        # a1 = a_coeff[0, :, 0].detach().numpy()
-        # a1 = (a1 - a1.min()) / (a1.max() - a1.min())
-        # a2 = a_coeff[0, :, 1].detach().numpy()
-        # a2 = (a2 - a2.min()) / (a2.max() - a2.min())
-        # b0 = b_coeff[0, :, 0].detach().numpy()
-        # b0 = (b0 - b0.min()) / (b0.max() - b0.min())
-        # b1 = b_coeff[0, :, 1].detach().numpy()
-        # b1 = (b1 - b1.min()) / (b1.max() - b1.min())
-        # b2 = b_coeff[0, :, 2].detach().numpy()
-        # b2 = (b2 - b2.min()) / (b2.max() - b2.min())
-        # mog_sig = w_mod_sig[0].detach().numpy()
-        # mog_sig = (mog_sig - mog_sig.min()) / (mog_sig.max() - mog_sig.min())
-        # from matplotlib import pyplot as plt
-        # plt.plot(a1, label="a1")
-        # plt.plot(a2, label="a2")
-        # plt.plot(b0, label="b0")
-        # plt.plot(b1, label="b1")
-        # plt.plot(b2, label="b2")
-        # plt.plot(mog_sig, label="mog_sig", linestyle="--")
-        # plt.legend()
-        # plt.show()
-
         if interp_coeff:
             a_coeff = util.interpolate_dim(a_coeff, n_samples, dim=1)
             b_coeff = util.interpolate_dim(b_coeff, n_samples, dim=1)
@@ -304,22 +254,3 @@ class TimeVaryingBiquad(nn.Module):
         a0 = tr.ones_like(a1)
         a_coeff = tr.stack([a0, a1, a2], dim=2)
         return y_ab, a_coeff, b_coeff, y_a
-
-
-if __name__ == "__main__":
-    w = tr.full((1, 1), 0.125 * tr.pi)
-    # q = tr.full_like(w, 0.7071)
-    q = tr.full_like(w, 4.0)
-    # a, b = calc_biquad_coeff("lp", w, q)
-    # a, b = calc_biquad_coeff("hp", w, q)
-    a, b = calc_biquad_coeff("bp", w, q)
-    # a, b = calc_biquad_coeff("no", w, q)
-    a = a.squeeze()
-    b = b.squeeze()
-    print(b[0].item())
-    print(b[1].item())
-    print(b[2].item())
-    print(f"")
-    print(1.0)
-    print(a[0].item())
-    print(a[1].item())

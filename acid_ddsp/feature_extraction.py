@@ -8,8 +8,6 @@ from torch import Tensor as T
 from torch import nn
 from torchaudio.transforms import MelSpectrogram, FrequencyMasking
 
-from losses_freq import DeltaMultiResolutionSTFTLoss
-
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
@@ -44,9 +42,7 @@ class LogMelSpecFeatureExtractor(nn.Module):
         self.eps = eps
 
         frame_rate = sr / hop_len
-        self.delta_win_len = DeltaMultiResolutionSTFTLoss.calc_delta_win_len(
-            delta_win_ms, frame_rate
-        )
+        self.delta_win_len = self.calc_delta_win_len(delta_win_ms, frame_rate)
         if use_delta or use_delta_delta:
             log.info(
                 f"use_delta: {use_delta}, use_delta_delta: {use_delta_delta}, "
@@ -99,3 +95,9 @@ class LogMelSpecFeatureExtractor(nn.Module):
                 x = tr.cat([x, delta_delta], dim=1)
 
         return x
+
+    @staticmethod
+    def calc_delta_win_len(delta_win_ms: int, sr: float) -> int:
+        delta_win_len = int((delta_win_ms * sr / 1000) // 2 * 2 + 1)
+        delta_win_len = max(3, delta_win_len)
+        return delta_win_len

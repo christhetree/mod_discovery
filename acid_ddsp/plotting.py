@@ -13,9 +13,6 @@ from matplotlib.axes import Subplot
 from matplotlib.figure import Figure
 from torch import Tensor as T
 from torchvision.transforms import ToTensor
-from tqdm import tqdm
-
-from paths import OUT_DIR
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -228,43 +225,6 @@ def piecewise_fitting_noncontinuous(
     return y_fitted
 
 
-# def plot_waterfall(
-#     ax: Subplot,
-#     sr: int,
-#     H: T,
-#     n_fft: int,
-#     title: str = "H",
-#     min_t: int = 0,
-#     max_t: Optional[int] = None,
-#     use_log: bool = False,
-#     freq_offset: int = 20,
-#     spec_offset: int = 10,
-# ) -> None:
-#     assert H.ndim == 2
-#     if max_t is None:
-#         max_t = H.size(1)
-#     min_t = min(min_t, H.size(1))
-#     max_t = min(max_t, H.size(1))
-#     H = H.abs()
-#     if use_log:
-#         H = H.log1p()
-#     freqs = np.arange(H.size(0)) / n_fft * sr
-#     H_plot = H[:, min_t:max_t] - np.arange(max_t - min_t) * spec_offset
-#     H_plot_min = H_plot.min()
-#     for i in range(max_t - min_t):
-#         zorder = i
-#         ax.plot(freqs - i * freq_offset, H_plot[:, i], "k", zorder=zorder)
-#         ax.fill_between(
-#             freqs - i * freq_offset,
-#             H_plot_min,
-#             H[:, i],
-#             facecolor="white",
-#             zorder=zorder,
-#         )
-#     ax.set_title(title, fontsize=18)
-#     ax.axis("off")
-
-
 def plot_waterfall_og(
     ax: Subplot,
     sr: int,
@@ -336,19 +296,3 @@ def plot_wavetable(wt: T, title: Optional[str] = None) -> Figure:
     fig.tight_layout()
     # plt.show()
     return fig
-
-
-if __name__ == "__main__":
-    H_paths = [
-        os.path.join(OUT_DIR, "coeff_sr__H.pt"),
-        os.path.join(OUT_DIR, "coeff_fs_128__H.pt"),
-        os.path.join(OUT_DIR, "coeff_fs_512__H.pt"),
-        os.path.join(OUT_DIR, "coeff_fs_1024__H.pt"),
-        os.path.join(OUT_DIR, "coeff_fs_4096__H.pt"),
-        # os.path.join(OUT_DIR, "lp_sr__H.pt"),
-        # os.path.join(OUT_DIR, "lp_fs_128__H.pt"),
-        # os.path.join(OUT_DIR, "lp_fs_1024__H.pt"),
-    ]
-    for idx in tqdm(range(68)):
-        fig = plot_waterfalls(H_paths, idx, use_log=True)
-        fig.savefig(os.path.join(OUT_DIR, f"waterfalls_{idx}.png"))

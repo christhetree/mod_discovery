@@ -35,6 +35,7 @@ class SquareSawVCOLite(SynthModule):
         "n_samples",
         "phase",
     ]
+    lfo_name = "osc_shape"
 
     # Based off TorchSynth's SquareSawVCO
     def __init__(self, sr: int):
@@ -172,20 +173,6 @@ class WavetableOsc(SynthModule):
         # TODO(cm): check whether this is correct or not
         self.wt_pitch_hz = sr / n_wt_samples
 
-        # pos_sr = 20.0
-        # pos_cf_hz = 10.0
-        # pos_filter_n = n_pos // 2 + 1
-        # pos_filter_support = 2 * (tr.arange(pos_filter_n) - (pos_filter_n - 1) / 2) / pos_sr
-        # pos_filter_window = tr.blackman_window(pos_filter_n, periodic=False)
-        # pos_filter = tr.sinc(pos_cf_hz * pos_filter_support) * pos_filter_window
-        # pos_filter /= tr.sum(pos_filter)
-        # pos_filter = pos_filter.view(1, 1, -1)
-        # pos_filter = pos_filter.expand(self.n_wt_samples, -1, -1)
-        # self.register_buffer(
-        #     "pos_filter", pos_filter, persistent=False
-        # )
-        # self.pos_filter_n = pos_filter_n
-
     def get_wt(self) -> T:
         return self.wt
 
@@ -249,7 +236,6 @@ class WavetableOsc(SynthModule):
 
         pitch_ratio = max_f0_hz / self.wt_pitch_hz
         # Make the cutoff frequency a bit lower than the new nyquist
-        # TODO(cm): add roll-off factor to config
         cf_hz = (self.sr / pitch_ratio / 2.0) * self.cf_factor
         aa_filters = self.calc_lp_sinc_blackman_coeff(cf_hz)
         bs = aa_filters.size(0)
@@ -334,16 +320,8 @@ class BezierWavetableOsc(WavetableOsc):
         self.n_segments = n_segments
         self.degree = degree
 
-        # self.bezier = PiecewiseBezier(n_wt_samples, n_segments, degree)
         self.bezier = PiecewiseBezier(n_pos, n_segments, degree)
-        # cp = tr.rand(n_pos, n_segments * degree + 1) * 2.0 - 1.0
-        # cp = tr.empty(n_pos, n_segments * degree + 1).normal_(mean=0.0, std=0.01)
         cp = tr.empty(n_wt_samples, n_segments * degree + 1).normal_(mean=0.0, std=0.01)
-        # cp = tr.rand(n_wt_samples, n_segments * degree + 1) * 2.0 - 1.0
-        # cp = tr.rand(n_segments * degree + 1, 2) * 2.0 - 1.0
-        # cp = tr.empty(n_segments * degree + 1, 2).normal_(mean=0.0, std=0.01)
-        # cp = util.interpolate_dim(cp, n=n_pos, dim=1, align_corners=True)
-        # cp = tr.swapaxes(cp, 0, 1)
 
         if is_trainable:
             self.cp = nn.Parameter(cp)
@@ -398,42 +376,6 @@ class WavetableOscShan(WavetableOsc):
             padding_mode="border",
             align_corners=True,
         ).squeeze(2)
-
-        # # batch linear interpolation implementation
-        # bs, n_wavetable, wt_len = wavetable.shape
-        # index = arg / (2 * tr.pi) * wt_len
-        # index_low = tr.floor(index.clone())  # (bs, n_samples)
-        # index_high = tr.ceil(index.clone())  # (bs, n_samples)
-        # alpha = index - index_low  # (bs, n_samples)
-        # index_low = index_low.long()
-        # index_high = index_high.long()
-        #
-        # index_low = index_low.unsqueeze(1).expand(
-        #     -1, n_wavetable, -1
-        # )  # (bs, n_wavetable, n_samples)
-        # index_high = index_high.unsqueeze(1).expand(
-        #     -1, n_wavetable, -1
-        # )  # (bs, n_wavetable, n_samples)
-        # index_high = index_high % wt_len
-        # alpha = alpha.unsqueeze(1).expand(
-        #     -1, n_wavetable, -1
-        # )  # (bs, n_wavetable, n_samples)
-        #
-        # indexed_wavetables_low = tr.gather(
-        #     wavetable, 2, index_low
-        # )  # (bs, n_wavetable, n_samples)
-        # indexed_wavetables_high = tr.gather(
-        #     wavetable, 2, index_high
-        # )  # (bs, n_wavetable, n_samples)
-        #
-        # signal = indexed_wavetables_low + alpha * (
-        #     indexed_wavetables_high - indexed_wavetables_low
-        # )
-
-        # tr.set_printoptions(precision=3)
-        # log.info(f"\nsignal1: {signal[0, :, :-5]}")
-        # log.info(f"\nsignal2: {signal2[0, :, :-5]}")
-        # exit()
         return signal
 
     def forward(
@@ -473,45 +415,6 @@ class WavetableOscShan(WavetableOsc):
             audio = audio.mean(dim=1)
 
         return audio
-
-
-class FourierWavetableOsc(WavetableOsc):
-    def __init__(
-        self,
-        sr: int,
-        n_pos: Optional[int] = None,
-        n_wt_samples: Optional[int] = None,
-        wt: Optional[T] = None,
-        aa_filter_n: Optional[int] = None,
-        is_trainable: bool = True,
-        n_bins: Optional[int] = None,
-    ):
-        super().__init__(sr, n_pos, n_wt_samples, wt, aa_filter_n, is_trainable)
-        if n_bins is None:
-            n_bins = self.n_wt_samples // 2 + 1
-            # n_bins = 32
-        self.n_bins = n_bins
-        # TODO(cm): check if normalization would be beneficial or not
-        fourier_wt = tr.fft.rfft(self.wt, dim=1)
-        fourier_wt = fourier_wt[:, :n_bins]
-        # wt_mag = tr.abs(fourier_wt)
-        # wt_phase = tr.angle(fourier_wt)
-        self.wt = None  # Get rid of superclass param or buffer since we don't need it
-        if is_trainable:
-            self.wt = nn.Parameter(fourier_wt)
-            # self.wt_mag = nn.Parameter(wt_mag)
-            # self.wt_phase = nn.Parameter(wt_phase)
-        else:
-            self.register_buffer("wt", fourier_wt)
-            # self.register_buffer("wt_mag", wt_mag)
-            # self.register_buffer("wt_phase", wt_phase)
-
-    def get_wt(self) -> T:
-        # fourier_wt = self.wt_mag * tr.exp(1j * self.wt_phase)
-        # wt = tr.fft.irfft(fourier_wt, n=self.n_wt_samples, dim=1)
-        # TODO(cm): check if normalization would be beneficial or not
-        wt = tr.fft.irfft(self.wt, n=self.n_wt_samples, dim=1)
-        return wt
 
 
 class DDSPHarmonicOsc(SynthModule):
@@ -790,143 +693,3 @@ class BiquadCoeffFilter(SynthModule):
         assert not tr.isnan(y_a).any()
         y_ab = time_varying_fir(y_a, b_coeff, zi=zi)
         return y_ab
-
-
-if __name__ == "__main__":
-    # ============ Test WavetableOsc ============
-    # bs = 2
-    # sr = 48000
-    # n_sec = 4.0
-    # n_samples = int(sr * n_sec)
-    # n_wt_samples = 1024
-    # f0_hz = tr.tensor([220.0])
-    # f0_hz = f0_hz.repeat(bs)
-    #
-    # # wt_pos = tr.linspace(-1.0, -1.0, n_samples).unsqueeze(0)
-    # # wt_pos = tr.linspace(1.0, 1.0, n_samples).unsqueeze(0)
-    # wt_pos = tr.linspace(-1.0, 1.0, n_samples).unsqueeze(0)
-    # wt_pos = wt_pos.repeat(bs, 1)
-    #
-    # osc = WavetableOsc(sr, n_pos=2, n_wt_samples=n_wt_samples)
-    # audio = osc(f0_hz, wt_pos, n_samples=n_samples)
-    #
-    # # import matplotlib.pyplot as plt
-    # # plt.plot(audio[0, :1000].detach().numpy())
-    # # plt.show()
-    # # plt.plot(audio[0, -1000:].detach().numpy())
-    # # plt.show()
-    #
-    # import torchaudio
-    #
-    # torchaudio.save("../out/audio.wav", audio[0:1, :], sr)
-    # exit()
-
-    # ============ Test WavetableOscShan ============
-    # bs = 3
-    # sr = 48000
-    # n_sec = 4.0
-    # n_samples = int(sr * n_sec)
-    # n_wt_samples = 1024
-    # f0_hz = tr.tensor([220.0, 440.0, 880.0])
-
-    # # prepare some wavetables for test
-    # wt_sin = tr.sin(tr.linspace(0, 2 * tr.pi, n_wt_samples))
-    # wt_square = tr.sign(tr.sin(tr.linspace(0, 2 * tr.pi, n_wt_samples)))
-    # wt = tr.stack([wt_sin, wt_square], dim=0)
-    # osc = WavetableOscShan(sr, n_pos=2, n_wt_samples=n_wt_samples, wt=wt)
-    # audio = osc(f0_hz=f0_hz, attention_matrix=None, n_samples=n_samples)
-    # audio = audio.reshape(-1, audio.size(-1))
-    # import soundfile as sf
-    # for idx, audio in enumerate(audio):
-    #     import matplotlib.pyplot as plt
-    #     plt.plot(audio.detach().numpy().squeeze()[:1000])
-    #     sf.write(f"audio_{idx}.wav", audio.squeeze().detach().numpy(), sr)
-    # plt.savefig("audio.png")
-    # plt.close()
-
-    # note_off = tr.tensor([0.75, 0.75])
-    # attack = tr.tensor([0.1, 0.2])
-    # decay = tr.tensor([0.0, 0.2])
-    # sustain = tr.tensor([0.5, 0.3])
-    # release = tr.tensor([2.0, 0.2])
-    # # floor = tr.tensor([0.1, 0.2])
-    # # peak = tr.tensor([0.3, 0.5])
-    # pow = tr.tensor([1.0, 2.5])
-    # note_on_duration = tr.tensor([0.1, 1.0])
-    # n_samples = 10
-
-    # adsr = ADSR(100)
-    # envelope = adsr(note_off, attack, decay, sustain, release, pow=pow)
-
-    # adsr = ADSREnvelope()
-    # envelope = adsr(
-    #     floor=tr.zeros_like(attack).view(-1, 1, 1),
-    #     peak=tr.ones_like(attack).view(-1, 1, 1),
-    #     attack=attack.view(-1, 1, 1),
-    #     decay=decay.view(-1, 1, 1),
-    #     sus_level=sustain.view(-1, 1, 1),
-    #     release=release.view(-1, 1, 1),
-    #     note_off=0.8,
-    #     n_frames=100,
-    # )
-
-    # exp_decay = ExpDecayEnv(10, eps=1e-3)
-    # envelope = exp_decay(alpha, note_on_duration, n_samples)
-
-    import matplotlib.pyplot as plt
-
-    plt.plot(envelope[0].numpy())
-    plt.plot(envelope[1].numpy())
-    plt.show()
-    log.info(
-        f"envelope.shape = {envelope.shape}, envelope.max(): {envelope.max()}, envelope.min(): {envelope.min()}"
-    )
-    exit()
-
-    import torchaudio
-
-    freq = tr.tensor([220.0, 220.0])
-    osc_shape = tr.tensor([1.0, 0.5])
-
-    sr = 48000
-    n_samples = 48000
-    vco = SquareSawVCOLite(sr)
-    out_wave = vco(freq, osc_shape, n_samples)
-
-    for idx, audio in enumerate(out_wave):
-        audio = audio.unsqueeze(0)
-        torchaudio.save(f"../out/out_wave_{idx}.wav", audio, sr)
-
-    # ============ Test DDSPHarmonicOsc ============
-    bs = 3
-    sr = 48000
-    n_sec = 4.0
-    n_samples = int(sr * n_sec)
-    f0_hz = tr.tensor([220.0, 440.0, 880.0])
-
-    osc = DDSPHarmonicOsc(sr, n_harmonics=16)
-    harm_audios = osc(f0_hz=f0_hz, harmonic_amplitudes=None, n_samples=n_samples)
-    harm_audios = harm_audios.reshape(-1, harm_audios.size(-1))
-
-    for idx, audio in enumerate(harm_audios):
-        audio = audio.unsqueeze(0)
-        torchaudio.save(f"harm_{idx}.wav", audio, sr)
-
-    # ============ Test DDSPNoiseModule ============
-    # NoiseModule acts like "subtractive" synthesis within the ComposableSynth framework
-    # hence it takes the output of the DDSPHarmonicOsc as input
-    osc = DDSPNoiseModule(sr, n_bands=16)
-
-    # the original ddsp code uses block_size = 160 => num_blocks = 300
-    num_blocks = 300
-    noise_amplitudes = tr.rand(bs, num_blocks, 16)
-
-    full_audios = osc(
-        x=harm_audios,
-        noise_amplitudes=noise_amplitudes,
-        n_samples=n_samples,
-    )
-
-    for idx, audio in enumerate(full_audios):
-        audio = audio.unsqueeze(0)
-        torchaudio.save(f"full_{idx}.wav", audio, sr)

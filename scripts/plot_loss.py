@@ -11,7 +11,7 @@ from pandas import DataFrame
 from tqdm import tqdm
 
 from paths import OUT_DIR, WAVETABLES_DIR
-from wavetables import BAD_ABLETON_WTS, CONTINUOUS_ABLETON_WTS
+from wavetables import CONTINUOUS_ABLETON_WTS
 
 logging.basicConfig()
 log = logging.getLogger(__name__)

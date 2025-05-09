@@ -114,31 +114,3 @@ class TurningPointsMetric(LFOMetric):
         turning_points = (ddiffs < 0).sum(dim=1).float()
         turning_points = turning_points / (x.size(1) - 2)
         return turning_points
-
-
-if __name__ == "__main__":
-    # x = tr.tensor([1, 2, 3, 2, 1]).float().view(1, -1).repeat(1, 1)
-    x = tr.tensor([0, -1, 1, 0]).float().view(1, -1).repeat(1, 1)
-    # y = tr.tensor([1, 2, 3, 2, 1]).float().view(1, -1).repeat(1, 1)
-    # y[1, :] -= 1
-
-    # metric = EntropyMetric()
-    metric = TotalVariationMetric()
-    # metric = TurningPointsMetric()
-    dist = metric(x)
-    print(dist)
-    exit()
-
-    cos = tr.nn.functional.cosine_similarity(x, y, dim=-1)
-    print(cos)
-
-    pcc_s = []
-    for idx in range(x.size(0)):
-        curr_x = x[idx, :]
-        curr_x_target = y[idx, :]
-        data = tr.stack([curr_x, curr_x_target], dim=0)
-        corr_matrix = tr.corrcoef(data)
-        pcc = corr_matrix[0, 1]
-        pcc_s.append(pcc)
-    dist = tr.stack(pcc_s, dim=0)
-    print(dist)
