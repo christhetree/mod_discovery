@@ -34,3 +34,5 @@ init_args:
   fc_act: prelu
   noise_std: 0.33
   filter_cf_hz: 8.0
+  filter_sr: 500.0
+  n_filter: 63

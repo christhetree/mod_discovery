@@ -32,3 +32,5 @@ init_args:
   cnn_act: prelu
   fc_act: prelu
   filter_cf_hz: 8.0
+  filter_sr: 500.0
+  n_filter: 63

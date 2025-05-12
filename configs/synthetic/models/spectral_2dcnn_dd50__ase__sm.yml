@@ -1,6 +1,6 @@
 class_path: models.Spectral2DCNN
 init_args:
-  fe: log_mel_spec_dd50.yml
+  fe: ../misc/log_mel_spec_dd50.yml
   in_ch: 3
   kernel_size: [5, 7]
   out_channels: [64, 64, 64, 64, 64, 64]
@@ -14,12 +14,10 @@ init_args:
       is_spline: true
       n_segments: 24
       degree: 3
-      is_bounded: false
-      use_alpha_noise: false
+      is_bounded: true
+      use_alpha_noise: true
       use_alpha_linear: true
-      adapt_dim: 101
-      adapt_act: none
-      adapt_use_separate: true
+      adapt_dim: 0
     sub_lfo:
       dim: 1
       act: none
@@ -29,7 +27,7 @@ init_args:
       is_bounded: false
       use_alpha_noise: false
       use_alpha_linear: true
-      adapt_dim: 65
+      adapt_dim: 5
       adapt_act: none
       adapt_use_separate: true
     env:

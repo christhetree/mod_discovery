@@ -33,7 +33,7 @@ from mod_sig_metrics import (
     TurningPointsMetric,
     LFORangeMetric,
 )
-from paths import OUT_DIR
+from paths import OUT_DIR, CONFIGS_DIR
 from synths import SynthBase
 
 logging.basicConfig()
@@ -59,11 +59,13 @@ class ModDiscoveryLightingModule(pl.LightningModule):
         global_param_names: Optional[List[str]] = None,
         use_p_loss: bool = False,
         fad_model_names: Optional[List[str]] = None,
-        run_name: Optional[str] = None,
         model_opt: Optional[OptimizerCallable] = None,
         synth_opt: Optional[OptimizerCallable] = None,
         alpha_divisor: float = 1.5,
         lpf_cf_hz: float = 8.0,
+        use_rand_spline: bool = False,
+        use_oracle: bool = False,
+        run_name: Optional[str] = None,
         eps: float = 1e-8,
     ):
         super().__init__()
@@ -97,6 +99,10 @@ class ModDiscoveryLightingModule(pl.LightningModule):
             assert loss_func.sr == ac.sr
         if hasattr(model, "n_frames"):
             assert model.n_frames == temp_param_n_frames
+        if use_rand_spline:
+            log.info("Training random spline baseline")
+        if use_oracle:
+            log.info("Training oracle baseline")
         self.ac = ac
         self.spectral_visualizer = spectral_visualizer
         self.model = model
@@ -116,6 +122,8 @@ class ModDiscoveryLightingModule(pl.LightningModule):
         self.synth_opt = synth_opt
         self.alpha_divisor = alpha_divisor
         self.lpf_cf_hz = lpf_cf_hz
+        self.use_rand_spline = use_rand_spline
+        self.use_oracle = use_oracle
         self.eps = eps
 
         self.loss_name = self.loss_func.__class__.__name__
@@ -238,9 +246,12 @@ class ModDiscoveryLightingModule(pl.LightningModule):
             self.tsv_path = None
 
         # Uncomment for random baselines ===============================================
-        # x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__model.yml")
-        # x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "serum_2/mod_sig_gen__model.yml")
-        # self.x_hat_mod_gen = util.load_class_from_yaml(x_hat_mod_gen_path)
+        self.x_hat_mod_gen = None
+        if use_rand_spline:
+            x_hat_mod_gen_path = os.path.join(
+                CONFIGS_DIR, "synthetic/mod_sig_gen/mod_sig_gen__model.yml"
+            )
+            self.x_hat_mod_gen = util.load_class_from_yaml(x_hat_mod_gen_path)
 
     def state_dict(self, *args, **kwargs) -> Dict[str, T]:
         state_dict = super().state_dict(*args, **kwargs)
@@ -416,63 +427,59 @@ class ModDiscoveryLightingModule(pl.LightningModule):
             alpha_linear = max(alpha_linear, 0.0)
             self.log(f"{stage}/alpha_linear", alpha_linear, prog_bar=False)
 
-        # Regular inference ============================================================
-        model_out = self.model(
-            model_in_dict, alpha_noise=alpha_noise, alpha_linear=alpha_linear
-        )
-
+        model_out = {}
         # Oracle inference =============================================================
-        # model_out = {}
-        # for p_name, tp in self.model.temp_params.items():
-        #     mod_sig = temp_params_raw[p_name]
-        #     pos_enc = self.model.pos_enc.expand(batch_size, -1, -1)
-        #     mod_sig = mod_sig.to(pos_enc.device)
-        #     model_out[p_name] = mod_sig
-        #     mod_sig = mod_sig.unsqueeze(2)
-        #     if tp.adapt_dim:
-        #         adapt_in = tr.cat([mod_sig, pos_enc], dim=-1)
-        #         if tp.adapt_use_separate:
-        #             adapt_outs = []
-        #             for dim_idx in range(tp.adapt_dim):
-        #                 adapter = self.model.adapters[f"{p_name}_{dim_idx}"]
-        #                 adapt_out = adapter(adapt_in)
-        #                 adapt_outs.append(adapt_out)
-        #             adapt_out = tr.cat(adapt_outs, dim=-1)
-        #         else:
-        #             adapt_out = self.model.adapters[p_name](adapt_in)
-        #         adapt_out = self.model.adapter_acts[p_name](adapt_out)
-        #         model_out[f"{p_name}_adapted"] = adapt_out.squeeze(-1)
-
+        if self.use_oracle:
+            for p_name, tp in self.model.temp_params.items():
+                mod_sig = temp_params_raw[p_name]
+                pos_enc = self.model.pos_enc.expand(batch_size, -1, -1)
+                mod_sig = mod_sig.to(pos_enc.device)
+                model_out[p_name] = mod_sig
+                mod_sig = mod_sig.unsqueeze(2)
+                if tp.adapt_dim:
+                    adapt_in = tr.cat([mod_sig, pos_enc], dim=-1)
+                    if tp.adapt_use_separate:
+                        adapt_outs = []
+                        for dim_idx in range(tp.adapt_dim):
+                            adapter = self.model.adapters[f"{p_name}_{dim_idx}"]
+                            adapt_out = adapter(adapt_in)
+                            adapt_outs.append(adapt_out)
+                        adapt_out = tr.cat(adapt_outs, dim=-1)
+                    else:
+                        adapt_out = self.model.adapters[p_name](adapt_in)
+                    adapt_out = self.model.adapter_acts[p_name](adapt_out)
+                    model_out[f"{p_name}_adapted"] = adapt_out.squeeze(-1)
         # Rand SM inference ============================================================
-        # if stage != "test":
-        #     model_out = self.model(
-        #         model_in_dict, alpha_noise=alpha_noise, alpha_linear=alpha_linear
-        #     )
-        # else:
-        #     model_out = {}
-        #     for p_name, tp in self.model.temp_params.items():
-        #         mod_sigs = []
-        #         for idx in range(batch_size):
-        #             mod_sig = self.x_hat_mod_gen(self.temp_param_n_frames)
-        #             mod_sigs.append(mod_sig)
-        #         mod_sig = tr.stack(mod_sigs, dim=0)
-        #         pos_enc = self.model.pos_enc.expand(batch_size, -1, -1)
-        #         mod_sig = mod_sig.to(pos_enc.device)
-        #         model_out[p_name] = mod_sig
-        #         mod_sig = mod_sig.unsqueeze(2)
-        #         if tp.adapt_dim:
-        #             adapt_in = tr.cat([mod_sig, pos_enc], dim=-1)
-        #             if tp.adapt_use_separate:
-        #                 adapt_outs = []
-        #                 for dim_idx in range(tp.adapt_dim):
-        #                     adapter = self.model.adapters[f"{p_name}_{dim_idx}"]
-        #                     adapt_out = adapter(adapt_in)
-        #                     adapt_outs.append(adapt_out)
-        #                 adapt_out = tr.cat(adapt_outs, dim=-1)
-        #             else:
-        #                 adapt_out = self.model.adapters[p_name](adapt_in)
-        #             adapt_out = self.model.adapter_acts[p_name](adapt_out)
-        #             model_out[f"{p_name}_adapted"] = adapt_out.squeeze(-1)
+        elif self.use_rand_spline and stage == "test":
+            model_out = {}
+            for p_name, tp in self.model.temp_params.items():
+                mod_sigs = []
+                for idx in range(batch_size):
+                    mod_sig = self.x_hat_mod_gen(self.temp_param_n_frames)
+                    mod_sigs.append(mod_sig)
+                mod_sig = tr.stack(mod_sigs, dim=0)
+                pos_enc = self.model.pos_enc.expand(batch_size, -1, -1)
+                mod_sig = mod_sig.to(pos_enc.device)
+                model_out[p_name] = mod_sig
+                mod_sig = mod_sig.unsqueeze(2)
+                if tp.adapt_dim:
+                    adapt_in = tr.cat([mod_sig, pos_enc], dim=-1)
+                    if tp.adapt_use_separate:
+                        adapt_outs = []
+                        for dim_idx in range(tp.adapt_dim):
+                            adapter = self.model.adapters[f"{p_name}_{dim_idx}"]
+                            adapt_out = adapter(adapt_in)
+                            adapt_outs.append(adapt_out)
+                        adapt_out = tr.cat(adapt_outs, dim=-1)
+                    else:
+                        adapt_out = self.model.adapters[p_name](adapt_in)
+                    adapt_out = self.model.adapter_acts[p_name](adapt_out)
+                    model_out[f"{p_name}_adapted"] = adapt_out.squeeze(-1)
+        # Regular inference ============================================================
+        else:
+            model_out = self.model(
+                model_in_dict, alpha_noise=alpha_noise, alpha_linear=alpha_linear
+            )
 
         for p_name in self.temp_param_names_hat:
             p_hat = model_out[p_name]

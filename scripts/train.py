@@ -34,49 +34,50 @@ if __name__ == "__main__":
     save_dir = None
     config_basename = None
 
-    # config_name = "synthetic_2/train.yml"
+    # config_name = "synthetic/train__mod_extraction__frame.yml"
+    # config_name = "synthetic/train__mod_extraction__lpf.yml"
+    # config_name = "synthetic/train__mod_extraction__spline.yml"
 
-    # config_name = "synthetic_2/train__ase__lfo.yml"
-    # config_name = "synthetic_2/train__ase__lfo_frame.yml"
-    # config_name = "synthetic_2/train__ase__lfo_frame_8_hz.yml"
-    # config_name = "synthetic_2/test_vital__ase__lfo.yml"
-    # config_name = "synthetic_2/test_vital__ase__lfo_frame.yml"
-    # config_name = "synthetic_2/test_vital__ase__lfo_frame_8_hz.yml"
+    # config_name = "synthetic/test_vital_curves__mod_extraction__frame.yml"
+    # config_name = "synthetic/test_vital_curves__mod_extraction__lpf.yml"
+    # config_name = "synthetic/test_vital_curves__mod_extraction__spline.yml"
 
     # config_basename = os.path.basename(config_name)[:-4]
-    # config_basename = config_basename.replace("test_vital", "train")
+    # config_basename = config_basename.replace("test_vital_curves", "train")
 
     # save_dir = config_name.split("/")[-1][:-4]
     # os.makedirs(save_dir, exist_ok=True)
 
-    config_name = "synthetic_2/train__ase__sm.yml"
-    # config_name = "synthetic_2/train__ase__sm_frame.yml"
-    # config_name = "synthetic_2/train__ase__sm_frame_8_hz.yml"
-    # config_name = "synthetic_2/train__ase__sm_rand.yml"
-    # config_name = "synthetic_2/train__ase__sm_oracle.yml"
-    # config_name = "synthetic_2/test__ase__sm_rand.yml"
+    # config_name = "synthetic/train__mod_discovery__frame.yml"
+    # config_name = "synthetic/train__mod_discovery__lpf.yml"
+    # config_name = "synthetic/train__mod_discovery__spline.yml"
+    config_name = "synthetic/train__mod_discovery__baseline_rand_spline.yml"
+    # config_name = "synthetic/train__mod_discovery__baseline_oracle.yml"
 
-    # config_name = "serum_2/train__ase__sm.yml"
-    # config_name = "serum_2/train__ase__sm_frame.yml"
-    # config_name = "serum_2/train__ase__sm_frame_8_hz.yml"
-    # config_name = "serum_2/train__ase__sm_rand.yml"
-    # config_name = "serum_2/train__ase__sm_frame_gran.yml"
-    # config_name = "serum_2/train__ase__sm_gran.yml"
-    # config_name = "serum_2/train__ase__sm_frame_8_hz_gran.yml"
 
-    # config_name = "serum_2/train__ase__sm_shan.yml"
-    # config_name = "serum_2/train__ase__sm_shan_frame.yml"
-    # config_name = "serum_2/train__ase__sm_shan_frame_8_hz.yml"
-    # config_name = "serum_2/train__ase__sm_shan_rand.yml"
-    # config_name = "serum_2/train__ase__sm_shan_frame_gran.yml"
-    # config_name = "serum_2/train__ase__sm_shan_gran.yml"
 
-    # config_name = "serum_2/train__ase__sm_ddsp.yml"
-    # config_name = "serum_2/train__ase__sm_ddsp_frame.yml"
-    # config_name = "serum_2/train__ase__sm_ddsp_frame_8_hz.yml"
-    # config_name = "serum_2/train__ase__sm_ddsp_rand.yml"
-    # config_name = "serum_2/train__ase__sm_ddsp_frame_gran.yml"
-    # config_name = "serum_2/train__ase__sm_ddsp_gran.yml"
+
+    # config_name = "serum/train__ase__sm.yml"
+    # config_name = "serum/train__ase__sm_frame.yml"
+    # config_name = "serum/train__ase__sm_frame_8_hz.yml"
+    # config_name = "serum/train__ase__sm_rand.yml"
+    # config_name = "serum/train__ase__sm_frame_gran.yml"
+    # config_name = "serum/train__ase__sm_gran.yml"
+    # config_name = "serum/train__ase__sm_frame_8_hz_gran.yml"
+
+    # config_name = "serum/train__ase__sm_shan.yml"
+    # config_name = "serum/train__ase__sm_shan_frame.yml"
+    # config_name = "serum/train__ase__sm_shan_frame_8_hz.yml"
+    # config_name = "serum/train__ase__sm_shan_rand.yml"
+    # config_name = "serum/train__ase__sm_shan_frame_gran.yml"
+    # config_name = "serum/train__ase__sm_shan_gran.yml"
+
+    # config_name = "serum/train__ase__sm_ddsp.yml"
+    # config_name = "serum/train__ase__sm_ddsp_frame.yml"
+    # config_name = "serum/train__ase__sm_ddsp_frame_8_hz.yml"
+    # config_name = "serum/train__ase__sm_ddsp_rand.yml"
+    # config_name = "serum/train__ase__sm_ddsp_frame_gran.yml"
+    # config_name = "serum/train__ase__sm_ddsp_gran.yml"
 
     seeds = [42]
     # seeds = list(range(10))
@@ -99,11 +100,6 @@ if __name__ == "__main__":
 
     config_path = os.path.join(CONFIGS_DIR, config_name)
 
-    # # We extract devices for FADTK
-    # with open(config_path, "r") as in_f:
-    #     config = yaml.safe_load(in_f)
-    # devices = config["trainer"]["devices"]
-
     for idx, (seed, wt_path) in enumerate(itertools.product(seeds, wt_paths)):
         log.info(f"Current seed: {seed} and wavetable: {wt_path}")
 
@@ -123,9 +119,6 @@ if __name__ == "__main__":
             wt_module = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
             synth.register_module("add_synth_module", wt_module)
             synth_hat = cli.model.synth_hat
-            # wt_module_hat = WavetableOsc(sr=sr, wt=basic_shapes_wt, is_trainable=True)
-            # synth_hat.register_module("add_synth_module", wt_module_hat)
-
             if isinstance(synth_hat.add_synth_module, WavetableOsc) and not synth_hat.add_synth_module.is_trainable:
                 wt_module_hat = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
                 synth_hat.register_module("add_synth_module", wt_module_hat)

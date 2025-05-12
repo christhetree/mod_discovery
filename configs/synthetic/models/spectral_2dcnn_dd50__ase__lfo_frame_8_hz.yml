@@ -1,6 +1,6 @@
 class_path: models.Spectral2DCNN
 init_args:
-  fe: log_mel_spec_dd50.yml
+  fe: ../misc/log_mel_spec_dd50.yml
   in_ch: 3
   kernel_size: [5, 7]
   out_channels: [64, 64, 64, 64, 64, 64]
@@ -30,3 +30,6 @@ init_args:
   n_frames: 1501
   cnn_act: prelu
   fc_act: prelu
+  filter_cf_hz: 8.0
+  filter_sr: 500.0
+  n_filter: 63

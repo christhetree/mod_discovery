@@ -1,7 +1,7 @@
 custom:
-  project_name: acid_ddsp_2
-  model_name: mss__frame_8_hz_nn__lfo
-  dataset_name: ase__ableton_13
+  project_name: mod_discovery
+  model_name: mss__frame_8_hz__mod_ex
+  dataset_name: ase__ableton_10
   cpu_batch_size: 5
   use_wandb_cpu: false
   use_wandb_gpu: false
@@ -18,7 +18,7 @@ data:
   class_path: acid_ddsp.data_modules.SeedDataModule
   init_args:
     batch_size: 32
-    ac: audio_config.yml
+    ac: misc/audio_config.yml
     n_seeds: 1024
     mod_sig_gens:
       - class_path: acid_ddsp.modulations.ModSignalGenRandomBezier1D
@@ -38,11 +38,11 @@ data:
     num_workers: 4
 
 model:
-  class_path: acid_ddsp.lightning.AcidDDSPLightingModule
+  class_path: acid_ddsp.lightning.ModDiscoveryLightingModule
   init_args:
-    ac: audio_config.yml
-    spectral_visualizer: log_mel_spec.yml
-    synth: synth__ase.yml
+    ac: misc/audio_config.yml
+    spectral_visualizer: misc/log_mel_spec.yml
+    synth: synths/synth__ase.yml
     temp_param_names:
       - add_lfo
       - sub_lfo
@@ -51,7 +51,7 @@ model:
       - add_lfo
       - sub_lfo
       - env
-    model: spectral_2dcnn_dd50__ase__lfo_frame_8_hz.yml
+    model: models/spectral_2dcnn_dd50__ase__lfo_frame_8_hz.yml
     temp_param_names_hat:
       - add_lfo
       - sub_lfo
@@ -60,7 +60,7 @@ model:
       - add_lfo
       - sub_lfo
       - env
-    synth_hat: synth__ase.yml
+    synth_hat: synths/synth__ase.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
     use_p_loss: false
@@ -69,8 +69,6 @@ model:
 
     fad_model_names:
       - clap-2023
-#      - encodec-emb-48k
-      - panns-cnn14-32k
-      - panns-wavegram-logmel
+      - encodec-emb-48k
 
-    run_name: mss__frame_8_hz_nn__lfo__ase__ableton_13
+    run_name: mss__frame_8_hz__mod_ex__ase__ableton_10

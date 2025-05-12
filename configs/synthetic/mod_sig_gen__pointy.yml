@@ -1,8 +1,0 @@
-class_path: modulations.ModSignalGeneratorPointy
-init_args:
-  min_diff: 0.2
-  max_diff: 1.0
-  min_attack_frac: 0.0
-  max_attack_frac: 1.0
-  min_alpha: 0.1
-  max_alpha: 6.0

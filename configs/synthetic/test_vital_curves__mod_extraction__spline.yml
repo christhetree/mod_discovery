@@ -1,7 +1,7 @@
 custom:
-  project_name: acid_ddsp_2
-  model_name: mss__s24d3D__sm_16_1024
-  dataset_name: ase__ableton_13
+  project_name: mod_discovery
+  model_name: mss__s24d3__mod_ex
+  dataset_name: ase__ableton_10__vital_curves
   cpu_batch_size: 5
   use_wandb_cpu: false
   use_wandb_gpu: false
@@ -18,16 +18,13 @@ data:
   class_path: acid_ddsp.data_modules.SeedDataModule
   init_args:
     batch_size: 32
-    ac: audio_config.yml
-    n_seeds: 1024
+    ac: misc/audio_config.yml
+    n_seeds: 5120
     mod_sig_gens:
-      - class_path: acid_ddsp.modulations.ModSignalGenRandomBezier1D
+      - class_path: acid_ddsp.modulations.ModSignalGenVitalCurves
         init_args:
-          min_n_seg: 1
-          max_n_seg: 8
-          min_degree: 1
-          max_degree: 3
-          min_seg_interval_frac: 0.5
+          curves_path: ../data/vital_curves__52_1501.pt
+#          curves_path: data/vital_curves__52_1501.pt
     global_param_names:
       - q
     temp_param_names:
@@ -38,11 +35,11 @@ data:
     num_workers: 4
 
 model:
-  class_path: acid_ddsp.lightning.AcidDDSPLightingModule
+  class_path: acid_ddsp.lightning.ModDiscoveryLightingModule
   init_args:
-    ac: audio_config.yml
-    spectral_visualizer: log_mel_spec.yml
-    synth: synth__ase.yml
+    ac: misc/audio_config.yml
+    spectral_visualizer: misc/log_mel_spec.yml
+    synth: synths/synth__ase.yml
     temp_param_names:
       - add_lfo
       - sub_lfo
@@ -51,25 +48,24 @@ model:
       - add_lfo
       - sub_lfo
       - env
-    model: spectral_2dcnn_dd50__ase__sm.yml
+    model: models/spectral_2dcnn_dd50__ase__lfo.yml
     temp_param_names_hat:
       - add_lfo
       - sub_lfo
       - env
     interp_temp_param_names_hat:
       - add_lfo
+      - sub_lfo
       - env
-    synth_hat: synth__ase__sm.yml
+    synth_hat: synths/synth__ase.yml
 
     loss_func: auraloss.freq.MultiResolutionSTFTLoss
+    use_p_loss: false
 
-    synth_opt: ../opt/sf_adam_w__lr_5e-2.yml
     model_opt: ../opt/sf_adam_w__lr_5e-3.yml
 
     fad_model_names:
       - clap-2023
       - encodec-emb-48k
-      - panns-cnn14-32k
-      - panns-wavegram-logmel
 
-    run_name: mss__s24d3D__sm_16_1024__ase__ableton_13
+    run_name: mss__s24d3__mod_ex__ase__ableton_10__vital_curves
