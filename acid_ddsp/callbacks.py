@@ -13,7 +13,7 @@ from pytorch_lightning import Trainer, Callback
 from torch import Tensor as T, nn
 
 from acid_ddsp.plotting import fig2img, plot_waveforms_stacked, plot_wavetable
-from lightning import AcidDDSPLightingModule
+from lightning import ModDiscoveryLightingModule
 from synth_modules import WavetableOsc
 
 logging.basicConfig()
@@ -31,7 +31,7 @@ class LogModSigAndSpecCallback(Callback):
     def on_validation_batch_end(
         self,
         trainer: Trainer,
-        pl_module: AcidDDSPLightingModule,
+        pl_module: ModDiscoveryLightingModule,
         out_dict: Dict[str, T],
         batch: Dict[str, T],
         batch_idx: int,
@@ -58,7 +58,7 @@ class LogModSigAndSpecCallback(Callback):
                     self.out_dicts[idx] = idx_out_dict
 
     def on_validation_epoch_end(
-        self, trainer: Trainer, pl_module: AcidDDSPLightingModule
+        self, trainer: Trainer, pl_module: ModDiscoveryLightingModule
     ) -> None:
         images = []
         for example_idx in range(self.n_examples):
@@ -200,7 +200,7 @@ class LogAudioCallback(Callback):
     def on_validation_batch_end(
         self,
         trainer: Trainer,
-        pl_module: AcidDDSPLightingModule,
+        pl_module: ModDiscoveryLightingModule,
         out_dict: Dict[str, T],
         batch: Dict[str, T],
         batch_idx: int,
@@ -223,7 +223,7 @@ class LogAudioCallback(Callback):
                     self.out_dicts[idx] = idx_out_dict
 
     def on_validation_epoch_end(
-        self, trainer: Trainer, pl_module: AcidDDSPLightingModule
+        self, trainer: Trainer, pl_module: ModDiscoveryLightingModule
     ) -> None:
         sample_time_sec = pl_module.ac.buffer_size_seconds
         n_repeat = math.ceil(self.min_render_time_sec / sample_time_sec)
@@ -344,7 +344,7 @@ class LogWavetablesCallback(Callback):
         return images
 
     def on_validation_epoch_end(
-        self, trainer: Trainer, pl_module: AcidDDSPLightingModule
+        self, trainer: Trainer, pl_module: ModDiscoveryLightingModule
     ) -> None:
         images = []
         with suppress(Exception):

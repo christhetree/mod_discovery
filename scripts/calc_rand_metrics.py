@@ -8,7 +8,7 @@ from torch import nn
 from tqdm import tqdm
 
 import util
-from lightning import AcidDDSPLightingModule
+from lightning import ModDiscoveryLightingModule
 from mod_sig_distances import (
     ESRLoss,
     FFTMagDist,

@@ -20,27 +20,20 @@ from audio_distances import (
     SpectralFlatnessDistance,
     MFCCDistance,
 )
-
-# from fad import save_and_concat_fad_audio, calc_fad
+from fad import save_and_concat_fad_audio, calc_fad
 from feature_extraction import LogMelSpecFeatureExtractor
 from mod_sig_distances import (
     FirstDerivativeDistance,
-    SecondDerivativeDistance,
-    ESRLoss,
-    FFTMagDist,
     PCCDistance,
-    DTWDistance,
-    ChamferDistance,
     FrechetDistance,
 )
 from mod_sig_metrics import (
-    EntropyMetric,
     SpectralEntropyMetric,
     TotalVariationMetric,
     TurningPointsMetric,
     LFORangeMetric,
 )
-from paths import OUT_DIR, CONFIGS_DIR
+from paths import OUT_DIR
 from synths import SynthBase
 
 logging.basicConfig()
@@ -48,7 +41,7 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-class AcidDDSPLightingModule(pl.LightningModule):
+class ModDiscoveryLightingModule(pl.LightningModule):
     def __init__(
         self,
         ac: AudioConfig,
@@ -69,10 +62,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         run_name: Optional[str] = None,
         model_opt: Optional[OptimizerCallable] = None,
         synth_opt: Optional[OptimizerCallable] = None,
-        metrics_win_len_sec: float = 0.0500,
-        metrics_hop_len_sec: float = 0.0125,
-        metrics_n_mels: int = 128,
         alpha_divisor: float = 1.5,
+        lpf_cf_hz: float = 8.0,
         eps: float = 1e-8,
     ):
         super().__init__()
@@ -123,10 +114,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.fad_model_names = fad_model_names
         self.model_opt = model_opt
         self.synth_opt = synth_opt
-        self.metrics_win_len_sec = metrics_win_len_sec
-        self.metrics_hop_len_sec = metrics_hop_len_sec
-        self.metrics_n_mels = metrics_n_mels
         self.alpha_divisor = alpha_divisor
+        self.lpf_cf_hz = lpf_cf_hz
         self.eps = eps
 
         self.loss_name = self.loss_func.__class__.__name__
@@ -136,51 +125,36 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.global_n = 0
         self.curr_training_step = 0
         self.total_n_training_steps = None
-        self.metrics_win_len = int(metrics_win_len_sec * self.ac.sr)
-        self.metrics_hop_len = int(metrics_hop_len_sec * self.ac.sr)
 
+        # TODO(cm): add to config
         # Audio distances ==============================================================
+        metrics_win_len = int(0.0500 * self.ac.sr)
+        metrics_hop_len = int(0.0125 * self.ac.sr)
         self.audio_dists = nn.ModuleDict()
         ad_tsv_cols = []
         self.audio_dists["mss"] = auraloss.freq.MultiResolutionSTFTLoss()
         ad_tsv_cols.append("mss")
         self.audio_dists["mel_stft"] = auraloss.freq.MelSTFTLoss(
             sample_rate=self.ac.sr,
-            fft_size=self.metrics_win_len,
-            hop_size=self.metrics_hop_len,
-            win_length=self.metrics_win_len,
-            n_mels=self.metrics_n_mels,
+            fft_size=metrics_win_len,
+            hop_size=metrics_hop_len,
+            win_length=metrics_win_len,
+            n_mels=128,
         )
         ad_tsv_cols.append("mel_stft")
         self.audio_dists["mfcc"] = MFCCDistance(
             sr=self.ac.sr,
             log_mels=True,
-            n_fft=self.metrics_win_len,
-            hop_len=self.metrics_hop_len,
-            n_mels=self.metrics_n_mels,
+            n_fft=metrics_win_len,
+            hop_len=metrics_hop_len,
+            n_mels=128,
         )
         ad_tsv_cols.append("mfcc")
-        # metrics_n_frames = self.ac.n_samples // self.metrics_hop_len + 1
-        # TODO(cm): add to config
         metrics_n_frames = self.ac.n_samples // self.spectral_visualizer.hop_len + 1
         ad_dist_fn_s = {
-            # "esr": ESRLoss(eps=eps),
-            # "esr_d1": FirstDerivativeDistance(ESRLoss(eps=eps)),
-            # "esr_d2": SecondDerivativeDistance(ESRLoss(eps=eps)),
             "l1": nn.L1Loss(),
             "l1_d1": FirstDerivativeDistance(nn.L1Loss()),
-            # "l1_d2": SecondDerivativeDistance(nn.L1Loss()),
-            # "mse": nn.MSELoss(),
-            # "mse_d1": FirstDerivativeDistance(nn.MSELoss()),
-            # "mse_d2": SecondDerivativeDistance(nn.MSELoss()),
-            # "fft": FFTMagDist(),
-            # "fft_d1": FirstDerivativeDistance(FFTMagDist()),
-            # "fft_d2": SecondDerivativeDistance(FFTMagDist()),
             "pcc": PCCDistance(),
-            # "pcc_d1": FirstDerivativeDistance(PCCDistance()),
-            # "pcc_d2": SecondDerivativeDistance(PCCDistance()),
-            # "dtw": DTWDistance(),
-            # "cd": ChamferDistance(n_frames=metrics_n_frames),
             "fd": FrechetDistance(n_frames=metrics_n_frames),
         }
         for feat_name, feat_cls in [
@@ -189,46 +163,30 @@ class AcidDDSPLightingModule(pl.LightningModule):
             ("sb", SpectralBandwidthDistance),
             ("sf", SpectralFlatnessDistance),
         ]:
-            cf_hz = 8.0  # TODO(cm): add to config
             self.audio_dists[feat_name] = feat_cls(
                 sr=self.ac.sr,
-                # win_len=self.metrics_win_len,
                 win_len=self.spectral_visualizer.n_fft,
-                # hop_len=self.metrics_hop_len,
                 hop_len=self.spectral_visualizer.hop_len,
                 dist_fn_s=ad_dist_fn_s,
                 average_channels=True,
-                filter_cf_hz=cf_hz,
+                filter_cf_hz=self.lpf_cf_hz,
             )
             for dist_name in ad_dist_fn_s:
                 ad_tsv_cols.append(f"{feat_name}__{dist_name}")
-                ad_tsv_cols.append(f"{feat_name}__{dist_name}__cf_{cf_hz:.0f}_hz")
+                ad_tsv_cols.append(
+                    f"{feat_name}__{dist_name}__cf_{self.lpf_cf_hz:.0f}_hz"
+                )
                 ad_tsv_cols.append(f"{feat_name}__{dist_name}__inv_all")
                 ad_tsv_cols.append(
-                    f"{feat_name}__{dist_name}__cf_{cf_hz:.0f}_hz__inv_all"
+                    f"{feat_name}__{dist_name}__cf_{self.lpf_cf_hz:.0f}_hz__inv_all"
                 )
         ad_tsv_cols = [f"audio__{v}" for v in ad_tsv_cols]
 
         # LFO distances ================================================================
         self.lfo_dists = nn.ModuleDict()
-        # self.lfo_dists["esr"] = ESRLoss(eps=eps)
-        # self.lfo_dists["esr_d1"] = FirstDerivativeDistance(dist_fn=ESRLoss(eps=eps))
-        # self.lfo_dists["esr_d2"] = SecondDerivativeDistance(dist_fn=ESRLoss(eps=eps))
         self.lfo_dists["l1"] = nn.L1Loss()
         self.lfo_dists["l1_d1"] = FirstDerivativeDistance(dist_fn=nn.L1Loss())
-        # self.lfo_dists["l1_d2"] = SecondDerivativeDistance(dist_fn=nn.L1Loss())
-        # self.lfo_dists["mse"] = nn.MSELoss()
-        # self.lfo_dists["mse_d1"] = FirstDerivativeDistance(dist_fn=nn.MSELoss())
-        # self.lfo_dists["mse_d2"] = SecondDerivativeDistance(dist_fn=nn.MSELoss())
-        # self.lfo_dists["fft_l1"] = FFTMagDist()
-        # self.lfo_dists["fft_l1_d1"] = FirstDerivativeDistance(dist_fn=FFTMagDist())
-        # self.lfo_dists["fft_l1_d2"] = SecondDerivativeDistance(dist_fn=FFTMagDist())
         self.lfo_dists["pcc"] = PCCDistance()
-        # self.lfo_dists["pcc_d1"] = FirstDerivativeDistance(dist_fn=PCCDistance())
-        # self.lfo_dists["pcc_d2"] = SecondDerivativeDistance(dist_fn=PCCDistance())
-
-        # self.lfo_dists["dtw"] = DTWDistance()
-        # self.lfo_dists["cd"] = ChamferDistance(n_frames=temp_param_n_frames)
         self.lfo_dists["fd"] = FrechetDistance(n_frames=temp_param_n_frames)
 
         # LFO metrics ==================================================================
@@ -236,7 +194,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         self.lfo_metrics["range_mean"] = LFORangeMetric(agg_fn="mean")
         self.lfo_metrics["min_val"] = LFORangeMetric(agg_fn="min_val")
         self.lfo_metrics["max_val"] = LFORangeMetric(agg_fn="max_val")
-        # self.lfo_metrics["ent"] = EntropyMetric(eps=eps, normalize=True)
         self.lfo_metrics["spec_ent"] = SpectralEntropyMetric(eps=eps, normalize=True)
         self.lfo_metrics["tv"] = TotalVariationMetric(eps=eps, normalize=True)
         self.lfo_metrics["tp"] = TurningPointsMetric()
@@ -280,6 +237,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         else:
             self.tsv_path = None
 
+        # Uncomment for random baselines ===============================================
         # x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "synthetic_2/mod_sig_gen__model.yml")
         # x_hat_mod_gen_path = os.path.join(CONFIGS_DIR, "serum_2/mod_sig_gen__model.yml")
         # self.x_hat_mod_gen = util.load_class_from_yaml(x_hat_mod_gen_path)
@@ -310,6 +268,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         #     self.synth = tr.compile(self.synth)
         #     self.synth_hat = tr.compile(self.synth_hat)
 
+    # This is needed for the ScheduleFree optimizer
     def on_train_epoch_start(self) -> None:
         try:
             self.model_opt.train()
@@ -320,6 +279,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         except AttributeError:
             pass
 
+    # This is needed for the ScheduleFree optimizer
     def on_validation_epoch_start(self) -> None:
         try:
             self.model_opt.eval()
@@ -330,6 +290,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         except AttributeError:
             pass
 
+    # This is needed for the ScheduleFree optimizer
     def on_test_epoch_start(self) -> None:
         try:
             self.model_opt.eval()
@@ -346,17 +307,17 @@ class AcidDDSPLightingModule(pl.LightningModule):
         phase = batch["phase"]
         phase_hat = batch["phase_hat"]
 
-        batch_size = f0_hz.size(0)
-        assert f0_hz.shape == (batch_size,)
-        assert note_on_duration.shape == (batch_size,)
-        assert phase.shape == (batch_size,)
-        assert phase_hat.shape == (batch_size,)
+        bs = f0_hz.size(0)
+        assert f0_hz.shape == (bs,)
+        assert note_on_duration.shape == (bs,)
+        assert phase.shape == (bs,)
+        assert phase_hat.shape == (bs,)
 
         temp_params_raw = {}
         temp_params = {}
         for temp_param_name in self.temp_param_names:
             temp_param = batch[temp_param_name]
-            assert temp_param.shape == (batch_size, self.temp_param_n_frames)
+            assert temp_param.shape == (bs, self.temp_param_n_frames)
             assert temp_param.min() >= 0.0
             assert temp_param.max() <= 1.0
             temp_params_raw[temp_param_name] = temp_param
@@ -372,23 +333,8 @@ class AcidDDSPLightingModule(pl.LightningModule):
         }
 
         other_params = {}
-        # if "add_lfo" in temp_params:
-        #     other_params["add_lfo"] = temp_params["add_lfo"]
-        # else:
-        #     other_mod_sig = list(temp_params.values())[0]
-        #     add_mod_sig = tr.zeros_like(other_mod_sig)
-        #     # add_mod_sig = tr.ones_like(other_mod_sig)
-        #     other_params["add_lfo"] = add_mod_sig
-        # if "wt" in batch:
-        #     other_params["wt"] = batch["wt"]
         if "q_0to1" in batch:
             other_params["q_mod_sig"] = batch["q_0to1"]
-        # filter_types = ["lp", "hp", "bp", "no"]
-        # if "filter_type_0to1" in batch:
-        #     filter_type_0to1 = batch["filter_type_0to1"][0]
-        #     filter_type_idx = int(filter_type_0to1 * len(filter_types))
-        #     filter_type = filter_types[filter_type_idx]
-        #     other_params["filter_type"] = filter_type
 
         # Generate ground truth wet audio
         with tr.no_grad():
@@ -403,7 +349,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
             add_audio = synth_out["add_audio"]
             sub_audio = synth_out["sub_audio"]
             env_audio = synth_out["env_audio"]
-            assert add_audio.shape == (batch_size, self.ac.n_samples)
+            assert add_audio.shape == (bs, self.ac.n_samples)
             assert add_audio.shape == sub_audio.shape == env_audio.shape
         preproc_batch = {
             "f0_hz": f0_hz,
@@ -437,8 +383,6 @@ class AcidDDSPLightingModule(pl.LightningModule):
         phase_hat = batch["phase_hat"]
         # Get optional params
         temp_params_raw = batch.get("temp_params_raw", {})
-        temp_params = batch.get("temp_params", {})
-        global_params = batch.get("global_params", {})
         other_params = batch.get("other_params", {})
         add_audio = batch.get("add_audio")
 
@@ -592,26 +536,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
                                 continue
                         dist_fn = self.lfo_dists[dist_name]
 
-                        # # Don't calc raw distances during validation and sound matching
-                        # # to save time since they will probably be meaningless
-                        # should_calc_raw = True
-                        # if stage == "val" and self.synth_opt is not None:
-                        #     should_calc_raw = False
-                        #
-                        # # if should_calc_raw:
-
                         # Calc raw
                         val = dist_fn(p_hat, p)
                         self.log(f"{stage}/{p_name}__{dist_name}", val, prog_bar=False)
                         lfo_dist_vals[f"{p_name}__{dist_name}"] = val.item()
-
-                        # # Don't calc inv distances during validation and not sound
-                        # # matching to save time since they will prob be meaningless
-                        # should_calc_inv = True
-                        # if stage == "val" and self.synth_opt is None:
-                        #     should_calc_inv = False
-                        #
-                        # if should_calc_inv:
 
                         # Calc inv
                         val = dist_fn(p_hat_inv, p)
@@ -740,10 +668,10 @@ class AcidDDSPLightingModule(pl.LightningModule):
         if stage != "train":
             with tr.no_grad():
                 for feat_name, feat_fn in self.audio_dists.items():
-                    if stage == "val":
-                        if feat_name in ["rms", "sc", "sb", "sf"]:
-                            # Skip expensive distances during validation
-                            continue
+                    # # Skip expensive distances during validation
+                    # if stage == "val":
+                    #     if feat_name in ["rms", "sc", "sb", "sf"]:
+                    #         continue
                     if feat_name in ["rms", "sc", "sb", "sf"]:
                         vals = feat_fn(x_hat, x, p_hats)
                     else:
@@ -779,11 +707,9 @@ class AcidDDSPLightingModule(pl.LightningModule):
             ]
             curr_tsv_row_len = len(tsv_row)
             for col in self.tsv_cols[curr_tsv_row_len:]:
-                # if stage == "test":
-                #     assert col in tsv_row_vals, f"Missing TSV column: {col}"
-                # if stage != "train" and not col.startswith("fad__"):
-                #     assert col in tsv_row_vals, f"Missing TSV column: {col}"
-                val = tsv_row_vals.get(col)
+                if stage == "test" and col not in tsv_row_vals:
+                    log.warning(f"Missing TSV column: {col}")
+                val = tsv_row_vals.get(col, "")
                 tsv_row.append(val)
             assert len(tsv_row) == len(self.tsv_cols)
             with open(self.tsv_path, "a") as f:
@@ -881,7 +807,7 @@ class AcidDDSPLightingModule(pl.LightningModule):
         return fad_dists
 
 
-class PreprocLightningModule(AcidDDSPLightingModule):
+class PreprocLightningModule(ModDiscoveryLightingModule):
     def preprocess_batch(self, batch: Dict[str, T]) -> Dict[str, T | Dict[str, T]]:
         audio = batch["audio"]
         f0_hz = batch["f0_hz"]
