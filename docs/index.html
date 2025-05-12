@@ -87,13 +87,13 @@
                 However, determining the modulation signals used to create a sound is difficult, and existing sound-matching / parameter estimation systems are often uninterpretable black boxes or predict high-dimensional framewise parameter values without considering the shape, structure, and routing of the underlying modulation curves.
                 We propose a neural sound-matching approach that leverages modulation extraction, constrained control signal parameterizations, and differentiable digital signal processing (DDSP) to discover the modulations present in a sound.
                 We demonstrate the effectiveness of our approach on highly modulated synthetic and real audio samples, its applicability to different DDSP synth architectures, and investigate the trade-off it incurs between interpretability and sound-matching accuracy.
-                We make our code and audio samples available and provide the trained models and DDSP synths in a VST plugin.
+                We make our code and audio samples available and provide the trained DDSP synths in a VST plugin.
             </p>
-<!--            <br>-->
-<!--            <img class="img-fluid" src="img/filter_diagram.svg">-->
-<!--            <br>-->
-<!--            <br>-->
-<!--            <p class="text-center">Figure 1: <em>The forward (left) and backpropagation (right) flow chart of a third-order time-varying all-pole filter.</em></p>-->
+            <br>
+            <img class="img-fluid w-100 mx-auto d-block" src="img/modulation_discovery.svg">
+            <br>
+            <br>
+            <p class="text-center">Figure 1: <em>Overview of the modulation discovery process through modulation extraction, parameterization, and routing using a DDSP synth. Orange blocks are neural networks, dashed blocks are optional, and blue blocks are differentiable and may contain learnable weights for sound matching.</em></p>
         </div>
     </div>
 
