@@ -78,10 +78,9 @@ if __name__ == "__main__":
     # config_name = "serum_2/train__ase__sm_ddsp_frame_gran.yml"
     # config_name = "serum_2/train__ase__sm_ddsp_gran.yml"
 
-    # seeds = [0]
-    seeds = list(range(10))
+    seeds = [42]
+    # seeds = list(range(10))
     # seeds = list(range(20))
-    # seeds = list(range(20, 40))
     log.info(f"Running with seeds: {seeds}")
 
     wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
