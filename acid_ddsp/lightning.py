@@ -534,12 +534,7 @@ class ModDiscoveryLightingModule(pl.LightningModule):
                     for dist_name in self.lfo_dists:
                         if stage == "val":
                             # Skip expensive distances during validation
-                            if dist_name in ["mse", "fft", "dtw", "fd", "cd"]:
-                                continue
-                            # Skip derivative distances for now
-                            # if "_d1" in dist_name:
-                            #     continue
-                            if "_d2" in dist_name:
+                            if dist_name in ["dtw", "fd", "cd"]:
                                 continue
                         dist_fn = self.lfo_dists[dist_name]
 
@@ -670,15 +665,17 @@ class ModDiscoveryLightingModule(pl.LightningModule):
 
         # Compute audio distances ======================================================
         audio_dist_vals = {}
-        p_hats = tr.stack([p for p in temp_params_hat_raw.values()], dim=1)
-        # p_hats = None
+        if all(p.size(1) == 1 for p in temp_params_hat_raw.values()):
+            p_hats = tr.stack([p for p in temp_params_hat_raw.values()], dim=1)
+        else:
+            p_hats = None
         if stage != "train":
             with tr.no_grad():
                 for feat_name, feat_fn in self.audio_dists.items():
-                    # # Skip expensive distances during validation
-                    # if stage == "val":
-                    #     if feat_name in ["rms", "sc", "sb", "sf"]:
-                    #         continue
+                    # Skip expensive distances during validation
+                    if stage == "val":
+                        if feat_name in ["rms", "sc", "sb", "sf"]:
+                            continue
                     if feat_name in ["rms", "sc", "sb", "sf"]:
                         vals = feat_fn(x_hat, x, p_hats)
                     else:

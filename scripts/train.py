@@ -45,39 +45,32 @@ if __name__ == "__main__":
     # config_basename = os.path.basename(config_name)[:-4]
     # config_basename = config_basename.replace("test_vital_curves", "train")
 
-    # save_dir = config_name.split("/")[-1][:-4]
-    # os.makedirs(save_dir, exist_ok=True)
-
     # config_name = "synthetic/train__mod_discovery__frame.yml"
     # config_name = "synthetic/train__mod_discovery__lpf.yml"
     # config_name = "synthetic/train__mod_discovery__spline.yml"
-    config_name = "synthetic/train__mod_discovery__baseline_rand_spline.yml"
     # config_name = "synthetic/train__mod_discovery__baseline_oracle.yml"
+    # config_name = "synthetic/train__mod_discovery__baseline_rand_spline.yml"
 
+    # save_dir = config_name.split("/")[-1][:-4]
+    # os.makedirs(save_dir, exist_ok=True)
 
+    # config_name = "serum/train__mod_discovery__mod_synth_frame.yml"
+    # config_name = "serum/train__mod_discovery__mod_synth_lpf.yml"
+    # config_name = "serum/train__mod_discovery__mod_synth_spline.yml"
+    # config_name = "serum/train__mod_discovery__mod_synth_baseline_gran.yml"
+    # config_name = "serum/train__mod_discovery__mod_synth_baseline_rand_spline.yml"
 
+    # config_name = "serum/train__mod_discovery__shan_et_al_frame.yml"
+    # config_name = "serum/train__mod_discovery__shan_et_al_lpf.yml"
+    # config_name = "serum/train__mod_discovery__shan_et_al_spline.yml"
+    # config_name = "serum/train__mod_discovery__shan_et_al_baseline_gran.yml"
+    # config_name = "serum/train__mod_discovery__shan_et_al_baseline_rand_spline.yml"
 
-    # config_name = "serum/train__ase__sm.yml"
-    # config_name = "serum/train__ase__sm_frame.yml"
-    # config_name = "serum/train__ase__sm_frame_8_hz.yml"
-    # config_name = "serum/train__ase__sm_rand.yml"
-    # config_name = "serum/train__ase__sm_frame_gran.yml"
-    # config_name = "serum/train__ase__sm_gran.yml"
-    # config_name = "serum/train__ase__sm_frame_8_hz_gran.yml"
-
-    # config_name = "serum/train__ase__sm_shan.yml"
-    # config_name = "serum/train__ase__sm_shan_frame.yml"
-    # config_name = "serum/train__ase__sm_shan_frame_8_hz.yml"
-    # config_name = "serum/train__ase__sm_shan_rand.yml"
-    # config_name = "serum/train__ase__sm_shan_frame_gran.yml"
-    # config_name = "serum/train__ase__sm_shan_gran.yml"
-
-    # config_name = "serum/train__ase__sm_ddsp.yml"
-    # config_name = "serum/train__ase__sm_ddsp_frame.yml"
-    # config_name = "serum/train__ase__sm_ddsp_frame_8_hz.yml"
-    # config_name = "serum/train__ase__sm_ddsp_rand.yml"
-    # config_name = "serum/train__ase__sm_ddsp_frame_gran.yml"
-    # config_name = "serum/train__ase__sm_ddsp_gran.yml"
+    # config_name = "serum/train__mod_discovery__engel_et_al_frame.yml"
+    # config_name = "serum/train__mod_discovery__engel_et_al_lpf.yml"
+    # config_name = "serum/train__mod_discovery__engel_et_al_spline.yml"
+    # config_name = "serum/train__mod_discovery__engel_et_al_baseline_gran.yml"
+    config_name = "serum/train__mod_discovery__engel_et_al_baseline_rand_spline.yml"
 
     seeds = [42]
     # seeds = list(range(10))
@@ -92,11 +85,13 @@ if __name__ == "__main__":
             filtered_wt_names.append(wt_name)
     wt_paths = [os.path.join(wt_dir, f"{wt_name}.pt") for wt_name in filtered_wt_names]
     wt_paths = sorted(wt_paths)
-    for wt_path in wt_paths:
-        wt_name = os.path.basename(wt_path)
-        log.info(wt_name)
-    log.info(f"\nWavetable directory: {wt_dir}\nFound {len(wt_paths)} wavetables")
-    # wt_paths = [None]
+    if "serum" in config_name:
+        wt_paths = [None]
+    else:
+        for wt_path in wt_paths:
+            wt_name = os.path.basename(wt_path)
+            log.info(wt_name)
+        log.info(f"\nWavetable directory: {wt_dir}\nFound {len(wt_paths)} wavetables")
 
     config_path = os.path.join(CONFIGS_DIR, config_name)
 
@@ -123,20 +118,9 @@ if __name__ == "__main__":
                 wt_module_hat = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
                 synth_hat.register_module("add_synth_module", wt_module_hat)
 
-        # use_wandb = idx == 0 and tr.cuda.is_available()
-        # use_wandb = True
-        use_wandb = None
-        cli.before_fit(use_wandb=use_wandb)
+        cli.before_fit()
         cli.trainer.fit(model=cli.model, datamodule=cli.datamodule)
-
-        # Set CUDA_VISIBLE_DEVICES again for FADTK
-        # if isinstance(devices, list):
-        #     cuda_flag = f'{",".join([str(d) for d in devices])}'
-        #     log.info(f"setting CUDA_VISIBLE_DEVICES = {cuda_flag}")
-        #     os.environ["CUDA_VISIBLE_DEVICES"] = f"{cuda_flag}"
-
         cli.trainer.test(model=cli.model, datamodule=cli.datamodule, ckpt_path="best")
-        # cli.trainer.test(model=cli.model, datamodule=cli.datamodule)
 
         # def get_ckpt_path(idx: int, config_basename: str) -> str:
         #     ckpt_dir = os.path.join(

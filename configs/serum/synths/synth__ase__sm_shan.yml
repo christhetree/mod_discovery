@@ -1,0 +1,7 @@
+class_path: synths.ComposableSynth
+init_args:
+  ac: ../misc/audio_config.yml
+  add_synth_module: wavetable_osc__learnable_shan.yml
+  add_lfo_name: add_lfo_adapted
+  sub_synth_module: filter__coeff_logits.yml
+  sub_lfo_name: sub_lfo_adapted

@@ -1,5 +1,0 @@
-class_path: synths.ComposableSynth
-init_args:
-  ac: audio_config.yml
-  add_synth_module: ddsp_osc__harmonic.yml
-  sub_synth_module: ddsp_osc__noise.yml

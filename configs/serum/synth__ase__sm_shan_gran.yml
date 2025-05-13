@@ -1,5 +1,0 @@
-class_path: synths.ComposableSynth
-init_args:
-  ac: audio_config.yml
-  add_synth_module: wavetable_osc__learnable_shan.yml
-  sub_synth_module: filter__coeff_logits.yml
