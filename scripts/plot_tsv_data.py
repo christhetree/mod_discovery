@@ -44,7 +44,6 @@ def prepare_tsv_data(
     stage: str,
     x_col: str,
     y_col: str,
-    y_converge_val: float = 0.1,
     trial_col: str = "seed",
     filter_col: Optional[str] = None,
     filter_vals: Optional[List[str]] = None,
@@ -89,10 +88,6 @@ def prepare_tsv_data(
     x_val_mins = []
     x_val_maxs = []
     x_val_ranges = []
-    # tvs_x_normed = []
-    # tvs_xy_normed = []
-    # converged = []
-    # converged_x_vals = []
 
     for _, group in grouped:
         # Calc ranges and duration per step
@@ -106,25 +101,6 @@ def prepare_tsv_data(
         grouped_x = group.groupby(x_col).agg({y_col: "mean"})
         for x_val, y_val in grouped_x.itertuples():
             data[x_val].append(y_val)
-        # if stage != "test":
-        #     # Calc TV
-        #     grouped_x.reset_index(drop=False, inplace=True)
-        #     tv_x_normed, tv_xy_normed = calc_tv(grouped_x, x_col, y_col)
-        #     tvs_x_normed.append(tv_x_normed)
-        #     tvs_xy_normed.append(tv_xy_normed)
-        # Check for convergence
-        # y_val_min = grouped_x[y_col].min()
-        # if y_val_min <= y_converge_val:
-        #     converged.append(1)
-        #     if stage != "test":
-        #         # Find first y value less than y_converge_val and corresponding x value
-        #         assert grouped_x[x_col].is_monotonic_increasing
-        #         con_x_val = grouped_x[grouped_x[y_col] <= y_converge_val][x_col].values[
-        #             0
-        #         ]
-        #         converged_x_vals.append(con_x_val)
-        # else:
-        #     converged.append(0)
 
     if not allow_var_n:
         if len(set(x_val_mins)) != 1:
@@ -194,36 +170,6 @@ def prepare_tsv_data(
     y_std = np.mean(y_stds)
     tsv_col_names.append("y_std")
     print_tsv_vals.append(y_std)
-    # y_var = np.mean(y_vars)
-    # tsv_col_names.append("y_var")
-    # print_tsv_vals.append(y_var)
-
-    # # Display TV information
-    # if stage != "test":
-    #     tv_x_normed = np.mean(tvs_x_normed)
-    #     tv_xy_normed = np.mean(tvs_xy_normed)
-    #     log.info(f"TV {y_col} (x normed): {tv_x_normed:.4f}, "
-    #              f"TV {y_col} (xy normed): {tv_xy_normed:.4f}")
-    #     print_tsv_vals.extend([tv_x_normed, tv_xy_normed])
-    # else:
-    #     print_tsv_vals.extend(["n/a"] * 2)
-    # tsv_col_names.extend(["tv_x_normed", "tv_xy_normed"])
-
-    # Display convergence information
-    # con_rate = np.mean(converged)
-    # tsv_col_names.extend(["y_con_val", "y_con_rate"])
-    # print_tsv_vals.extend([y_converge_val, con_rate])
-    # if stage != "test" and con_rate > 0:
-    #     con_x_val = np.mean(converged_x_vals)
-    #     con_x_std = np.std(converged_x_vals)
-    #     con_x_min = np.min(converged_x_vals)
-    #     con_x_max = np.max(converged_x_vals)
-    #     con_x_sem = con_x_std / np.sqrt(len(converged_x_vals))
-    #     con_x_95ci = 1.96 * con_x_sem
-    #     print_tsv_vals.extend([con_x_val, con_x_95ci, con_x_val - con_x_95ci, con_x_val + con_x_95ci, con_x_min, con_x_max])
-    # else:
-    #     print_tsv_vals.extend(["n/a"] * 6)
-    # tsv_col_names.extend(["con_x_val", "con_x_95ci", "con_x_val - con_x_95ci", "con_x_val + con_x_95ci", "con_x_min", "con_x_max"])
 
     # Display duration information
     x_val_min = x_val_mins[0]
@@ -293,9 +239,6 @@ if __name__ == "__main__":
         log.info(f"{len(filtered_wt_names)} filtered_wt_names: {filtered_wt_names}")
 
     tsv_names_and_paths = [
-        # ("spline_n", os.path.join(OUT_DIR, f"out_curr/lfo/noise/mss__s24d3D__lfo__ase__ableton_13.tsv")),
-        # ("8_hz_n", os.path.join(OUT_DIR, f"out_curr/lfo/noise/mss__frame_8_hz__lfo__ase__ableton_13.tsv")),
-        # ("frame_n", os.path.join(OUT_DIR, f"out_curr/lfo/noise/mss__frame__lfo__ase__ableton_13.tsv")),
         # ("spline", os.path.join(OUT_DIR, f"out_curr/lfo/mss__s24d3D_nn__lfo__ase__ableton_13.tsv")),
         # ("8_hz", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_8_hz_nn__lfo__ase__ableton_13.tsv")),
         # ("frame", os.path.join(OUT_DIR, f"out_curr/lfo/mss__frame_nn__lfo__ase__ableton_13.tsv")),
@@ -312,31 +255,24 @@ if __name__ == "__main__":
         # ("oracle", os.path.join(OUT_DIR, f"out_curr/sm/mss__oracle__sm_16_1024__ase__ableton_13.tsv")),
         # ("rand_sm", os.path.join(OUT_DIR, f"out_curr/sm/mss__s24d3D_rand__sm_16_1024__ase__ableton_13.tsv")),
         # ("rand", os.path.join(OUT_DIR, f"out_curr/sm/mss__s24d3D_rand__sm__ase__ableton_13.tsv")),
-        # ("spline_nn", os.path.join(OUT_DIR, f"out_curr/sm/no_noise/mss__s24d3D_nn__sm_16_1024__ase__ableton_13.tsv")),
-        # ("8_hz_nn", os.path.join(OUT_DIR, f"out_curr/sm/no_noise/mss__frame_8_hz_nn__sm_16_1024__ase__ableton_13.tsv")),
-        # ("frame_nn", os.path.join(OUT_DIR, f"out_curr/sm/no_noise/mss__frame_nn__sm_16_1024__ase__ableton_13.tsv")),
 
         # ("frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         # ("frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         # ("8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         # ("spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         # ("rand_sm", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_rand__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        # ("spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__s24d3D_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        # ("8_hz_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__frame_8_hz_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
 
         # ("shan_frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         # ("shan_frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         # ("shan_8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_frame_8_hz__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         # ("shan_spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_s24d3D__sm_16_1024__serum__BA_both_lfo_10.tsv")),
         # ("shan_rand_sm", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_s24d3D_rand__sm_16_1024__serum__BA_both_lfo_10.tsv")),
-        # ("shan_spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__shan_s24d3D_gran__sm_16_1024__serum__BA_both_lfo_10.tsv")),
 
         # ("ddsp_frame_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame_gran__sm__serum__BA_both_lfo_10.tsv")),
         # ("ddsp_frame", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame__sm__serum__BA_both_lfo_10.tsv")),
         # ("ddsp_8_hz", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_frame_8_hz__sm__serum__BA_both_lfo_10.tsv")),
         # ("ddsp_spline", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_s24d3D__sm__serum__BA_both_lfo_10.tsv")),
         # ("ddsp_rand_sm", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_s24d3D_rand__sm__serum__BA_both_lfo_10.tsv")),
-        # ("ddsp_spline_gran", os.path.join(OUT_DIR, f"out_curr/serum/mss__ddsp_s24d3D_gran__sm__serum__BA_both_lfo_10.tsv")),
     ]
     # stage = "train"
     # stage = "val"
@@ -353,18 +289,12 @@ if __name__ == "__main__":
     # inv = "_inv"
     # inv = "_inv_all"
 
-    # dist_fn = "__esr"
     dist_fn = "__l1"
-    # dist_fn = "__mse"
-    # dist_fn = "__fft"
     # dist_fn = "__pcc"
-    # dist_fn = "__dtw"
-    # dist_fn = "__cd"
     # dist_fn = "__fd"
 
     deriv = ""
     # deriv = "_d1"
-    # deriv = "_d2"
 
     # y_col = f"{lfo}{inv}{dist_fn}{deriv}"
 
@@ -383,7 +313,6 @@ if __name__ == "__main__":
     # metric = "range_mean"
     # metric = "min_val"
     # metric = "max_val"
-    # metric = "ent"
     metric = "spec_ent"
     # metric = "tv"
     # metric = "tp"
@@ -400,18 +329,12 @@ if __name__ == "__main__":
     # metric = "sf"
 
     dist_fn = ""
-    # dist_fn = "__esr"
     # dist_fn = "__l1"
-    # dist_fn = "__mse"
-    # dist_fn = "__fft"
     # dist_fn = "__pcc"
-    # dist_fn = "__dtw"
-    # dist_fn = "__cd"
     # dist_fn = "__fd"
 
     deriv = ""
     # deriv = "_d1"
-    # deriv = "_d2"
 
     suffix = ""
     # suffix = "__cf_8_hz"
@@ -424,8 +347,6 @@ if __name__ == "__main__":
     # FAD distances ====================================================================
     # y_col = "fad__clap-2023"
     # y_col = "fad__encodec-emb-48k"
-    # y_col = "fad__panns-cnn14-32k"
-    # y_col = "fad__panns-wavegram-logmel"
 
     trial_col = "seed"
     # trial_col = "wt_name"
@@ -478,7 +399,6 @@ if __name__ == "__main__":
         if stage != "test":
             ax.set_ylim(bottom=None, top=None)
             # ax.set_ylim(bottom=0.0, top=None)
-            # ax.set_ylim(bottom=0.0, top=0.12)
             plt.show()
             plt.pause(0.20)
 

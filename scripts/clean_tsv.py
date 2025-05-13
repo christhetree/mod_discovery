@@ -11,7 +11,7 @@ log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
 if __name__ == "__main__":
-    tsv_path = os.path.join(OUT_DIR, "out_curr/lfo/mss__frame_8_hz_nn__lfo__ase__ableton_13.tsv")
+    tsv_path = os.path.join(OUT_DIR, "tbd.tsv")
 
     df = pd.read_csv(tsv_path, sep="\t", index_col=False)
     log.info(f"Loaded {len(df)} rows from {tsv_path}")
