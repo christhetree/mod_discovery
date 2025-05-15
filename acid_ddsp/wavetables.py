@@ -6,16 +6,16 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 CONTINUOUS_ABLETON_WTS = [
-    "basics__fm_fold",
-    "basics__harmonic_series",
-    "basics__sub_3",
-    "basics__galactica",
-    "collection__aureolin",
-    "collection__squash",
-    "complex__bit_ring",
-    "complex__kicked",
-    "distortion__dp_fold",
-    "distortion__phased",
+    "basics__fm_fold__78_1024",
+    "basics__galactica__4_1024",
+    "basics__harmonic_series__7_1024",
+    "basics__sub_3__122_1024",
+    "collection__aureolin__256_1024",
+    "collection__squash__32_1024",
+    "complex__bit_ring__256_1024",
+    "complex__kicked__4_1024",
+    "distortion__dp_fold__230_1024",
+    "distortion__phased__178_1024",
 ]
 
 BOTH_LFO_SERUM_WTS = [

@@ -98,7 +98,647 @@
     </div>
 
     <div class="section">
-        <h2>Website will be updated with audio samples, visualizations, and trained DDSP synth VST plugins by May 16th, 2025.</h2>
+        <h2 class="">Listening Samples and Modulation Signal Visualizations</h2>
+        <hr>
+        <div class="section mb-5">
+            <p>
+                Below, we provide listening examples and visualizations for the three experiments in the paper.
+                All tables can be randomized by clicking the button below them which will display a random example from the test results for the given experiment.
+            </p>
+        </div>
+
+        <h3 class="">Experiment 1: Modulation Extraction (Synthetic and Real-world Data, White-box Synth)</h3>
+        <hr>
+
+        <div class="section mb-5">
+            <p>
+                The first experiment evaluates how well LFO-net and the three parameterization methods can extract modulation signals when a white-box synth architecture is used.
+                Audio is generated and reconstructed with a frozen Mod. Synth (see Section 2.1 in the paper for more information), which means extracted modulation signals can be compared directly to their ground truth counterparts.
+                <br><br>
+                <em>Ableton</em> wavetable presets used:
+                <ol>
+                    <li>Basics: FM Fold (78 positions, 1024 samples)</li>
+                    <li>Basics: Galactica (4 positions, 1024 samples)</li>
+                    <li>Basics: Harmonic Series (7 positions, 1024 samples)</li>
+                    <li>Basics: Sub 3 (122 positions, 1024 samples)</li>
+                    <li>Collection: Aureolin (256 positions, 1024 samples)</li>
+                    <li>Collection: Squash (32 positions, 1024 samples)</li>
+                    <li>Complex: Bit Ring (256 positions, 1024 samples)</li>
+                    <li>Complex: Kicked (4 positions, 1024 samples)</li>
+                    <li>Distortion: DP Fold (230 positions, 1024 samples)</li>
+                    <li>Distortion: Phased (178 positions, 1024 samples)</li>
+                </ol>
+                The first table shows the results for the test split of the synthetic dataset the models and synths are trained on.
+                Synthetic, ground-truth modulation signals used to make the target audio are dashed and black, extracted modulation signals are solid and red for additive, blue for subtractive, and orange for envelope synth modules.
+            </p>
+        </div>
+
+        <div class="table-wrapper" data-n="10" data-m="20">
+            <table class="table table-sm text-center" style="vertical-align: middle;">
+                <colgroup>
+                    <col>
+                    <col style="width: 15.1%;">
+                    <col style="width: 20%;">
+                    <col style="width: 20%;">
+                    <col style="width: 20%;">
+                    <col>
+                </colgroup>
+                <tr>
+                    <th>Method</th>
+                    <th>Spectrogram</th>
+                    <th>Extracted Additive<br>Modulation Signal</sub></th>
+                    <th>Extracted Subtractive<br>Modulation Signal</sub></th>
+                    <th>Extracted Envelope<br>Modulation Signal</sub></th>
+                    <th class="audio-col">Audio</th>
+                </tr>
+                <tr>
+                    <td>Target</td>
+                    <td><img class="img-fluid" src="exp_1/exp_1__frame__spec__1_16.png"></td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_1/exp_1__frame__audio__1_16.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Frame</td>
+                    <td><img class="img-fluid" src="exp_1/exp_1__frame__spec_hat__1_16.png"></td>
+                    <td><img class="img-fluid" src="exp_1/exp_1__frame__add_lfo__1_16.svg"></td>
+                    <td><img class="img-fluid" src="exp_1/exp_1__frame__sub_lfo__1_16.svg"></td>
+                    <td><img class="img-fluid" src="exp_1/exp_1__frame__env__1_16.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_1/exp_1__frame__audio_hat__1_16.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>LPF</td>
+                    <td><img class="img-fluid" src="exp_1/exp_1__lpf__spec_hat__1_16.png"></td>
+                    <td><img class="img-fluid" src="exp_1/exp_1__lpf__add_lfo__1_16.svg"></td>
+                    <td><img class="img-fluid" src="exp_1/exp_1__lpf__sub_lfo__1_16.svg"></td>
+                    <td><img class="img-fluid" src="exp_1/exp_1__lpf__env__1_16.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_1/exp_1__lpf__audio_hat__1_16.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Spline</td>
+                    <td><img class="img-fluid" src="exp_1/exp_1__spline__spec_hat__1_16.png"></td>
+                    <td><img class="img-fluid" src="exp_1/exp_1__spline__add_lfo__1_16.svg"></td>
+                    <td><img class="img-fluid" src="exp_1/exp_1__spline__sub_lfo__1_16.svg"></td>
+                    <td><img class="img-fluid" src="exp_1/exp_1__spline__env__1_16.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_1/exp_1__spline__audio_hat__1_16.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Random<br>Spline</td>
+                    <td><img class="img-fluid" src="exp_1/exp_1__rand_spline__spec_hat__1_16.png"></td>
+                    <td><img class="img-fluid" src="exp_1/exp_1__rand_spline__add_lfo__1_16.svg"></td>
+                    <td><img class="img-fluid" src="exp_1/exp_1__rand_spline__sub_lfo__1_16.svg"></td>
+                    <td><img class="img-fluid" src="exp_1/exp_1__rand_spline__env__1_16.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_1/exp_1__rand_spline__audio_hat__1_16.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+            </table>
+            <div class="text-center">
+                <button class="random-btn" style="margin-bottom: 0.5rem;">Randomize Table</button>
+                <p class="xy-display" style="margin-bottom: 0.5rem;">Current example: wavetable index = 2 / 10, batch index = 17 / 20</p>
+                <p style="margin-bottom: 3.0rem;">Table scrolls horizontally if space is limited.</p>
+            </div>
+        </div>
+
+        <div class="section mb-5">
+            <p>
+                This second table shows the results for the unseen, real-world test dataset made from <em>Vital</em>'s default preset library modulation curves.
+                Unseen, real-world, ground-truth modulation signals used to make the target audio are dashed and black, extracted modulation signals are solid and red for additive, blue for subtractive, and orange for envelope synth modules.
+            </p>
+        </div>
+        
+        <div class="table-wrapper" data-n="10" data-m="20">
+            <table class="table table-sm text-center" style="vertical-align: middle;">
+                <colgroup>
+                    <col>
+                    <col style="width: 15.1%;">
+                    <col style="width: 20%;">
+                    <col style="width: 20%;">
+                    <col style="width: 20%;">
+                    <col>
+                </colgroup>
+                <tr>
+                    <th>Method</th>
+                    <th>Spectrogram</th>
+                    <th>Extracted Additive<br>Modulation Signal</sub></th>
+                    <th>Extracted Subtractive<br>Modulation Signal</sub></th>
+                    <th>Extracted Envelope<br>Modulation Signal</sub></th>
+                    <th class="audio-col">Audio</th>
+                </tr>
+                <tr>
+                    <td>Target</td>
+                    <td><img class="img-fluid" src="exp_1_unseen/exp_1__frame__spec__5_0.png"></td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_1_unseen/exp_1__frame__audio__5_0.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Frame</td>
+                    <td><img class="img-fluid" src="exp_1_unseen/exp_1__frame__spec_hat__5_0.png"></td>
+                    <td><img class="img-fluid" src="exp_1_unseen/exp_1__frame__add_lfo__5_0.svg"></td>
+                    <td><img class="img-fluid" src="exp_1_unseen/exp_1__frame__sub_lfo__5_0.svg"></td>
+                    <td><img class="img-fluid" src="exp_1_unseen/exp_1__frame__env__5_0.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_1_unseen/exp_1__frame__audio_hat__5_0.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>LPF</td>
+                    <td><img class="img-fluid" src="exp_1_unseen/exp_1__lpf__spec_hat__5_0.png"></td>
+                    <td><img class="img-fluid" src="exp_1_unseen/exp_1__lpf__add_lfo__5_0.svg"></td>
+                    <td><img class="img-fluid" src="exp_1_unseen/exp_1__lpf__sub_lfo__5_0.svg"></td>
+                    <td><img class="img-fluid" src="exp_1_unseen/exp_1__lpf__env__5_0.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_1_unseen/exp_1__lpf__audio_hat__5_0.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Spline</td>
+                    <td><img class="img-fluid" src="exp_1_unseen/exp_1__spline__spec_hat__5_0.png"></td>
+                    <td><img class="img-fluid" src="exp_1_unseen/exp_1__spline__add_lfo__5_0.svg"></td>
+                    <td><img class="img-fluid" src="exp_1_unseen/exp_1__spline__sub_lfo__5_0.svg"></td>
+                    <td><img class="img-fluid" src="exp_1_unseen/exp_1__spline__env__5_0.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_1_unseen/exp_1__spline__audio_hat__5_0.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Random<br>Spline</td>
+                    <td><img class="img-fluid" src="exp_1_unseen/exp_1__rand_spline__spec_hat__5_0.png"></td>
+                    <td><img class="img-fluid" src="exp_1_unseen/exp_1__rand_spline__add_lfo__5_0.svg"></td>
+                    <td><img class="img-fluid" src="exp_1_unseen/exp_1__rand_spline__sub_lfo__5_0.svg"></td>
+                    <td><img class="img-fluid" src="exp_1_unseen/exp_1__rand_spline__env__5_0.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_1_unseen/exp_1__rand_spline__audio_hat__5_0.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+            </table>
+            <div class="text-center">
+                <button class="random-btn" style="margin-bottom: 0.5rem;">Randomize Table</button>
+                <p class="xy-display" style="margin-bottom: 0.5rem;">Current example: wavetable index = 6 / 10, batch index = 1 / 20</p>
+                <p style="margin-bottom: 3.0rem;">Table scrolls horizontally if space is limited.</p>
+            </div>
+        </div>
+        
+        <h3 class="">Experiment 2: Modulation Discovery (Synthetic Data, Gray-box Synth)</h3>
+        <hr>
+
+        <div class="section mb-5">
+            <p>
+                The second experiment evaluates how well our modulation routing and DDSP sound matching approach can discover modulations for a gray-box synth.
+                The same <em>Ableton</em> wavetables as listed above in Experiment 1 are used.
+                <br><br>
+                Synthetic, ground-truth modulation signals used to make the target audio are dashed and black, discovered modulation signals are solid when using <em>LLS&nbsp;3</em> and dotted when using <em>LLS&nbsp;1</em> post-processing steps (see Section 3.2 in the paper for more information).
+                Discovered modulation signals are red for additive, blue for subtractive, and orange for envelope synth modules.
+            </p>
+        </div>
+
+        <div class="table-wrapper" data-n="10" data-m="20">
+            <table class="table table-sm text-center" style="vertical-align: middle;">
+                <colgroup>
+                    <col>
+                    <col style="width: 15.1%;">
+                    <col style="width: 20%;">
+                    <col style="width: 20%;">
+                    <col style="width: 20%;">
+                    <col>
+                </colgroup>
+                <tr>
+                    <th>Method</th>
+                    <th>Spectrogram</th>
+                    <th>Discovered Additive<br>Modulation Signal</sub></th>
+                    <th>Discovered Subtractive<br>Modulation Signal</sub></th>
+                    <th>Discovered Envelope<br>Modulation Signal</sub></th>
+                    <th class="audio-col">Audio</th>
+                </tr>
+                <tr>
+                    <td>Target</td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__oracle__spec__9_5.png"></td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_2/exp_2__oracle__audio__9_5.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Frame</td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__frame__spec_hat__9_5.png"></td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__frame__add_lfo__9_5.svg"></td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__frame__sub_lfo__9_5.svg"></td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__frame__env__9_5.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_2/exp_2__frame__audio_hat__9_5.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>LPF</td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__lpf__spec_hat__9_5.png"></td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__lpf__add_lfo__9_5.svg"></td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__lpf__sub_lfo__9_5.svg"></td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__lpf__env__9_5.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_2/exp_2__lpf__audio_hat__9_5.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Spline</td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__spline__spec_hat__9_5.png"></td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__spline__add_lfo__9_5.svg"></td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__spline__sub_lfo__9_5.svg"></td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__spline__env__9_5.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_2/exp_2__spline__audio_hat__9_5.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Oracle</td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__oracle__spec_hat__9_5.png"></td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__oracle__add_lfo__9_5.svg"></td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__oracle__sub_lfo__9_5.svg"></td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__oracle__env__9_5.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_2/exp_2__oracle__audio_hat__9_5.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Random<br>Spline</td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__rand_spline__spec_hat__9_5.png"></td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__rand_spline__add_lfo__9_5.svg"></td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__rand_spline__sub_lfo__9_5.svg"></td>
+                    <td><img class="img-fluid" src="exp_2/exp_2__rand_spline__env__9_5.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_2/exp_2__rand_spline__audio_hat__9_5.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+            </table>
+            <div class="text-center">
+                <button class="random-btn" style="margin-bottom: 0.5rem;">Randomize Table</button>
+                <p class="xy-display" style="margin-bottom: 0.5rem;">Current example: wavetable index = 10 / 10, batch index = 6 / 20</p>
+                <p style="margin-bottom: 3.0rem;">Table scrolls horizontally if space is limited.</p>
+            </div>
+        </div>
+
+        <h3 class="">Experiment 3: Modulation Discovery (Real-world Data, Black-box Synth)</h3>
+        <hr>
+
+        <div class="section mb-5">
+            <p>
+                The last experiment evaluates how well our modulation discovery approach generalizes to real-world audio, black-box synths, and different DDSP synth architectures and their modulation routing.
+                <br><br>
+                <em>Serum</em> presets (from the "Bass (Hard)" category) used:
+                <ol>
+                  <li>BA Access 2 Mthrshp Denied</li>
+                  <li>BA BitterBot</li>
+                  <li>BA Deth reece</li>
+                  <li>BA Gritter</li>
+                  <li>BA Hoo</li>
+                  <li>BA Le Gigante</li>
+                  <li>BA Modulated Chomper</li>
+                  <li>BA SCREAM Wobble 01</li>
+                  <li>BA Sludgecrank</li>
+                  <li>BA Wide Eyed Reese</li>
+                </ol>
+                Discovered modulation signals are red for additive, blue for subtractive, and orange for envelope synth modules.
+                RMS loudness and spectral flatness proxy modulation signals of the target audio are dashed and black, and the corresponding <em>LLS&nbsp;3</em> post-processed discovered modulation signals are solid and magenta.
+                To improve the visualizations and remove windowing artifacts, the proxy modulation signals are low-pass filtered and trimmed by 32 frames before plotting.
+            </p>
+        </div>
+
+        <div class="table-wrapper-3" data-n="176">
+            <table class="table table-sm text-center" style="vertical-align: middle;">
+                <colgroup>
+                    <col>
+                    <col style="width: 15.1%;">
+                    <col style="width: 20%;">
+                    <col style="width: 20%;">
+                    <col style="width: 20%;">
+                    <col>
+                </colgroup>
+                <tr>
+                    <th>Synth &<br>Method</th>
+                    <th>Spectrogram</th>
+                    <th>Discovered<br>Modulation Signals</sub></th>
+                    <th>RMS Loudness</sub></th>
+                    <th>Spectral Flatness</sub></th>
+                    <th class="audio-col">Audio</th>
+                </tr>
+                
+                <tr>
+                    <td>Target</td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__frame__spec__70.png"></td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_mod_synth/exp_3__mod_synth__frame__audio__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Mod. Synth<br><br>Granular</td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__gran__spec_hat__70.png"></td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_mod_synth/exp_3__mod_synth__gran__audio_hat__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Mod. Synth<br><br>Frame</td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__frame__spec_hat__70.png"></td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__frame__sub_lfo_hat__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__frame__rms_lpf_trim_32__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__frame__sf_lpf_trim_32__70.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_mod_synth/exp_3__mod_synth__frame__audio_hat__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Mod. Synth<br><br>LPF</td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__lpf__spec_hat__70.png"></td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__lpf__sub_lfo_hat__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__lpf__rms_lpf_trim_32__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__lpf__sf_lpf_trim_32__70.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_mod_synth/exp_3__mod_synth__lpf__audio_hat__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Mod. Synth<br><br>Spline</td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__spline__spec_hat__70.png"></td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__spline__sub_lfo_hat__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__spline__rms_lpf_trim_32__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__spline__sf_lpf_trim_32__70.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_mod_synth/exp_3__mod_synth__spline__audio_hat__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Mod. Synth<br><br>Random<br>Spline</td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__rand_spline__spec_hat__70.png"></td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__rand_spline__sub_lfo_hat__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__rand_spline__rms_lpf_trim_32__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__rand_spline__sf_lpf_trim_32__70.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_mod_synth/exp_3__mod_synth__rand_spline__audio_hat__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+
+                <tr class="row-grey">
+                    <td>Target</td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__frame__spec__70.png"></td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_mod_synth/exp_3__mod_synth__frame__audio__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr class="row-grey">
+                    <td>Shan et al.<br><br>Granular</td>
+                    <td><img class="img-fluid" src="exp_3_shan_et_al/exp_3__shan_et_al__gran__spec_hat__70.png"></td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_shan_et_al/exp_3__shan_et_al__gran__audio_hat__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr class="row-grey">
+                    <td>Shan et al.<br><br>Frame</td>
+                    <td><img class="img-fluid" src="exp_3_shan_et_al/exp_3__shan_et_al__frame__spec_hat__70.png"></td>
+                    <td><img class="img-fluid" src="exp_3_shan_et_al/exp_3__shan_et_al__frame__ase__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_shan_et_al/exp_3__shan_et_al__frame__rms_lpf_trim_32__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_shan_et_al/exp_3__shan_et_al__frame__sf_lpf_trim_32__70.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_shan_et_al/exp_3__shan_et_al__frame__audio_hat__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr class="row-grey">
+                    <td>Shan et al.<br><br>LPF</td>
+                    <td><img class="img-fluid" src="exp_3_shan_et_al/exp_3__shan_et_al__lpf__spec_hat__70.png"></td>
+                    <td><img class="img-fluid" src="exp_3_shan_et_al/exp_3__shan_et_al__lpf__ase__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_shan_et_al/exp_3__shan_et_al__lpf__rms_lpf_trim_32__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_shan_et_al/exp_3__shan_et_al__lpf__sf_lpf_trim_32__70.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_shan_et_al/exp_3__shan_et_al__lpf__audio_hat__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr class="row-grey">
+                    <td>Shan et al.<br><br>Spline</td>
+                    <td><img class="img-fluid" src="exp_3_shan_et_al/exp_3__shan_et_al__spline__spec_hat__70.png"></td>
+                    <td><img class="img-fluid" src="exp_3_shan_et_al/exp_3__shan_et_al__spline__ase__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_shan_et_al/exp_3__shan_et_al__spline__rms_lpf_trim_32__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_shan_et_al/exp_3__shan_et_al__spline__sf_lpf_trim_32__70.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_shan_et_al/exp_3__shan_et_al__spline__audio_hat__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr class="row-grey">
+                    <td>Shan et al.<br><br>Random<br>Spline</td>
+                    <td><img class="img-fluid" src="exp_3_shan_et_al/exp_3__shan_et_al__rand_spline__spec_hat__70.png"></td>
+                    <td><img class="img-fluid" src="exp_3_shan_et_al/exp_3__shan_et_al__rand_spline__ase__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_shan_et_al/exp_3__shan_et_al__rand_spline__rms_lpf_trim_32__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_shan_et_al/exp_3__shan_et_al__rand_spline__sf_lpf_trim_32__70.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_shan_et_al/exp_3__shan_et_al__rand_spline__audio_hat__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+
+                <tr>
+                    <td>Target</td>
+                    <td><img class="img-fluid" src="exp_3_mod_synth/exp_3__mod_synth__frame__spec__70.png"></td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_mod_synth/exp_3__mod_synth__frame__audio__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Engel et al.<br><br>Granular</td>
+                    <td><img class="img-fluid" src="exp_3_engel_et_al/exp_3__engel_et_al__gran__spec_hat__70.png"></td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_engel_et_al/exp_3__engel_et_al__gran__audio_hat__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Engel et al.<br><br>Frame</td>
+                    <td><img class="img-fluid" src="exp_3_engel_et_al/exp_3__engel_et_al__frame__spec_hat__70.png"></td>
+                    <td><img class="img-fluid" src="exp_3_engel_et_al/exp_3__engel_et_al__frame__ase__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_engel_et_al/exp_3__engel_et_al__frame__rms_lpf_trim_32__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_engel_et_al/exp_3__engel_et_al__frame__sf_lpf_trim_32__70.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_engel_et_al/exp_3__engel_et_al__frame__audio_hat__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Engel et al.<br><br>LPF</td>
+                    <td><img class="img-fluid" src="exp_3_engel_et_al/exp_3__engel_et_al__lpf__spec_hat__70.png"></td>
+                    <td><img class="img-fluid" src="exp_3_engel_et_al/exp_3__engel_et_al__lpf__ase__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_engel_et_al/exp_3__engel_et_al__lpf__rms_lpf_trim_32__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_engel_et_al/exp_3__engel_et_al__lpf__sf_lpf_trim_32__70.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_engel_et_al/exp_3__engel_et_al__lpf__audio_hat__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Engel et al.<br><br>Spline</td>
+                    <td><img class="img-fluid" src="exp_3_engel_et_al/exp_3__engel_et_al__spline__spec_hat__70.png"></td>
+                    <td><img class="img-fluid" src="exp_3_engel_et_al/exp_3__engel_et_al__spline__ase__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_engel_et_al/exp_3__engel_et_al__spline__rms_lpf_trim_32__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_engel_et_al/exp_3__engel_et_al__spline__sf_lpf_trim_32__70.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_engel_et_al/exp_3__engel_et_al__spline__audio_hat__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+                <tr>
+                    <td>Engel et al.<br><br>Random<br>Spline</td>
+                    <td><img class="img-fluid" src="exp_3_engel_et_al/exp_3__engel_et_al__rand_spline__spec_hat__70.png"></td>
+                    <td><img class="img-fluid" src="exp_3_engel_et_al/exp_3__engel_et_al__rand_spline__ase__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_engel_et_al/exp_3__engel_et_al__rand_spline__rms_lpf_trim_32__70.svg"></td>
+                    <td><img class="img-fluid" src="exp_3_engel_et_al/exp_3__engel_et_al__rand_spline__sf_lpf_trim_32__70.svg"></td>
+                    <td>
+                        <audio controls="controls" class="player" preload="metadata">
+                            <source src="exp_3_engel_et_al/exp_3__engel_et_al__rand_spline__audio_hat__70.mp3" type="audio/mp3">
+                            Unsupported browser.
+                        </audio>
+                    </td>
+                </tr>
+
+
+            </table>
+            <div class="text-center">
+                <button class="random-btn" style="margin-bottom: 0.5rem;">Randomize Table</button>
+                <p class="n-display" style="margin-bottom: 0.5rem;">Current example: 71 / 176</p>
+                <p style="margin-bottom: 3.0rem;">Table scrolls horizontally if space is limited.</p>
+            </div>
+        </div>
+
+        <h3 class="">DDSP Synth VST Plugins</h3>
+        <hr>
+
+        <div class="section mb-5">
+            <p>
+                Coming soon.
+            </p>
+        </div>
+
     </div>
 
 <!--    <div class="section">-->
@@ -126,6 +766,68 @@
         <p><br></p>
     </footer>
 </div>
+
+<script>
+    document.querySelectorAll('.table-wrapper').forEach(wrapper => {
+      const N = parseInt(wrapper.dataset.n, 10);
+      const M = parseInt(wrapper.dataset.m, 10);
+      const btn = wrapper.querySelector('.random-btn');
+      const display = wrapper.querySelector('.xy-display');
+
+      btn.addEventListener('click', () => {
+        // pick random integers in [0..N‑1] and [0..M‑1]
+        const x = Math.floor(Math.random() * N);
+        const y = Math.floor(Math.random() * M);
+
+        display.textContent = `Current example: wavetable index = ${x + 1} / ${N}, batch index = ${y + 1} / ${M}`;
+
+        // regex to match “…__<num1>_<num2>.<ext>”
+        const re = /__(\d+)_(\d+)(\.\w+)$/;
+
+        // update all images
+        wrapper.querySelectorAll('img').forEach(img => {
+          img.src = img.src.replace(re, `__${x}_${y}$3`);
+        });
+
+        // update all audio <source> tags, then reload each player
+        wrapper.querySelectorAll('audio').forEach(player => {
+          const srcTag = player.querySelector('source');
+          srcTag.src = srcTag.src.replace(re, `__${x}_${y}$3`);
+          player.load();
+        });
+      });
+    });
+</script>
+
+<script>
+    document.querySelectorAll('.table-wrapper-3').forEach(wrapper => {
+      const N = parseInt(wrapper.dataset.n, 10);
+      const btn = wrapper.querySelector('.random-btn');
+      const display = wrapper.querySelector('.n-display');
+
+      btn.addEventListener('click', () => {
+        // pick random integers in [0..N‑1] and [0..M‑1]
+        const x = Math.floor(Math.random() * N);
+
+        display.textContent = `Current example: ${x + 1} / ${N}`;
+
+        // regex to match “…__<num1>_<num2>.<ext>”
+        const re = /__\d+(\.\w+)$/;
+
+        // update all images
+        wrapper.querySelectorAll('img').forEach(img => {
+          img.src = img.src.replace(re, `__${x}$1`);
+        });
+
+        // update all audio <source> tags, then reload each player
+        wrapper.querySelectorAll('audio').forEach(player => {
+          const srcTag = player.querySelector('source');
+          srcTag.src = srcTag.src.replace(re, `__${x}$1`);
+          player.load();
+        });
+      });
+    });
+</script>
 
 <!-- Bootstrap core JavaScript -->
 <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"

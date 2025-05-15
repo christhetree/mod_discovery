@@ -1,0 +1,73 @@
+custom:
+  project_name: mod_discovery
+  model_name: mss__s24d3__mod_ex
+  dataset_name: ase__ableton_10__vital_curves
+  cpu_batch_size: 5
+  use_wandb_cpu: false
+  use_wandb_gpu: false
+
+trainer:
+  accelerator: gpu
+  benchmark: false
+  devices: [3]
+  max_epochs: 30
+  num_sanity_val_steps: 1
+  gradient_clip_val: 0.5
+
+data:
+  class_path: acid_ddsp.data_modules.SeedDataModule
+  init_args:
+    batch_size: 32
+    ac: misc/audio_config.yml
+    n_seeds: 5120
+    mod_sig_gens:
+      - class_path: acid_ddsp.modulations.ModSignalGenVitalCurves
+        init_args:
+          curves_path: ../data/vital_curves__52_1501.pt
+#          curves_path: data/vital_curves__52_1501.pt
+    global_param_names:
+      - q
+    temp_param_names:
+      - add_lfo
+      - sub_lfo
+      - env
+    n_frames: 1501
+    num_workers: 4
+
+model:
+  class_path: acid_ddsp.lightning.ModDiscoveryLightingModule
+  init_args:
+    ac: misc/audio_config.yml
+    spectral_visualizer: misc/log_mel_spec.yml
+    synth: synths/synth__ase.yml
+    temp_param_names:
+      - add_lfo
+      - sub_lfo
+      - env
+    interp_temp_param_names:
+      - add_lfo
+      - sub_lfo
+      - env
+    model: models/spectral_2dcnn_dd50__ase__lfo.yml
+    temp_param_names_hat:
+      - add_lfo
+      - sub_lfo
+      - env
+    interp_temp_param_names_hat:
+      - add_lfo
+      - sub_lfo
+      - env
+    synth_hat: synths/synth__ase.yml
+
+    loss_func: auraloss.freq.MultiResolutionSTFTLoss
+    use_p_loss: false
+
+    model_opt: ../opt/sf_adam_w__lr_5e-3.yml
+
+    fad_model_names:
+      - clap-2023
+      - encodec-emb-48k
+
+    use_rand_spline: true
+
+    run_name: mss__s24d3__mod_ex__ase__ableton_10__vital_curves

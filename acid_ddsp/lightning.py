@@ -664,8 +664,9 @@ class ModDiscoveryLightingModule(pl.LightningModule):
                 opt.step()
 
         # Compute audio distances ======================================================
+        out_dict = {}
         audio_dist_vals = {}
-        if all(p.size(1) == 1 for p in temp_params_hat_raw.values()):
+        if all(p.ndim == 2 for p in temp_params_hat_raw.values()):
             p_hats = tr.stack([p for p in temp_params_hat_raw.values()], dim=1)
         else:
             p_hats = None
@@ -677,7 +678,16 @@ class ModDiscoveryLightingModule(pl.LightningModule):
                         if feat_name in ["rms", "sc", "sb", "sf"]:
                             continue
                     if feat_name in ["rms", "sc", "sb", "sf"]:
+                        # assert feat_fn.audio_feature is None
+                        # assert feat_fn.lfo_inv_all is None
                         vals = feat_fn(x_hat, x, p_hats)
+                        # if p_hats is not None:
+                        #     assert feat_fn.audio_feature is not None
+                        #     assert feat_fn.lfo_inv_all is not None
+                        #     out_dict[f"{feat_name}__audio_feature"] = feat_fn.audio_feature
+                        #     out_dict[f"{feat_name}__lfo_inv_all"] = feat_fn.lfo_inv_all
+                        #     feat_fn.audio_feature = None
+                        #     feat_fn.lfo_inv_all = None
                     else:
                         vals = feat_fn(x_hat, x)
                     if isinstance(vals, dict):
@@ -712,7 +722,7 @@ class ModDiscoveryLightingModule(pl.LightningModule):
             curr_tsv_row_len = len(tsv_row)
             for col in self.tsv_cols[curr_tsv_row_len:]:
                 if stage == "test" and col not in tsv_row_vals:
-                    log.warning(f"Missing TSV column: {col}")
+                    log.debug(f"Missing TSV column: {col}")
                 val = tsv_row_vals.get(col, "")
                 tsv_row.append(val)
             assert len(tsv_row) == len(self.tsv_cols)
@@ -720,13 +730,15 @@ class ModDiscoveryLightingModule(pl.LightningModule):
                 f.write("\t".join(str(v) for v in tsv_row) + "\n")
 
         # Prepare out_dict =============================================================
-        out_dict = {
+        log_spec_x_hat = self.spectral_visualizer(x_hat).squeeze(1)
+        out_dict.update({
             "loss": loss,
             "add_audio": add_audio,
             "x": x,
             "x_hat": x_hat,
             "log_spec_x": log_spec_x,
-        }
+            "log_spec_x_hat": log_spec_x_hat,
+        })
         out_dict.update(temp_params_raw)
         for p_name, p in temp_params_hat_raw.items():
             out_dict[f"{p_name}_hat"] = p

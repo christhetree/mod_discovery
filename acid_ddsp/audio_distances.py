@@ -92,6 +92,9 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
             h /= h.sum()
             self.filter = h.view(1, 1, -1)
 
+        # self.audio_feature = None
+        # self.lfo_inv_all = None
+
     @abstractmethod
     def calc_feature(self, x: T) -> T:
         pass
@@ -152,6 +155,10 @@ class OneDimensionalAudioDistance(nn.Module, abc.ABC):
         # plt.title(f"{self.__class__.__name__} {self.filter_cf_hz} Hz")
         # plt.legend()
         # plt.show()
+
+        # self.audio_feature = x_target_frames
+        # self.audio_feature = x_target_filtered_frames
+        # self.lfo_inv_all = p_hats_inv_all
 
         assert x.shape == x_target.shape
         dists = {}
