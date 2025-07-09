@@ -1,1 +1,1 @@
-Website for "Differentiable All-pole Filters for Time-varying Audio Systems".
+Website for "Modulation Discovery with Differentiable Digital Signal Processing".
