@@ -1,0 +1,354 @@
+# pytorch_lightning==2.5.1
+seed_everything: 42
+trainer:
+  accelerator: gpu
+  strategy: auto
+  devices: 1
+  num_nodes: 1
+  precision: 32
+  logger:
+    class_path: pytorch_lightning.loggers.TensorBoardLogger
+    init_args:
+      save_dir: train__mod_discovery__lpf
+      version: null
+      log_graph: false
+      default_hp_metric: true
+      prefix: ''
+      sub_dir: null
+      comment: ''
+      purge_step: null
+      max_queue: 10
+      flush_secs: 120
+      filename_suffix: ''
+  callbacks: null
+  fast_dev_run: false
+  max_epochs: 30
+  min_epochs: null
+  max_steps: -1
+  min_steps: null
+  max_time: null
+  limit_train_batches: null
+  limit_val_batches: null
+  limit_test_batches: null
+  limit_predict_batches: null
+  overfit_batches: 0.0
+  val_check_interval: null
+  check_val_every_n_epoch: 1
+  num_sanity_val_steps: 1
+  log_every_n_steps: 1
+  enable_checkpointing: null
+  enable_progress_bar: null
+  enable_model_summary: null
+  accumulate_grad_batches: 1
+  gradient_clip_val: 0.5
+  gradient_clip_algorithm: null
+  deterministic: null
+  benchmark: false
+  inference_mode: true
+  use_distributed_sampler: true
+  profiler: null
+  detect_anomaly: false
+  barebones: false
+  plugins: null
+  sync_batchnorm: false
+  reload_dataloaders_every_n_epochs: 0
+  default_root_dir: null
+  model_registry: null
+model:
+  class_path: acid_ddsp.lightning.ModDiscoveryLightingModule
+  init_args:
+    ac:
+      class_path: audio_config.AudioConfig
+      init_args:
+        sr: 48000
+        buffer_size_seconds: 3.0
+        note_on_duration: 3.0
+        min_f0_hz: 32.7
+        max_f0_hz: 523.25
+    spectral_visualizer:
+      class_path: feature_extraction.LogMelSpecFeatureExtractor
+      init_args:
+        sr: 48000.0
+        n_fft: 1024
+        hop_len: 96
+        n_mels: 128
+        normalized: false
+        center: true
+        use_delta: false
+        use_delta_delta: false
+        delta_win_ms: 50
+        freq_mask_amount: 0.0
+        eps: 0.0001
+    model:
+      class_path: models.Spectral2DCNN
+      init_args:
+        fe:
+          class_path: feature_extraction.LogMelSpecFeatureExtractor
+          init_args:
+            sr: 48000.0
+            n_fft: 1024
+            hop_len: 96
+            n_mels: 128
+            normalized: false
+            center: true
+            use_delta: true
+            use_delta_delta: true
+            delta_win_ms: 50
+            freq_mask_amount: 0.0
+            eps: 0.0001
+        in_ch: 3
+        kernel_size:
+        - 5
+        - 7
+        out_channels:
+        - 64
+        - 64
+        - 64
+        - 64
+        - 64
+        - 64
+        bin_dilations: null
+        temp_dilations:
+        - 1
+        - 4
+        - 16
+        - 32
+        - 64
+        - 128
+        pool_size:
+        - 2
+        - 1
+        use_ln: true
+        temp_params:
+          add_lfo:
+            dim: 1
+            act: sigmoid
+            is_spline: false
+            use_alpha_noise: true
+            adapt_dim: 0
+          sub_lfo:
+            dim: 1
+            act: none
+            is_spline: false
+            use_alpha_noise: false
+            adapt_dim: 5
+            adapt_act: none
+            adapt_use_separate: true
+          env:
+            dim: 1
+            act: sigmoid
+            is_spline: false
+            use_alpha_noise: false
+            adapt_dim: 0
+        dropout: 0.0
+        n_frames: 1501
+        cnn_act: prelu
+        fc_act: prelu
+        noise_std: 0.33
+        spline_eps: 0.001
+        softmax_tau: 0.25
+        filter_cf_hz: 8.0
+        filter_sr: 500.0
+        n_filter: 63
+    loss_func:
+      class_path: auraloss.freq.MultiResolutionSTFTLoss
+      init_args:
+        fft_sizes:
+        - 1024
+        - 2048
+        - 512
+        hop_sizes:
+        - 120
+        - 240
+        - 50
+        win_lengths:
+        - 600
+        - 1200
+        - 240
+        window: hann_window
+        w_sc: 1.0
+        w_log_mag: 1.0
+        w_lin_mag: 0.0
+        w_phs: 0.0
+        sample_rate: null
+        scale: null
+        n_bins: null
+        perceptual_weighting: false
+        scale_invariance: false
+        eps: 1.0e-08
+        output: loss
+        reduction: mean
+        mag_distance: L1
+        device: null
+    synth:
+      class_path: synths.ComposableSynth
+      init_args:
+        ac:
+          class_path: audio_config.AudioConfig
+          init_args:
+            sr: 48000
+            buffer_size_seconds: 3.0
+            note_on_duration: 3.0
+            min_f0_hz: 32.7
+            max_f0_hz: 523.25
+        add_synth_module:
+          class_path: acid_ddsp.synth_modules.WavetableOsc
+          init_args:
+            sr: 48000
+            n_pos: 256
+            n_wt_samples: 1024
+            wt: null
+            aa_filter_n: 129
+            is_trainable: false
+            init_noise_std: 0.01
+            cf_factor: 0.9
+            use_tanh: false
+            use_aa: true
+        sub_synth_module:
+          class_path: acid_ddsp.synth_modules.BiquadWQFilter
+          init_args:
+            sr: 48000
+            min_w_hz: 100.0
+            max_w_hz: 8000.0
+            min_q: 0.7071
+            max_q: 4.0
+            eps: 0.001
+            modulate_log_w: true
+            modulate_log_q: true
+            interp_coeff: false
+            filter_type: lp
+        add_lfo_name: add_lfo
+        sub_lfo_name: sub_lfo
+    synth_hat:
+      class_path: synths.ComposableSynth
+      init_args:
+        ac:
+          class_path: audio_config.AudioConfig
+          init_args:
+            sr: 48000
+            buffer_size_seconds: 3.0
+            note_on_duration: 3.0
+            min_f0_hz: 32.7
+            max_f0_hz: 523.25
+        add_synth_module:
+          class_path: acid_ddsp.synth_modules.WavetableOsc
+          init_args:
+            sr: 48000
+            n_pos: 16
+            n_wt_samples: 1024
+            wt: null
+            aa_filter_n: 129
+            is_trainable: true
+            init_noise_std: 0.01
+            cf_factor: 0.9
+            use_tanh: false
+            use_aa: true
+        sub_synth_module:
+          class_path: acid_ddsp.synth_modules.BiquadCoeffFilter
+          init_args:
+            interp_coeff: false
+            eps: 0.001
+        add_lfo_name: add_lfo
+        sub_lfo_name: sub_lfo_adapted
+    temp_param_names:
+    - add_lfo
+    - sub_lfo
+    - env
+    interp_temp_param_names:
+    - add_lfo
+    - sub_lfo
+    - env
+    temp_param_names_hat:
+    - add_lfo
+    - sub_lfo
+    - env
+    interp_temp_param_names_hat:
+    - add_lfo
+    - env
+    temp_param_n_frames: null
+    temp_param_n_samples: null
+    global_param_names: null
+    use_p_loss: false
+    fad_model_names:
+    - clap-2023
+    - encodec-emb-48k
+    model_opt:
+      class_path: schedulefree.AdamWScheduleFree
+      init_args:
+        lr: 0.005
+        betas:
+        - 0.9
+        - 0.999
+        eps: 1.0e-08
+        weight_decay: 0.01
+        warmup_steps: 0
+        r: 0.0
+        weight_lr_power: 2.0
+        foreach: true
+    synth_opt:
+      class_path: schedulefree.AdamWScheduleFree
+      init_args:
+        lr: 0.05
+        betas:
+        - 0.9
+        - 0.999
+        eps: 1.0e-08
+        weight_decay: 0.01
+        warmup_steps: 0
+        r: 0.0
+        weight_lr_power: 2.0
+        foreach: true
+    alpha_divisor: 1.5
+    lpf_cf_hz: 8.0
+    use_rand_spline: false
+    use_oracle: false
+    run_name: mss__frame_8_hz__sm_16_1024__ase__ableton_10
+    eps: 1.0e-08
+data:
+  class_path: acid_ddsp.data_modules.SeedDataModule
+  init_args:
+    batch_size: 32
+    ac:
+      class_path: audio_config.AudioConfig
+      init_args:
+        sr: 48000
+        buffer_size_seconds: 3.0
+        note_on_duration: 3.0
+        min_f0_hz: 32.7
+        max_f0_hz: 523.25
+    n_seeds: 1024
+    mod_sig_gens:
+    - class_path: acid_ddsp.modulations.ModSignalGenRandomBezier1D
+      init_args:
+        min_n_seg: 1
+        max_n_seg: 8
+        min_degree: 1
+        max_degree: 3
+        min_seg_interval_frac: 0.5
+        is_c1_cont: false
+        normalize: false
+        eps: 1.0e-08
+        spline_eps: 0.001
+    global_param_names:
+    - q
+    temp_param_names:
+    - add_lfo
+    - sub_lfo
+    - env
+    val_split: 0.2
+    test_split: 0.2
+    n_frames: 1501
+    randomize_train_seed: false
+    num_workers: 4
+custom:
+  project_name: mod_discovery
+  model_name: mss__frame_8_hz__sm_16_1024
+  dataset_name: ase__ableton_10
+  use_wandb_cpu: false
+  use_wandb_gpu: false
+  cpu_batch_size: 5
+  cpu_train_n_per_epoch: 10
+  cpu_val_n_per_epoch: 5
+  is_deterministic: true
+optimizer: null
+lr_scheduler: null
