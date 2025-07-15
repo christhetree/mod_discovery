@@ -4,8 +4,6 @@ import os
 from typing import Callable
 
 import torch as tr
-from dtw import dtw
-from pytorch3d.loss import chamfer_distance
 from shapely import frechet_distance
 from shapely.geometry.linestring import LineString
 from torch import Tensor as T
@@ -41,6 +39,7 @@ class PCCDistance(nn.Module):
         return dist
 
 
+# from dtw import dtw
 class DTWDistance(nn.Module):
     def __init__(self, dist_method: str = "cityblock") -> None:
         super().__init__()
@@ -93,6 +92,7 @@ class XCoordDistance(nn.Module, abc.ABC):
         return dist
 
 
+# from pytorch3d.loss import chamfer_distance
 class ChamferDistance(XCoordDistance):
     def __init__(self, n_frames: int, p: int = 1) -> None:
         super().__init__(n_frames)

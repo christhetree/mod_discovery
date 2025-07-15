@@ -50,28 +50,6 @@ class SquareSawVCOLite(SynthModule):
         n_partials = 12000 / (max_f0_hz * tr.log10(max_f0_hz))
         return n_partials
 
-    @staticmethod
-    def calc_osc_arg(
-        sr: int, f0_hz: T, n_samples: Optional[int] = None, phase: Optional[T] = None
-    ) -> T:
-        assert 1 <= f0_hz.ndim <= 2
-        bs = f0_hz.size(0)
-
-        if f0_hz.ndim == 1:
-            assert n_samples is not None
-            f0_hz = f0_hz.unsqueeze(1)
-            f0_hz = f0_hz.expand(-1, n_samples)
-
-        if phase is None:
-            # assert False  # TODO(cm): tmp
-            phase = (
-                tr.rand((bs,), dtype=f0_hz.dtype, device=f0_hz.device) * 2 * tr.pi
-            ) - tr.pi
-        phase = phase.view(bs, 1)
-        arg = tr.cumsum(2 * tr.pi * f0_hz / sr, dim=1)
-        arg += phase
-        return arg
-
     def forward(
         self,
         f0_hz: T,
@@ -91,7 +69,7 @@ class SquareSawVCOLite(SynthModule):
             osc_shape = osc_shape.unsqueeze(1)
             osc_shape = osc_shape.expand(-1, n_samples)
 
-        arg = self.calc_osc_arg(self.sr, f0_hz, n_samples, phase)
+        arg = WavetableOsc.calc_osc_arg(self.sr, f0_hz, n_samples, phase)
         # TODO(cm): check how this works
         n_partials = self.calc_n_partials(f0_hz)
         square_wave = tr.tanh(tr.pi * n_partials * tr.sin(arg) / 2)
@@ -256,7 +234,6 @@ class WavetableOsc(SynthModule):
         wt_pos_0to1: T,
         n_samples: Optional[int] = None,
         phase: Optional[T] = None,
-        wt: Optional[T] = None,
     ) -> T:
         assert 1 <= f0_hz.ndim <= 2
         assert 1 <= wt_pos_0to1.ndim <= 2
@@ -271,10 +248,8 @@ class WavetableOsc(SynthModule):
         assert wt_pos_0to1.min() >= 0.0, f"wt_pos_0to1.min() = {wt_pos_0to1.min()}"
         assert wt_pos_0to1.max() <= 1.0, f"wt_pos_0to1.max() = {wt_pos_0to1.max()}"
         wt_pos = wt_pos_0to1 * 2.0 - 1.0
-        if wt is not None:
-            self.set_wt(wt)
 
-        arg = SquareSawVCOLite.calc_osc_arg(self.sr, f0_hz, n_samples, phase)
+        arg = self.calc_osc_arg(self.sr, f0_hz, n_samples, phase)
         arg = arg % (2 * tr.pi)
         temp_coords = arg / tr.pi - 1.0  # Normalize to [-1, 1] for grid_sample
         assert temp_coords.min() >= -1.0
@@ -293,9 +268,32 @@ class WavetableOsc(SynthModule):
             align_corners=True,
         )
         audio = audio.squeeze(1).squeeze(1)
-        bs = f0_hz.size(0)
-        assert audio.shape == (bs, n_samples)
+        # Commented out for TorchScript
+        # bs = f0_hz.size(0)
+        # assert audio.shape == (bs, n_samples)
         return audio
+
+    @staticmethod
+    def calc_osc_arg(
+        sr: int, f0_hz: T, n_samples: Optional[int] = None, phase: Optional[T] = None
+    ) -> T:
+        assert 1 <= f0_hz.ndim <= 2
+        bs = f0_hz.size(0)
+
+        if f0_hz.ndim == 1:
+            assert n_samples is not None
+            f0_hz = f0_hz.unsqueeze(1)
+            f0_hz = f0_hz.expand(-1, n_samples)
+
+        if phase is None:
+            # assert False  # TODO(cm): tmp
+            phase = (
+                tr.rand((bs,), dtype=f0_hz.dtype, device=f0_hz.device) * 2 * tr.pi
+            ) - tr.pi
+        phase = phase.view(bs, 1)
+        arg = tr.cumsum(2 * tr.pi * f0_hz / sr, dim=1)
+        arg += phase
+        return arg
 
 
 class BezierWavetableOsc(WavetableOsc):
@@ -360,7 +358,7 @@ class WavetableOscShan(WavetableOsc):
             signal: (batch_size, n_wavetable, n_samples)
 
         """
-        arg = SquareSawVCOLite.calc_osc_arg(sr, freq, n_samples, phase)
+        arg = WavetableOsc.calc_osc_arg(sr, freq, n_samples, phase)
         arg = arg % (2 * tr.pi)
         temp_coords = arg / tr.pi - 1.0  # Normalize to [-1, 1] for grid_sample
         assert temp_coords.min() >= -1.0
@@ -384,7 +382,6 @@ class WavetableOscShan(WavetableOsc):
         wt_pos_0to1: Optional[T] = None,  # TODO(cm): consolidate naming
         n_samples: Optional[int] = None,
         phase: Optional[T] = None,
-        wt: Optional[T] = None,
     ) -> T:
         attention_matrix = wt_pos_0to1
         assert 1 <= f0_hz.ndim <= 2
@@ -392,8 +389,6 @@ class WavetableOscShan(WavetableOsc):
             assert n_samples is not None
             f0_hz = f0_hz.unsqueeze(1)
             f0_hz = f0_hz.expand(-1, n_samples)
-        if wt is not None:
-            self.set_wt(wt)
 
         max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
         wt = self.get_maybe_aa_maybe_bounded_wt(max_f0_hz)
@@ -542,7 +537,7 @@ class DDSPNoiseModule(SynthModule):
         # we follow as-is, but it is not clear why this exists
         noise_amplitudes = util.scale_function(noise_amplitudes - 5)
 
-        block_size = round(n_samples / noise_amplitudes.size(1))
+        block_size = int(round(n_samples / noise_amplitudes.size(1)))
         impulse = DDSPNoiseModule.amp_to_impulse_response(noise_amplitudes, block_size)
         noise = (
             tr.rand(
