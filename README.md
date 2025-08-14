@@ -9,6 +9,7 @@
 [//]: # ([![arXiv]&#40;https://img.shields.io/badge/arXiv-2404.07970-b31b1b.svg&#41;]&#40;https://arxiv.org/abs/2404.07970&#41;)
 [![Listening Samples](https://img.shields.io/badge/%F0%9F%94%8A%F0%9F%8E%B6-Listening_Samples-blue)](https://christhetree.github.io/mod_discovery/)
 [![Plugins](https://img.shields.io/badge/neutone-Plugins-blue)](https://christhetree.github.io/mod_discovery/index.html#plugins)
+[![Video](https://img.shields.io/badge/Video-blue?logo=youtube&labelColor=555)](https://www.youtube.com/watch?v=6BS8-_Glbdo)
 [![License](https://img.shields.io/badge/License-MPL%202.0-orange)](https://www.mozilla.org/en-US/MPL/2.0/FAQ/)
 </div>
 
