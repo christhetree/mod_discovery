@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Optional, Tuple, Literal
+from typing import Optional, Tuple
 
 import torch as tr
 import torch.nn.functional as F
@@ -78,7 +78,7 @@ def calc_logits_to_biquad_a_coeff_triangle(a_logits: T, eps: float = 1e-3) -> T:
     return a
 
 
-def _calc_a_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T, T, T, T, T):
+def _calc_a_coeff(w: T, q: T, eps: float = 1e-3) -> Tuple[T, T, T, T, T, T]:
     stability_factor = 1.0 - eps
     sin_w = tr.sin(w)
     cos_w = tr.cos(w)
@@ -89,7 +89,7 @@ def _calc_a_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T, T, T, T, T):
     return a0, a1, a2, sin_w, cos_w, alpha_q
 
 
-def _calc_lp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T, T, T, T, T):
+def _calc_lp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> Tuple[T, T, T, T, T, T]:
     a0, a1, a2, sin_w, cos_w, alpha_q = _calc_a_coeff(w, q, eps)
     b0 = (1.0 - cos_w) / 2.0
     b1 = 1.0 - cos_w
@@ -97,7 +97,7 @@ def _calc_lp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T, T, T, T, T):
     return a0, a1, a2, b0, b1, b2
 
 
-def _calc_hp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T, T, T, T, T):
+def _calc_hp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> Tuple[T, T, T, T, T, T]:
     a0, a1, a2, sin_w, cos_w, alpha_q = _calc_a_coeff(w, q, eps)
     b0 = (1.0 + cos_w) / 2.0
     b1 = -1.0 - cos_w
@@ -105,7 +105,7 @@ def _calc_hp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T, T, T, T, T):
     return a0, a1, a2, b0, b1, b2
 
 
-def _calc_bp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T, T, T, T, T):
+def _calc_bp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> Tuple[T, T, T, T, T, T]:
     a0, a1, a2, sin_w, cos_w, alpha_q = _calc_a_coeff(w, q, eps)
     b0 = alpha_q
     b1 = tr.zeros_like(w)
@@ -116,7 +116,7 @@ def _calc_bp_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T, T, T, T, T):
     return a0, a1, a2, b0, b1, b2
 
 
-def _calc_no_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T, T, T, T, T):
+def _calc_no_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> Tuple[T, T, T, T, T, T]:
     a0, a1, a2, sin_w, cos_w, alpha_q = _calc_a_coeff(w, q, eps)
     b0 = tr.ones_like(w)
     b1 = -2.0 * cos_w
@@ -125,7 +125,7 @@ def _calc_no_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> (T, T, T, T, T, T):
 
 
 def calc_biquad_coeff(
-    filter_type: Literal["lp", "hp", "bp", "no"], w: T, q: T, eps: float = 1e-3
+    filter_type: str, w: T, q: T, eps: float = 1e-3
 ) -> Tuple[T, T]:
     assert w.ndim == 2
     assert q.ndim == 2
@@ -133,16 +133,15 @@ def calc_biquad_coeff(
     assert tr.pi >= w.max()
     assert 0.0 < q.min()
     if filter_type == "lp":
-        coeff_fn = _calc_lp_biquad_coeff
+        a0, a1, a2, b0, b1, b2 = _calc_lp_biquad_coeff(w, q, eps)
     elif filter_type == "hp":
-        coeff_fn = _calc_hp_biquad_coeff
+        a0, a1, a2, b0, b1, b2 = _calc_hp_biquad_coeff(w, q, eps)
     elif filter_type == "bp":
-        coeff_fn = _calc_bp_biquad_coeff
+        a0, a1, a2, b0, b1, b2 = _calc_bp_biquad_coeff(w, q, eps)
     elif filter_type == "no":
-        coeff_fn = _calc_no_biquad_coeff
+        a0, a1, a2, b0, b1, b2 = _calc_no_biquad_coeff(w, q, eps)
     else:
         raise ValueError(f"Unknown filter type: {filter_type}")
-    a0, a1, a2, b0, b1, b2 = coeff_fn(w, q, eps)
     assert a0.abs().min() > 0.0
     a1 = a1 / a0
     a2 = a2 / a0
@@ -226,12 +225,12 @@ class TimeVaryingBiquad(nn.Module):
     def forward(
         self,
         x: T,
-        filter_type: Literal["lp", "hp", "bp", "no"],
+        filter_type: str,
         w_mod_sig: Optional[T] = None,
         q_mod_sig: Optional[T] = None,
         interp_coeff: bool = False,
         zi: Optional[T] = None,
-    ) -> Tuple[T, T, T, Optional[T]]:
+    ) -> Tuple[T, T, T, T]:
         w, q = self.calc_w_and_q(x, w_mod_sig, q_mod_sig)
         n_samples = x.size(1)
         if not interp_coeff:

@@ -1,5 +1,6 @@
 import logging
 import os
+import pathlib
 from contextlib import suppress
 from typing import Dict, List
 
@@ -11,82 +12,36 @@ from neutone_sdk import (
     NeutoneParameter,
     ContinuousNeutoneParameter,
 )
+from neutone_sdk.utils import save_neutone_model
 from torch import Tensor as T
 
-from audio_config import AudioConfig
 from cli import CustomLightningCLI
 from paths import MODELS_DIR, OUT_DIR, CONFIGS_DIR, WAVETABLES_DIR
-from synth_modules import WavetableOsc
+from synth_modules import WavetableOsc, SynthModule
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-class AcidSynth(nn.Module):
+class ModSynth(nn.Module):
     def __init__(
         self,
+        name: str,
+        add_synth_module: SynthModule,
+        sub_synth_module: SynthModule,
+        sr: int = 48000,
         min_midi_f0: int = 30,
         max_midi_f0: int = 60,
-        min_alpha: float = 0.2,
-        max_alpha: float = 3.0,
-        min_w_hz: float = 100.0,
-        max_w_hz: float = 8000.0,
-        min_q: float = 0.7071,
-        max_q: float = 8.0,
-        sr: int = 48000,
-        note_on_duration: float = 0.125,
-        osc_shape: float = 1.0,
-        osc_gain: float = 0.5,
-        dist_gain: float = 1.0,
-        stability_eps: float = 0.001,
-        use_fs: bool = False,
-        win_len: int = 128,
-        overlap: float = 0.75,
-        oversampling_factor: int = 1,
     ):
         super().__init__()
-        self.ac = AudioConfig(
-            sr=sr,
-            min_w_hz=min_w_hz,
-            max_w_hz=max_w_hz,
-            min_q=min_q,
-            max_q=max_q,
-            stability_eps=stability_eps,
-        )
-        # if use_fs:
-        #     self.synth = AcidSynthLPBiquadFSM(
-        #         self.ac,
-        #         win_len=win_len,
-        #         overlap=overlap,
-        #         oversampling_factor=oversampling_factor,
-        #     )
-        # else:
-        #     self.synth = AcidSynthLPBiquad(self.ac)
-        #     self.synth.toggle_scriptable(is_scriptable=True)
-
+        self.name = name
+        self.add_synth_module = add_synth_module
+        self.sub_synth_module = sub_synth_module
+        self.sr = sr
         self.min_midi_f0 = min_midi_f0
         self.max_midi_f0 = max_midi_f0
-        self.min_alpha = min_alpha
-        self.max_alpha = max_alpha
-        self.min_w_hz = min_w_hz
-        self.max_w_hz = max_w_hz
-        self.min_q = min_q
-        self.max_q = max_q
-        self.sr = sr
-        self.register_buffer("note_on_duration", tr.full((1,), note_on_duration))
-        self.register_buffer("osc_shape", tr.full((1,), osc_shape))
-        self.register_buffer("osc_gain", tr.full((1,), osc_gain))
-        self.register_buffer("dist_gain", tr.full((1,), dist_gain))
-        self.use_fs = use_fs
-        self.win_len = win_len
-        self.overlap = overlap
-        self.hop_len = int(win_len * (1 - overlap))
-        assert win_len % self.hop_len == 0, "Hop length must divide into window length."
-        self.oversampling_factor = oversampling_factor
 
-        self.note_on_samples = int(note_on_duration * self.sr)
-        self.curr_env_val = 1.0
         self.register_buffer("phase", tr.zeros((1, 1), dtype=tr.double))
         self.register_buffer("zi", tr.zeros((1, 2)))
         self.midi_f0_to_hz = {
@@ -95,90 +50,71 @@ class AcidSynth(nn.Module):
         }
 
     def reset(self) -> None:
-        self.curr_env_val = 1.0
         self.phase.zero_()
         self.zi.zero_()
 
     def forward(
         self,
-        x: T,
+        n_samples: int,
         midi_f0_0to1: T,
-        alpha_0to1: T,
-        w_mod_sig: T,
-        q_mod_sig: T,
+        add_mod_sig: T,
+        sub_mod_sig: T,
+        env_mod_sig: T,
     ) -> T:
-        n_samples = x.size(-1)
-        alpha = alpha_0to1 * (self.max_alpha - self.min_alpha) + self.min_alpha
-        # env, _, new_env_val = make_envelope(x, self.note_on_samples, self.curr_env_val)
-        env = None
-        new_env_val = None
-        self.curr_env_val = new_env_val
-        if alpha != 1.0:
-            tr.pow(env, alpha, out=env)
-
         midi_f0 = (
             midi_f0_0to1 * (self.max_midi_f0 - self.min_midi_f0) + self.min_midi_f0
         )
-        midi_f0 = midi_f0.round().int().item()
+        midi_f0 = midi_f0[0].round().int().item()
         f0_hz = self.midi_f0_to_hz[midi_f0]
-
-        filter_args = {
-            "w_mod_sig": w_mod_sig,
-            "q_mod_sig": q_mod_sig,
-            "zi": self.zi,
-        }
-        global_params = {
-            "osc_shape": self.osc_shape,
-            "osc_gain": self.osc_gain,
-            "dist_gain": self.dist_gain,
-            "learned_alpha": alpha,
-        }
-        synth_out = self.synth(
-            n_samples=n_samples,
+        add_out = self.add_synth_module(
             f0_hz=f0_hz,
-            note_on_duration=self.note_on_duration,
+            wt_pos_0to1=add_mod_sig,
+            n_samples=n_samples,
             phase=self.phase,
-            filter_args=filter_args,
-            global_params=global_params,
-            envelope=env,
         )
-        wet = synth_out["wet"]
+        # q_mod_sig = tr.full_like(sub_mod_sig, fill_value=0.5)
+        sub_out = self.sub_synth_module(
+            x=add_out,
+            w_mod_sig=sub_mod_sig,
+            # q_mod_sig=q_mod_sig,
+            q_mod_sig=env_mod_sig,
+            zi=self.zi,
+        )
+        # env_out = env_mod_sig * add_out
+        # env_out = env_mod_sig * sub_out
+        env_out = sub_out
+        # env_out = add_out
 
         period_completion = (n_samples / (self.sr / f0_hz.double())) % 1.0
         tr.add(self.phase, 2 * tr.pi * period_completion, out=self.phase)
-        if not self.use_fs:
-            y_a = synth_out["y_a"]
-            self.zi[:, :] = y_a[:, -2:]
-        return wet
+        self.zi[:, :] = self.sub_synth_module.next_zi
+        return env_out
 
 
-class AcidSynthWrapper(WaveformToWaveformBase):
+class ModSynthWrapper(WaveformToWaveformBase):
     def get_model_name(self) -> str:
-        if self.model.use_fs:
-            return f"acid_synth_lp_fs_{self.model.win_len}"
-        else:
-            return "acid_synth_lp_td"
+        return self.model.name
 
     def get_model_authors(self) -> List[str]:
         return ["Christopher Mitcheltree"]
 
     def get_model_short_description(self) -> str:
-        return "Low-pass biquad TB-303 DDSP implementation."
+        return "TBD"
 
     def get_model_long_description(self) -> str:
-        return "Low-pass biquad TB-303 DDSP implementation for 'Differentiable All-pole Filters for Time-varying Audio Systems'."
+        return "TBD"
 
     def get_technical_description(self) -> str:
-        return "Wrapper for a TB-303 DDSP implementation consisting of a sawtooth or square wave oscillator, time-varying low-pass biquad filter, and hyperbolic tangent distortion."
+        return "TBD"
 
     def get_technical_links(self) -> Dict[str, str]:
         return {
-            # "Paper": "tbd",
-            "Code": "https://github.com/DiffAPF/TB-303",
+            "Paper": "https://christhetr.ee/mod_discovery/",
+            "Code": "https://github.com/christhetree/mod_discovery/",
         }
 
     def get_tags(self) -> List[str]:
-        return ["subtractive synth", "acid", "TB-303"]
+        return ["TBD"]
 
     def get_model_version(self) -> str:
         return "1.0.0"
@@ -194,19 +130,19 @@ class AcidSynthWrapper(WaveformToWaveformBase):
                 default_value=0.5,
             ),
             ContinuousNeutoneParameter(
-                "alpha",
-                f"Decaying envelope generator exponent [f{self.model.min_alpha}, f{self.model.max_alpha}]",
+                "add_mod_sig",
+                f"TBD",
                 default_value=0.5,
             ),
             ContinuousNeutoneParameter(
-                "w_mod_sig",
-                f"Filter cutoff frequency [f{self.model.min_w_hz} Hz, f{self.model.max_w_hz} Hz]",
+                "sub_mod_sig",
+                f"TBD",
+                default_value=0.5,
+            ),
+            ContinuousNeutoneParameter(
+                "env_mod_sig",
+                f"TBD",
                 default_value=1.0,
-            ),
-            ContinuousNeutoneParameter(
-                "q_mod_sig",
-                f"Filter resonance Q-factor [f{self.model.min_q}, f{self.model.max_q}]",
-                default_value=0.5,
             ),
         ]
 
@@ -224,46 +160,33 @@ class AcidSynthWrapper(WaveformToWaveformBase):
 
     @tr.jit.export
     def get_native_buffer_sizes(self) -> List[int]:
-        if self.model.use_fs:
-            return [
-                bs
-                for bs in range(
-                    self.model.win_len,
-                    max(self.model.win_len + 1, 10000),
-                    self.model.hop_len,
-                )
-            ]
-        else:
-            return []
+        return []
 
     @tr.jit.export
     def reset_model(self) -> bool:
         self.model.reset()
         return True
 
+    def aggregate_params(self, params: T) -> T:
+        return params
+
     def do_forward_pass(self, x: T, params: Dict[str, T]) -> T:
         n_samples = x.size(-1)
         midi_f0_0to1 = params["midi_f0"]
-        w_mod_sig = params["w_mod_sig"].unsqueeze(0)
-        q_mod_sig = params["q_mod_sig"].unsqueeze(0)
-        w_mod_sig = w_mod_sig.expand(-1, n_samples)
-        q_mod_sig = q_mod_sig.expand(-1, n_samples)
-        alpha_0to1 = params["alpha"]
-        x = x.unsqueeze(1)
-        y = self.model(x, midi_f0_0to1, alpha_0to1, w_mod_sig, q_mod_sig)
-        y = y.squeeze(1)
+        add_mod_sig = params["add_mod_sig"].unsqueeze(0)
+        sub_mod_sig = params["sub_mod_sig"].unsqueeze(0)
+        env_mod_sig = params["env_mod_sig"].unsqueeze(0)
+        y = self.model(
+            n_samples=n_samples,
+            midi_f0_0to1=midi_f0_0to1,
+            add_mod_sig=add_mod_sig,
+            sub_mod_sig=sub_mod_sig,
+            env_mod_sig=env_mod_sig,
+        )
         return y
 
 
 if __name__ == "__main__":
-    # import torch.utils.cpp_extension  # Import is needed first
-    # torch.utils.cpp_extension.load(
-    #     name="torchlpc",
-    #     sources=["../cpp/torchlpc.cpp"],
-    #     is_python_module=False,
-    #     verbose=True
-    # )
-
     # ("exp_1__frame", f"synthetic/train__mod_extraction__frame.yml", f"train__mod_ex__frame/acid_ddsp_2/version_{wt_idx_mapping[wt_idx]}/checkpoints/mss__frame_nn__lfo__ase__ableton_13__epoch_29_step_600.ckpt"),
     # ("exp_1__lpf", f"synthetic/train__mod_extraction__lpf.yml", f"train__mod_ex__lpf/acid_ddsp_2/version_{wt_idx_mapping[wt_idx]}/checkpoints/mss__frame_8_hz_nn__lfo__ase__ableton_13__epoch_29_step_600.ckpt"),
     # ("exp_1__spline", f"synthetic/train__mod_extraction__spline.yml", f"train__mod_ex__spline/acid_ddsp_2/version_{wt_idx_mapping[wt_idx]}/checkpoints/mss__s24d3D_nn__lfo__ase__ableton_13__epoch_29_step_600.ckpt"),
@@ -309,11 +232,12 @@ if __name__ == "__main__":
     exp_name = "exp_1"
     # exp_name = "exp_2"
     # exp_name = "exp_3"
-    # method_name = "frame"
+    method_name = "frame"
     # method_name = "lpf"
-    method_name = "spline"
+    # method_name = "spline"
     # method_name = "oracle"
-    wt_name = "0__basics__fm_fold__78_1024"
+    # wt_name = "0__basics__fm_fold__78_1024"
+    wt_name = "2__basics__harmonic_series__7_1024"
     arch_name = "mod_synth"
     # arch_name = "shan_et_al"
     # arch_name = "engel_et_al"
@@ -337,7 +261,6 @@ if __name__ == "__main__":
         return os.path.join(ckpt_dir, ckpt_files[0])
 
     ckpt_path = get_ckpt_path(ckpt_dir)
-
     log.info(f"Ckpt path: {ckpt_path}")
 
     cli = CustomLightningCLI(
@@ -364,19 +287,28 @@ if __name__ == "__main__":
     cli.model.load_state_dict(state_dict)
     cli.model.eval()
 
-    scripted = tr.jit.script(synth_hat)
+    add_module = cli.model.synth_hat.add_synth_module
+    add_module.use_aa = False
+    sub_module = cli.model.synth_hat.sub_synth_module
 
+    sub_module.filter.toggle_scriptable(True)
+    sr = cli.model.synth.ac.sr
 
-    # model = AcidSynth(use_fs=False)
-    # wrapper = AcidSynthWrapper(model)
-    # root_dir = pathlib.Path(
-    #     os.path.join(OUT_DIR, "neutone_models", wrapper.get_model_name())
-    # )
-    # save_neutone_model(
-    #     wrapper,
-    #     root_dir,
-    #     submission=False,
-    #     dump_samples=False,
-    #     test_offline_mode=False,
-    #     speed_benchmark=False,
-    # )
+    model = ModSynth(
+        name=f"{exp_name}__{method_name}",
+        add_synth_module=add_module,
+        sub_synth_module=sub_module,
+        sr=sr,
+    )
+    wrapper = ModSynthWrapper(model)
+    root_dir = pathlib.Path(
+        os.path.join(OUT_DIR, "neutone_models", wrapper.get_model_name())
+    )
+    save_neutone_model(
+        wrapper,
+        root_dir,
+        submission=False,
+        dump_samples=True,
+        test_offline_mode=False,
+        speed_benchmark=False,
+    )

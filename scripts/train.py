@@ -54,7 +54,7 @@ if __name__ == "__main__":
     # save_dir = config_name.split("/")[-1][:-4]
     # os.makedirs(save_dir, exist_ok=True)
 
-    # config_name = "serum/train__mod_discovery__mod_synth_frame.yml"
+    config_name = "serum/train__mod_discovery__mod_synth_frame.yml"
     # config_name = "serum/train__mod_discovery__mod_synth_lpf.yml"
     # config_name = "serum/train__mod_discovery__mod_synth_spline.yml"
     # config_name = "serum/train__mod_discovery__mod_synth_baseline_gran.yml"
@@ -70,7 +70,7 @@ if __name__ == "__main__":
     # config_name = "serum/train__mod_discovery__engel_et_al_lpf.yml"
     # config_name = "serum/train__mod_discovery__engel_et_al_spline.yml"
     # config_name = "serum/train__mod_discovery__engel_et_al_baseline_gran.yml"
-    config_name = "serum/train__mod_discovery__engel_et_al_baseline_rand_spline.yml"
+    # config_name = "serum/train__mod_discovery__engel_et_al_baseline_rand_spline.yml"
 
     seeds = [42]
     # seeds = list(range(10))

@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Tuple
 
 import torch as tr
 import torch.nn.functional as F
@@ -201,7 +201,7 @@ class WavetableOsc(SynthModule):
 
         # Maybe apply anti-aliasing
         if not self.use_aa:
-            return maybe_bounded_wt
+            return maybe_bounded_wt.unsqueeze(0)
 
         # if self.is_trainable:
         #     wt = maybe_bounded_wt.unsqueeze(0)
@@ -245,6 +245,8 @@ class WavetableOsc(SynthModule):
             assert n_samples is not None
             wt_pos_0to1 = wt_pos_0to1.unsqueeze(1)
             wt_pos_0to1 = wt_pos_0to1.expand(-1, n_samples)
+        # This needs to be commented out to prevent rounding errors in TorchScript
+        # from crashing the VST
         assert wt_pos_0to1.min() >= 0.0, f"wt_pos_0to1.min() = {wt_pos_0to1.min()}"
         assert wt_pos_0to1.max() <= 1.0, f"wt_pos_0to1.max() = {wt_pos_0to1.max()}"
         wt_pos = wt_pos_0to1 * 2.0 - 1.0
@@ -623,13 +625,14 @@ class BiquadWQFilter(SynthModule):
         self.filter = TimeVaryingBiquad(
             self.min_w, self.max_w, min_q, max_q, eps, modulate_log_w, modulate_log_q
         )
+        self.next_zi = tr.zeros((1, 2)).float()
 
     def forward(
         self,
         x: T,
         w_mod_sig: Optional[T] = None,
         q_mod_sig: Optional[T] = None,
-        filter_type: Optional[Literal["lp", "hp", "bp", "no"]] = None,
+        zi: Optional[T] = None,
     ) -> T:
         if w_mod_sig is not None:
             assert x.shape == w_mod_sig.shape
@@ -637,14 +640,15 @@ class BiquadWQFilter(SynthModule):
             if q_mod_sig.shape != x.shape:
                 assert q_mod_sig.shape == (x.size(0),)
                 q_mod_sig = q_mod_sig.unsqueeze(1).expand(-1, x.size(1))
-        if filter_type is None:
-            assert self.filter_type is not None
-            filter_type = self.filter_type
-        else:
-            assert self.filter_type is None, f"Dynamic filter_type not supported "
         y_ab, a_coeff, b_coeff, y_a = self.filter(
-            x, filter_type, w_mod_sig, q_mod_sig, interp_coeff=self.interp_coeff
+            x,
+            self.filter_type,
+            w_mod_sig,
+            q_mod_sig,
+            interp_coeff=self.interp_coeff,
+            zi=zi
         )
+        self.next_zi = y_a[:, -2:]
         return y_ab
 
 
@@ -660,8 +664,9 @@ class BiquadCoeffFilter(SynthModule):
         self.eps = eps
 
         self.lpc_func = sample_wise_lpc
+        self.next_zi = tr.zeros((1, 2)).float()
 
-    def _calc_coeff(self, logits: T, n_frames: int) -> (T, T):
+    def _calc_coeff(self, logits: T, n_frames: int) -> Tuple[T, T]:
         bs = logits.size(0)
         if not self.interp_coeff:
             logits = util.interpolate_dim(logits, n_frames, dim=1)
@@ -686,5 +691,6 @@ class BiquadCoeffFilter(SynthModule):
         y_a = self.lpc_func(x, a_coeff, zi=zi_a)
         assert not tr.isinf(y_a).any()
         assert not tr.isnan(y_a).any()
+        self.next_zi = y_a[:, -2:]
         y_ab = time_varying_fir(y_a, b_coeff, zi=zi)
         return y_ab
