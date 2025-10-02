@@ -200,13 +200,13 @@ class TimeVaryingBiquad(nn.Module):
         if q_mod_sig is None:
             q_mod_sig = tr.zeros_like(x)
 
-        assert x.ndim == 2
-        assert w_mod_sig.ndim == 2
-        assert w_mod_sig.min() >= 0.0
-        assert w_mod_sig.max() <= 1.0
-        assert q_mod_sig.ndim == 2
-        assert q_mod_sig.min() >= 0.0
-        assert q_mod_sig.max() <= 1.0
+        # assert x.ndim == 2
+        # assert w_mod_sig.ndim == 2
+        # assert w_mod_sig.min() >= 0.0
+        # assert w_mod_sig.max() <= 1.0
+        # assert q_mod_sig.ndim == 2
+        # assert q_mod_sig.min() >= 0.0
+        # assert q_mod_sig.max() <= 1.0
 
         if self.modulate_log_w:
             log_w = self.log_min_w + (self.log_max_w - self.log_min_w) * w_mod_sig
@@ -245,8 +245,8 @@ class TimeVaryingBiquad(nn.Module):
         if zi_a is not None:
             zi_a = tr.flip(zi_a, dims=[1])  # Match scipy's convention for torchlpc
         y_a = self.lpc_func(x, a_coeff, zi_a)
-        assert not tr.isinf(y_a).any()
-        assert not tr.isnan(y_a).any()
+        # assert not tr.isinf(y_a).any()
+        # assert not tr.isnan(y_a).any()
         y_ab = time_varying_fir(y_a, b_coeff, zi)
         a1 = a_coeff[:, :, 0]
         a2 = a_coeff[:, :, 1]

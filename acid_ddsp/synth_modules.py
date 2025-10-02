@@ -11,7 +11,7 @@ from curves import PiecewiseBezier
 from filters import (
     TimeVaryingBiquad,
     calc_logits_to_biquad_a_coeff_triangle,
-    time_varying_fir,
+    time_varying_fir, sample_wise_lpc_scriptable,
 )
 from torchlpc import sample_wise_lpc
 
@@ -234,6 +234,7 @@ class WavetableOsc(SynthModule):
         wt_pos_0to1: T,
         n_samples: Optional[int] = None,
         phase: Optional[T] = None,
+        wt: Optional[T] = None,
     ) -> T:
         assert 1 <= f0_hz.ndim <= 2
         assert 1 <= wt_pos_0to1.ndim <= 2
@@ -247,19 +248,20 @@ class WavetableOsc(SynthModule):
             wt_pos_0to1 = wt_pos_0to1.expand(-1, n_samples)
         # This needs to be commented out to prevent rounding errors in TorchScript
         # from crashing the VST
-        assert wt_pos_0to1.min() >= 0.0, f"wt_pos_0to1.min() = {wt_pos_0to1.min()}"
-        assert wt_pos_0to1.max() <= 1.0, f"wt_pos_0to1.max() = {wt_pos_0to1.max()}"
+        # assert wt_pos_0to1.min() >= 0.0, f"wt_pos_0to1.min() = {wt_pos_0to1.min()}"
+        # assert wt_pos_0to1.max() <= 1.0, f"wt_pos_0to1.max() = {wt_pos_0to1.max()}"
         wt_pos = wt_pos_0to1 * 2.0 - 1.0
 
         arg = self.calc_osc_arg(self.sr, f0_hz, n_samples, phase)
         arg = arg % (2 * tr.pi)
         temp_coords = arg / tr.pi - 1.0  # Normalize to [-1, 1] for grid_sample
-        assert temp_coords.min() >= -1.0
-        assert temp_coords.max() <= 1.0
+        # assert temp_coords.min() >= -1.0
+        # assert temp_coords.max() <= 1.0
         flow_field = tr.stack([temp_coords, wt_pos], dim=2).unsqueeze(1)
 
-        max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
-        wt = self.get_maybe_aa_maybe_bounded_wt(max_f0_hz)
+        if wt is None:
+            max_f0_hz = tr.max(f0_hz, dim=1, keepdim=True).values
+            wt = self.get_maybe_aa_maybe_bounded_wt(max_f0_hz)
         wt = wt.unsqueeze(1)
 
         audio = F.grid_sample(
@@ -627,6 +629,9 @@ class BiquadWQFilter(SynthModule):
         )
         self.next_zi = tr.zeros((1, 2)).float()
 
+    def toggle_scriptable(self, is_scriptable: bool) -> None:
+        self.filter.toggle_scriptable(is_scriptable)
+
     def forward(
         self,
         x: T,
@@ -681,6 +686,12 @@ class BiquadCoeffFilter(SynthModule):
             assert b_coeff.shape == (bs, n_frames, 3)
         return a_coeff, b_coeff
 
+    def toggle_scriptable(self, is_scriptable: bool) -> None:
+        if is_scriptable:
+            self.lpc_func = sample_wise_lpc_scriptable
+        else:
+            self.lpc_func = sample_wise_lpc
+
     def forward(self, x: T, coeff_logits: T = None, zi: Optional[T] = None) -> T:
         assert coeff_logits.ndim == 3
         n_samples = x.size(1)
@@ -689,8 +700,8 @@ class BiquadCoeffFilter(SynthModule):
         if zi_a is not None:
             zi_a = tr.flip(zi_a, dims=[1])  # Match scipy's convention for torchlpc
         y_a = self.lpc_func(x, a_coeff, zi=zi_a)
-        assert not tr.isinf(y_a).any()
-        assert not tr.isnan(y_a).any()
+        # assert not tr.isinf(y_a).any()
+        # assert not tr.isnan(y_a).any()
         self.next_zi = y_a[:, -2:]
         y_ab = time_varying_fir(y_a, b_coeff, zi=zi)
         return y_ab

@@ -17,7 +17,7 @@ from torch import Tensor as T
 
 from cli import CustomLightningCLI
 from paths import MODELS_DIR, OUT_DIR, CONFIGS_DIR, WAVETABLES_DIR
-from synth_modules import WavetableOsc, SynthModule
+from synth_modules import WavetableOsc, BiquadWQFilter, BiquadCoeffFilter
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
@@ -28,15 +28,17 @@ class ModSynth(nn.Module):
     def __init__(
         self,
         name: str,
-        add_synth_module: SynthModule,
-        sub_synth_module: SynthModule,
+        add_synth_module: WavetableOsc,
+        sub_synth_module: BiquadWQFilter | BiquadCoeffFilter,
         sr: int = 48000,
         min_midi_f0: int = 30,
         max_midi_f0: int = 60,
     ):
         super().__init__()
         self.name = name
+        assert add_synth_module.use_aa
         self.add_synth_module = add_synth_module
+        sub_synth_module.toggle_scriptable(True)
         self.sub_synth_module = sub_synth_module
         self.sr = sr
         self.min_midi_f0 = min_midi_f0
@@ -48,6 +50,19 @@ class ModSynth(nn.Module):
             idx: tr.tensor(librosa.midi_to_hz(idx)).view(1).float()
             for idx in range(min_midi_f0, max_midi_f0 + 1)
         }
+
+        # Precompute anti-aliased wavetables for all MIDI pitches
+        self.midi_f0_to_wt = {}
+        for idx in range(min_midi_f0, max_midi_f0 + 1):
+            f0_hz = self.midi_f0_to_hz[idx]
+            wt = self.add_synth_module.get_maybe_aa_maybe_bounded_wt(f0_hz.unsqueeze(1))
+            self.midi_f0_to_wt[idx] = wt
+
+        # Use env_mod_sig to control the Q of the filter for Experiment 1
+        self.use_q_mod_sig = False
+        if sub_synth_module.__class__.__name__ == "BiquadWQFilter":
+            self.use_q_mod_sig = True
+            log.info("Using Neutone control parameter D for Q of BiquadWQFilter")
 
     def reset(self) -> None:
         self.phase.zero_()
@@ -61,33 +76,38 @@ class ModSynth(nn.Module):
         sub_mod_sig: T,
         env_mod_sig: T,
     ) -> T:
+        # Additive synthesis
         midi_f0 = (
             midi_f0_0to1 * (self.max_midi_f0 - self.min_midi_f0) + self.min_midi_f0
         )
         midi_f0 = midi_f0[0].round().int().item()
         f0_hz = self.midi_f0_to_hz[midi_f0]
+        wt = self.midi_f0_to_wt[midi_f0]
         add_out = self.add_synth_module(
             f0_hz=f0_hz,
             wt_pos_0to1=add_mod_sig,
             n_samples=n_samples,
             phase=self.phase,
+            wt=wt,
         )
-        # q_mod_sig = tr.full_like(sub_mod_sig, fill_value=0.5)
-        sub_out = self.sub_synth_module(
-            x=add_out,
-            w_mod_sig=sub_mod_sig,
-            # q_mod_sig=q_mod_sig,
-            q_mod_sig=env_mod_sig,
-            zi=self.zi,
-        )
-        # env_out = env_mod_sig * add_out
-        # env_out = env_mod_sig * sub_out
-        env_out = sub_out
-        # env_out = add_out
 
+        # Subtractive synthesis
+        if self.use_q_mod_sig:
+            sub_out = self.sub_synth_module(
+                x=add_out,
+                w_mod_sig=sub_mod_sig,
+                q_mod_sig=env_mod_sig,
+                zi=self.zi,
+            )
+            env_out = sub_out
+        else:
+            env_out = add_out * env_mod_sig
+
+        # Advance phase and store filter state
         period_completion = (n_samples / (self.sr / f0_hz.double())) % 1.0
         tr.add(self.phase, 2 * tr.pi * period_completion, out=self.phase)
         self.zi[:, :] = self.sub_synth_module.next_zi
+
         return env_out
 
 
@@ -131,18 +151,18 @@ class ModSynthWrapper(WaveformToWaveformBase):
             ),
             ContinuousNeutoneParameter(
                 "add_mod_sig",
-                f"TBD",
+                f"Wavetable position modulation signal",
                 default_value=0.5,
             ),
             ContinuousNeutoneParameter(
                 "sub_mod_sig",
-                f"TBD",
+                f"Low-pass filter cutoff frequency" if self.model.use_q_mod_sig else "Filter modulation signal",
                 default_value=0.5,
             ),
             ContinuousNeutoneParameter(
-                "env_mod_sig",
-                f"TBD",
-                default_value=1.0,
+                "q_mod_sig" if self.model.use_q_mod_sig else "env_mod_sig",
+                f"Low-pass filter resonance" if self.model.use_q_mod_sig else "Envelope modulation signal",
+                default_value=0.5 if self.model.use_q_mod_sig else 1.0,
             ),
         ]
 
@@ -175,7 +195,7 @@ class ModSynthWrapper(WaveformToWaveformBase):
         midi_f0_0to1 = params["midi_f0"]
         add_mod_sig = params["add_mod_sig"].unsqueeze(0)
         sub_mod_sig = params["sub_mod_sig"].unsqueeze(0)
-        env_mod_sig = params["env_mod_sig"].unsqueeze(0)
+        env_mod_sig = params["q_mod_sig"].unsqueeze(0) if self.model.use_q_mod_sig else params["env_mod_sig"].unsqueeze(0)
         y = self.model(
             n_samples=n_samples,
             midi_f0_0to1=midi_f0_0to1,
@@ -215,6 +235,33 @@ if __name__ == "__main__":
     # ("exp_3__shan_et_al__spline", "serum/train__mod_discovery__shan_et_al_spline.yml", "mss__shan_s24d3D__sm_16_1024__serum__BA_both_lfo_10__epoch_29_step_1020.ckpt"),
     # ("exp_3__shan_et_al__rand_spline", "serum/train__mod_discovery__shan_et_al_baseline_rand_spline.yml", "mss__shan_s24d3D__sm_16_1024__serum__BA_both_lfo_10__epoch_29_step_1020.ckpt"),
 
+    exp_name = "exp_1"
+    # exp_name = "exp_2"
+    # exp_name = "exp_3"
+
+    method_name = "frame"
+    # method_name = "lpf"
+    # method_name = "spline"
+    # method_name = "oracle"
+
+    # wt_name = "0__basics__fm_fold__78_1024"
+    # wt_name = "1__basics__galactica__4_1024"
+    wt_name = "2__basics__harmonic_series__7_1024"
+    # wt_name = "3__basics__sub_3__122_1024"
+    # wt_name = "4__collection__aureolin__256_1024"
+    # wt_name = "5__collection__squash__32_1024"
+    # wt_name = "6__complex__bit_ring__256_1024"
+    # wt_name = "7__complex__kicked__4_1024"
+    # wt_name = "8__distortion__dp_fold__230_1024"
+    # wt_name = "9__distortion__phased__178_1024"
+
+    arch_name = "mod_synth"
+    # arch_name = "shan_et_al"
+    # arch_name = "engel_et_al"
+
+    seed_name = "seed_0"
+
+    # ==================================================================================
     ckpt_to_config = {
         "exp_1__frame": "synthetic/train__mod_extraction__frame.yml",
         "exp_1__lpf": "synthetic/train__mod_extraction__lpf.yml",
@@ -228,32 +275,18 @@ if __name__ == "__main__":
         # "exp_3__spline__mod_synth": "synthetic/train__mod_discovery__spline.yml",
     }
 
-
-    exp_name = "exp_1"
-    # exp_name = "exp_2"
-    # exp_name = "exp_3"
-    method_name = "frame"
-    # method_name = "lpf"
-    # method_name = "spline"
-    # method_name = "oracle"
-    # wt_name = "0__basics__fm_fold__78_1024"
-    wt_name = "2__basics__harmonic_series__7_1024"
-    arch_name = "mod_synth"
-    # arch_name = "shan_et_al"
-    # arch_name = "engel_et_al"
-    seed_name = "seed_0"
-
+    # Determine checkpoint path
     if exp_name == "exp_3":
         ckpt_dir = os.path.join(exp_name, method_name, arch_name, seed_name, "checkpoints")
         config_path = ckpt_to_config[f"{exp_name}__{method_name}__{arch_name}"]
+        model_name = f"{exp_name}__{method_name}__{arch_name}"
     else:
         ckpt_dir = os.path.join(exp_name, method_name, wt_name, seed_name, "checkpoints")
         config_path = ckpt_to_config[f"{exp_name}__{method_name}"]
+        model_name = f"{exp_name}__{method_name}__wt_{wt_name[0]}"
 
     ckpt_dir = os.path.join(MODELS_DIR, ckpt_dir)
     config_path = os.path.join(CONFIGS_DIR, config_path)
-    wt_path = os.path.join(WAVETABLES_DIR, "ableton", f"{wt_name[3:]}.pt")
-    wt = tr.load(wt_path, weights_only=True)
 
     def get_ckpt_path(ckpt_dir: str) -> str:
         ckpt_files = [f for f in os.listdir(ckpt_dir) if f.endswith(".ckpt")]
@@ -263,11 +296,16 @@ if __name__ == "__main__":
     ckpt_path = get_ckpt_path(ckpt_dir)
     log.info(f"Ckpt path: {ckpt_path}")
 
+    # Initialize checkpoint classes
     cli = CustomLightningCLI(
         args=["-c", config_path],
         trainer_defaults=CustomLightningCLI.make_trainer_defaults(save_dir=OUT_DIR),
         run=False,
     )
+
+    # Resize wavetables if frozen to match shape of checkpoint weights
+    wt_path = os.path.join(WAVETABLES_DIR, "ableton", f"{wt_name[3:]}.pt")
+    wt = tr.load(wt_path, weights_only=True)
     synth = cli.model.synth
     with suppress(Exception):
         if synth.add_synth_module.__class__.__name__ == "WavetableOsc" and not synth.add_synth_module.is_trainable:
@@ -283,19 +321,19 @@ if __name__ == "__main__":
             wt_module_hat = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
             synth_hat.register_module("add_synth_module", wt_module_hat)
 
+    # Load checkpoint weights
     state_dict = tr.load(ckpt_path, map_location="cpu")["state_dict"]
     cli.model.load_state_dict(state_dict)
     cli.model.eval()
 
-    add_module = cli.model.synth_hat.add_synth_module
-    add_module.use_aa = False
-    sub_module = cli.model.synth_hat.sub_synth_module
+    # Extract modules and sample rate
+    add_module = synth_hat.add_synth_module
+    sub_module = synth_hat.sub_synth_module
+    sr = synth_hat.ac.sr
 
-    sub_module.filter.toggle_scriptable(True)
-    sr = cli.model.synth.ac.sr
-
+    # Wrap synth with Neutone SDK and export
     model = ModSynth(
-        name=f"{exp_name}__{method_name}",
+        name=model_name,
         add_synth_module=add_module,
         sub_synth_module=sub_module,
         sr=sr,
@@ -308,7 +346,8 @@ if __name__ == "__main__":
         wrapper,
         root_dir,
         submission=False,
-        dump_samples=True,
+        # dump_samples=True,
+        dump_samples=False,
         test_offline_mode=False,
         speed_benchmark=False,
     )
