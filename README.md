@@ -58,7 +58,7 @@ Coming soon.
 
 [//]: # (    </li>)
 
-[//]: # (    <li>The source code can be explored in the <code>acid_ddsp/</code> directory.</li>)
+[//]: # (    <li>The source code can be explored in the <code>mod_discovery/</code> directory.</li>)
 
 [//]: # (    <li>All models from the paper can be found in the <code>models/</code> directory.</li>)
 
@@ -74,7 +74,7 @@ Coming soon.
 
 [//]: # (    Make sure your <code>PYTHONPATH</code> has been set correctly by running a command like<br>)
 
-[//]: # (    <code>export PYTHONPATH=$PYTHONPATH:BASE_DIR/acid_ddsp/</code>,<br>)
+[//]: # (    <code>export PYTHONPATH=$PYTHONPATH:BASE_DIR/mod_discovery/</code>,<br>)
 
 [//]: # (    <code>export PYTHONPATH=$PYTHONPATH:BASE_DIR/torchlpc/</code>, and<br>)
 

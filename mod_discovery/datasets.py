@@ -12,9 +12,9 @@ from pandas import DataFrame
 from torch import Tensor as T
 from torch.utils.data import Dataset
 
-import acid_ddsp.util as util
-from acid_ddsp.audio_config import AudioConfig
-from acid_ddsp.modulations import ModSignalGenerator
+import mod_discovery.util as util
+from mod_discovery.audio_config import AudioConfig
+from mod_discovery.modulations import ModSignalGenerator
 
 logging.basicConfig()
 log = logging.getLogger(__name__)

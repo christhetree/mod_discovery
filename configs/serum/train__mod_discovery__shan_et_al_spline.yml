@@ -16,7 +16,7 @@ trainer:
   gradient_clip_val: 0.5
 
 data:
-  class_path: acid_ddsp.data_modules.SerumDataModule
+  class_path: mod_discovery.data_modules.SerumDataModule
   init_args:
     batch_size: 32
     ac: misc/audio_config.yml
@@ -40,7 +40,7 @@ data:
       - BA Wide Eyed Reese
 
 model:
-  class_path: acid_ddsp.lightning.PreprocLightningModule
+  class_path: mod_discovery.lightning.PreprocLightningModule
   init_args:
     ac: misc/audio_config.yml
     spectral_visualizer: misc/log_mel_spec.yml

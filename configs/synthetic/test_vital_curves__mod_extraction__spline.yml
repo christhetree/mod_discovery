@@ -15,13 +15,13 @@ trainer:
   gradient_clip_val: 0.5
 
 data:
-  class_path: acid_ddsp.data_modules.SeedDataModule
+  class_path: mod_discovery.data_modules.SeedDataModule
   init_args:
     batch_size: 32
     ac: misc/audio_config.yml
     n_seeds: 5120
     mod_sig_gens:
-      - class_path: acid_ddsp.modulations.ModSignalGenVitalCurves
+      - class_path: mod_discovery.modulations.ModSignalGenVitalCurves
         init_args:
           curves_path: ../data/vital_curves__52_1501.pt
 #          curves_path: data/vital_curves__52_1501.pt
@@ -35,7 +35,7 @@ data:
     num_workers: 4
 
 model:
-  class_path: acid_ddsp.lightning.ModDiscoveryLightingModule
+  class_path: mod_discovery.lightning.ModDiscoveryLightingModule
   init_args:
     ac: misc/audio_config.yml
     spectral_visualizer: misc/log_mel_spec.yml

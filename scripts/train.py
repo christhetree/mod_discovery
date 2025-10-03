@@ -12,18 +12,15 @@ os.environ["OMP_NUM_THREADS"] = "4"
 
 import torch as tr
 
-from acid_ddsp.cli import CustomLightningCLI
-from acid_ddsp.paths import CONFIGS_DIR, OUT_DIR, WAVETABLES_DIR, MODELS_DIR
-from acid_ddsp.synth_modules import WavetableOsc
+from mod_discovery.cli import CustomLightningCLI
+from mod_discovery.paths import CONFIGS_DIR, WAVETABLES_DIR
+from mod_discovery.synth_modules import WavetableOsc
 
 logging.basicConfig()
 log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 tr.set_float32_matmul_precision("high")
-# warnings.filterwarnings(
-#     "ignore", message="does not have a deterministic", category=UserWarning
-# )
 warnings.simplefilter("ignore", UserWarning)
 
 os.makedirs("lightning_logs", exist_ok=True)
@@ -31,30 +28,20 @@ os.makedirs("wandb_logs", exist_ok=True)
 
 
 if __name__ == "__main__":
-    save_dir = None
-    config_basename = None
-
+    # Experiment 1 =====================================================================
     # config_name = "synthetic/train__mod_extraction__frame.yml"
     # config_name = "synthetic/train__mod_extraction__lpf.yml"
     # config_name = "synthetic/train__mod_extraction__spline.yml"
 
-    # config_name = "synthetic/test_vital_curves__mod_extraction__frame.yml"
-    # config_name = "synthetic/test_vital_curves__mod_extraction__lpf.yml"
-    # config_name = "synthetic/test_vital_curves__mod_extraction__spline.yml"
-
-    # config_basename = os.path.basename(config_name)[:-4]
-    # config_basename = config_basename.replace("test_vital_curves", "train")
-
-    # config_name = "synthetic/train__mod_discovery__frame.yml"
+    # Experiment 2 =====================================================================
+    config_name = "synthetic/train__mod_discovery__frame.yml"
     # config_name = "synthetic/train__mod_discovery__lpf.yml"
     # config_name = "synthetic/train__mod_discovery__spline.yml"
     # config_name = "synthetic/train__mod_discovery__baseline_oracle.yml"
     # config_name = "synthetic/train__mod_discovery__baseline_rand_spline.yml"
 
-    # save_dir = config_name.split("/")[-1][:-4]
-    # os.makedirs(save_dir, exist_ok=True)
-
-    config_name = "serum/train__mod_discovery__mod_synth_frame.yml"
+    # Experiment 3 =====================================================================
+    # config_name = "serum/train__mod_discovery__mod_synth_frame.yml"
     # config_name = "serum/train__mod_discovery__mod_synth_lpf.yml"
     # config_name = "serum/train__mod_discovery__mod_synth_spline.yml"
     # config_name = "serum/train__mod_discovery__mod_synth_baseline_gran.yml"
@@ -72,9 +59,7 @@ if __name__ == "__main__":
     # config_name = "serum/train__mod_discovery__engel_et_al_baseline_gran.yml"
     # config_name = "serum/train__mod_discovery__engel_et_al_baseline_rand_spline.yml"
 
-    seeds = [42]
-    # seeds = list(range(10))
-    # seeds = list(range(20))
+    seeds = list(range(20))
     log.info(f"Running with seeds: {seeds}")
 
     wt_dir = os.path.join(WAVETABLES_DIR, "ableton")
@@ -100,7 +85,7 @@ if __name__ == "__main__":
 
         cli = CustomLightningCLI(
             args=["-c", config_path, "--seed_everything", str(seed)],
-            trainer_defaults=CustomLightningCLI.make_trainer_defaults(save_dir=save_dir),
+            trainer_defaults=CustomLightningCLI.make_trainer_defaults(),
             run=False,
         )
         if wt_path is not None:
@@ -121,21 +106,3 @@ if __name__ == "__main__":
         cli.before_fit()
         cli.trainer.fit(model=cli.model, datamodule=cli.datamodule)
         cli.trainer.test(model=cli.model, datamodule=cli.datamodule, ckpt_path="best")
-
-        # def get_ckpt_path(idx: int, config_basename: str) -> str:
-        #     ckpt_dir = os.path.join(
-        #         MODELS_DIR,
-        #         config_basename,
-        #         "acid_ddsp_2",
-        #         f"version_{idx}/checkpoints/",
-        #     )
-        #     ckpt_files = [
-        #         f for f in os.listdir(ckpt_dir) if f.endswith(".ckpt")
-        #     ]
-        #     assert len(ckpt_files) == 1, f"Found {len(ckpt_files)} files in {ckpt_dir}"
-        #     ckpt_path = os.path.join(ckpt_dir, ckpt_files[0])
-        #     log.info(f"Checkpoint path: {ckpt_path}")
-        #     return ckpt_path
-        #
-        # ckpt_path = get_ckpt_path(idx, config_basename)
-        # cli.trainer.test(model=cli.model, datamodule=cli.datamodule, ckpt_path=ckpt_path)

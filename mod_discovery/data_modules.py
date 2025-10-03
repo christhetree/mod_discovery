@@ -8,12 +8,12 @@ import pytorch_lightning as pl
 import torch as tr
 from torch.utils.data import DataLoader
 
-from acid_ddsp.datasets import (
+from mod_discovery.datasets import (
     NSynthDataset,
     SerumDataset,
     SeedDataset,
 )
-from acid_ddsp.modulations import ModSignalGenerator
+from mod_discovery.modulations import ModSignalGenerator
 from audio_config import AudioConfig
 
 logging.basicConfig()

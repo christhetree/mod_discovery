@@ -5,7 +5,7 @@ from typing import Dict, Optional
 
 from torch import Tensor as T, nn
 
-from acid_ddsp.synth_modules import (
+from mod_discovery.synth_modules import (
     SynthModule,
 )
 from audio_config import AudioConfig

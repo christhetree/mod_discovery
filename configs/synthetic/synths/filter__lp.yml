@@ -1,4 +1,4 @@
-class_path: acid_ddsp.synth_modules.BiquadWQFilter
+class_path: mod_discovery.synth_modules.BiquadWQFilter
 init_args:
   sr: 48000
   min_w_hz: 100

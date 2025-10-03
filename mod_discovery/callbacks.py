@@ -12,7 +12,7 @@ from matplotlib import pyplot as plt
 from pytorch_lightning import Trainer, Callback
 from torch import Tensor as T, nn
 
-from acid_ddsp.plotting import fig2img, plot_waveforms_stacked, plot_wavetable
+from mod_discovery.plotting import fig2img, plot_waveforms_stacked, plot_wavetable
 from lightning import ModDiscoveryLightingModule
 from synth_modules import WavetableOsc
 
