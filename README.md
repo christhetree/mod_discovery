@@ -39,7 +39,40 @@ Accepted to the IEEE Workshop on Applications of Signal Processing to Audio and 
 <h2>Instructions for Reproducibility</h2>
 <hr>
 
-Coming soon.
+<ol>
+    <li>Clone this repository and open its directory.</li>
+    <li>
+    Install the requirements:
+    <br><code>conda env create --file=conda_env.yml</code>
+    <br>or 
+    <br><code>conda create -n md python=3.10</code>
+    <br><code>conda activate md</code>
+    <br><code>pip install uv</code>
+    <br><code>uv pip install 'torch==2.2.2' lightning numba torchaudio torchvision auraloss black librosa matplotlib numpy nvitop pandas schedulefree 'scipy<=1.11.4' tensorboard wandb pip-chill 'numpy<2.0.0' 'jsonargparse[signatures]' torchlibrosa shapely hypy_utils encodec transformers nnaudio resampy jsonschema</code>
+    <br><code>pip install msclap --no-deps</code>
+    <br><code>pip install 'git+https://github.com/Neutone/neutone_sdk.git' --no-deps</code>
+    <br>For posterity, <code>requirements.txt</code> and <code>requirements_all.txt</code> are also provided.
+    </li>
+    <li>The source code can be explored in the <code>mod_discovery/</code> directory.</li>
+    <li>All experiment config files can be found in the <code>configs/</code> directory.</li>
+    <li>The dataset for Experiment 3 (modulation discovery on real-world audio samples from Serum) can be found <a href="tbd" target="_blank">here</a>.</li>
+    <li>Create an out directory (<code>mkdir out</code>).</li>
+    <li>
+    All experiments can be run by modifying <code>scripts/train.py</code> and the corresponding 
+    <code>configs/.../train_ ... .yml</code> config file and then running <code>python scripts/train.py</code>.
+    <br>Make sure your PYTHONPATH has been set correctly by running commands like:
+    <br><code>export PYTHONPATH=$PYTHONPATH:BASE_DIR/mod_discovery/</code>,
+    <br><code>export PYTHONPATH=$PYTHONPATH:BASE_DIR/torchlpc/</code>,
+    <br>and <code>export PYTHONPATH=$PYTHONPATH:BASE_DIR/fadtk/</code>.
+    </li>
+    <li>Exported <a href="https://neutone.ai" target=”_blank”>Neutone</a> models of the learned synths can be found in the <code>neutone/</code> directory. They can be loaded and run in the DAW through the Neutone FX host plugin VST .</li>
+    <li>All eval results from the paper can be found in the <code>eval/</code> directory.</li>
+    <li>
+    The source code is currently not documented, but don't hesitate to open an issue if you have any questions or 
+    comments.
+    </li>
+</ol>
+
 
 [//]: # ()
 [//]: # (<ol>)

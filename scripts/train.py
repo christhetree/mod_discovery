@@ -99,7 +99,10 @@ if __name__ == "__main__":
             wt_module = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
             synth.register_module("add_synth_module", wt_module)
             synth_hat = cli.model.synth_hat
-            if isinstance(synth_hat.add_synth_module, WavetableOsc) and not synth_hat.add_synth_module.is_trainable:
+            if (
+                isinstance(synth_hat.add_synth_module, WavetableOsc)
+                and not synth_hat.add_synth_module.is_trainable
+            ):
                 wt_module_hat = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
                 synth_hat.register_module("add_synth_module", wt_module_hat)
 

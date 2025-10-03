@@ -124,9 +124,7 @@ def _calc_no_biquad_coeff(w: T, q: T, eps: float = 1e-3) -> Tuple[T, T, T, T, T,
     return a0, a1, a2, b0, b1, b2
 
 
-def calc_biquad_coeff(
-    filter_type: str, w: T, q: T, eps: float = 1e-3
-) -> Tuple[T, T]:
+def calc_biquad_coeff(filter_type: str, w: T, q: T, eps: float = 1e-3) -> Tuple[T, T]:
     assert w.ndim == 2
     assert q.ndim == 2
     assert 0.0 <= w.min()

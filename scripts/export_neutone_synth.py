@@ -99,7 +99,7 @@ class ModSynth(ABC, nn.Module):
 
     @abstractmethod
     def do_sub_env_synthesis(self, add_out: T, sub_mod_sig: T, env_mod_sig: T) -> T:
-       pass
+        pass
 
 
 class ModSynthWQ(ModSynth):
@@ -201,13 +201,13 @@ class ModSynthWrapper(WaveformToWaveformBase):
         return ["Christopher Mitcheltree"]
 
     def get_model_short_description(self) -> str:
-        return "TBD"
+        return "Learned synth for 'Modulation Discovery with DDSP'"
 
     def get_model_long_description(self) -> str:
-        return "TBD"
+        return "Learned synth for 'Modulation Discovery with DDSP'"
 
     def get_technical_description(self) -> str:
-        return "TBD"
+        return "Learned synth for 'Modulation Discovery with DDSP'"
 
     def get_technical_links(self) -> Dict[str, str]:
         return {
@@ -216,7 +216,7 @@ class ModSynthWrapper(WaveformToWaveformBase):
         }
 
     def get_tags(self) -> List[str]:
-        return ["TBD"]
+        return ["DDSP", "modulations", "wavetable", "filter"]
 
     def get_model_version(self) -> str:
         return "1.0.0"
@@ -238,12 +238,20 @@ class ModSynthWrapper(WaveformToWaveformBase):
             ),
             ContinuousNeutoneParameter(
                 "sub_mod_sig",
-                f"Low-pass filter cutoff frequency" if self.model.use_q_mod_sig else "Filter modulation signal",
+                (
+                    f"Low-pass filter cutoff frequency"
+                    if self.model.use_q_mod_sig
+                    else "Filter modulation signal"
+                ),
                 default_value=0.5,
             ),
             ContinuousNeutoneParameter(
                 "q_mod_sig" if self.model.use_q_mod_sig else "env_mod_sig",
-                f"Low-pass filter resonance" if self.model.use_q_mod_sig else "Envelope modulation signal",
+                (
+                    f"Low-pass filter resonance"
+                    if self.model.use_q_mod_sig
+                    else "Envelope modulation signal"
+                ),
                 default_value=0.5 if self.model.use_q_mod_sig else 1.0,
             ),
         ]
@@ -277,7 +285,11 @@ class ModSynthWrapper(WaveformToWaveformBase):
         midi_f0_0to1 = params["midi_f0"]
         add_mod_sig = params["add_mod_sig"].unsqueeze(0)
         sub_mod_sig = params["sub_mod_sig"].unsqueeze(0)
-        env_mod_sig = params["q_mod_sig"].unsqueeze(0) if self.model.use_q_mod_sig else params["env_mod_sig"].unsqueeze(0)
+        env_mod_sig = (
+            params["q_mod_sig"].unsqueeze(0)
+            if self.model.use_q_mod_sig
+            else params["env_mod_sig"].unsqueeze(0)
+        )
         y = self.model(
             n_samples=n_samples,
             midi_f0_0to1=midi_f0_0to1,
@@ -328,11 +340,15 @@ if __name__ == "__main__":
 
     # Determine checkpoint path
     if exp_name == "exp_3":
-        ckpt_dir = os.path.join(exp_name, method_name, arch_name, seed_name, "checkpoints")
+        ckpt_dir = os.path.join(
+            exp_name, method_name, arch_name, seed_name, "checkpoints"
+        )
         config_path = ckpt_to_config[f"{exp_name}__{method_name}__{arch_name}"]
         model_name = f"{exp_name}__{method_name}__{arch_name}"
     else:
-        ckpt_dir = os.path.join(exp_name, method_name, wt_name, seed_name, "checkpoints")
+        ckpt_dir = os.path.join(
+            exp_name, method_name, wt_name, seed_name, "checkpoints"
+        )
         config_path = ckpt_to_config[f"{exp_name}__{method_name}"]
         model_name = f"{exp_name}__{method_name}__wt_{wt_name[0]}"
 
@@ -341,7 +357,9 @@ if __name__ == "__main__":
 
     def get_ckpt_path(ckpt_dir: str) -> str:
         ckpt_files = [f for f in os.listdir(ckpt_dir) if f.endswith(".ckpt")]
-        assert len(ckpt_files) == 1, f"Expected one checkpoint file in {ckpt_dir}, found {len(ckpt_files)}."
+        assert (
+            len(ckpt_files) == 1
+        ), f"Expected one checkpoint file in {ckpt_dir}, found {len(ckpt_files)}."
         return os.path.join(ckpt_dir, ckpt_files[0])
 
     ckpt_path = get_ckpt_path(ckpt_dir)
@@ -359,14 +377,20 @@ if __name__ == "__main__":
     wt = tr.load(wt_path, weights_only=True)
     synth = cli.model.synth
     with suppress(Exception):
-        if synth.add_synth_module.__class__.__name__ == "WavetableOsc" and not synth.add_synth_module.is_trainable:
+        if (
+            synth.add_synth_module.__class__.__name__ == "WavetableOsc"
+            and not synth.add_synth_module.is_trainable
+        ):
             log.info(f"Resizing synth wavetable module to {wt.shape}")
             sr = synth.ac.sr
             wt_module_hat = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
             synth.register_module("add_synth_module", wt_module_hat)
     synth_hat = cli.model.synth_hat
     with suppress(Exception):
-        if synth_hat.add_synth_module.__class__.__name__ == "WavetableOsc" and not synth_hat.add_synth_module.is_trainable:
+        if (
+            synth_hat.add_synth_module.__class__.__name__ == "WavetableOsc"
+            and not synth_hat.add_synth_module.is_trainable
+        ):
             log.info(f"Resizing synth_hat wavetable module to {wt.shape}")
             sr = synth_hat.ac.sr
             wt_module_hat = WavetableOsc(sr=sr, wt=wt, is_trainable=False)
@@ -400,9 +424,7 @@ if __name__ == "__main__":
             sr=sr,
         )
     wrapper = ModSynthWrapper(model)
-    root_dir = pathlib.Path(
-        os.path.join(OUT_DIR, "neutone_models", model_name)
-    )
+    root_dir = pathlib.Path(os.path.join(OUT_DIR, "neutone_models", model_name))
     save_neutone_model(
         wrapper,
         root_dir,

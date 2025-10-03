@@ -731,14 +731,16 @@ class ModDiscoveryLightingModule(pl.LightningModule):
 
         # Prepare out_dict =============================================================
         log_spec_x_hat = self.spectral_visualizer(x_hat).squeeze(1)
-        out_dict.update({
-            "loss": loss,
-            "add_audio": add_audio,
-            "x": x,
-            "x_hat": x_hat,
-            "log_spec_x": log_spec_x,
-            "log_spec_x_hat": log_spec_x_hat,
-        })
+        out_dict.update(
+            {
+                "loss": loss,
+                "add_audio": add_audio,
+                "x": x,
+                "x_hat": x_hat,
+                "log_spec_x": log_spec_x,
+                "log_spec_x_hat": log_spec_x_hat,
+            }
+        )
         out_dict.update(temp_params_raw)
         for p_name, p in temp_params_hat_raw.items():
             out_dict[f"{p_name}_hat"] = p

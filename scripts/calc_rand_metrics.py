@@ -8,20 +8,13 @@ from torch import nn
 from tqdm import tqdm
 
 import util
-from lightning import ModDiscoveryLightingModule
 from mod_sig_distances import (
-    ESRLoss,
-    FFTMagDist,
     PCCDistance,
-    DTWDistance,
-    ChamferDistance,
     FrechetDistance,
     FirstDerivativeDistance,
-    SecondDerivativeDistance,
 )
 from mod_sig_metrics import (
     LFORangeMetric,
-    EntropyMetric,
     TotalVariationMetric,
     SpectralEntropyMetric,
     TurningPointsMetric,

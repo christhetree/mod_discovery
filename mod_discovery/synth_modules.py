@@ -11,7 +11,8 @@ from curves import PiecewiseBezier
 from filters import (
     TimeVaryingBiquad,
     calc_logits_to_biquad_a_coeff_triangle,
-    time_varying_fir, sample_wise_lpc_scriptable,
+    time_varying_fir,
+    sample_wise_lpc_scriptable,
 )
 from torchlpc import sample_wise_lpc
 
@@ -651,7 +652,7 @@ class BiquadWQFilter(SynthModule):
             w_mod_sig,
             q_mod_sig,
             interp_coeff=self.interp_coeff,
-            zi=zi
+            zi=zi,
         )
         self.next_zi = y_a[:, -2:]
         return y_ab
