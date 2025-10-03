@@ -1,6 +1,7 @@
 import logging
 import os
 import pathlib
+from abc import ABC, abstractmethod
 from contextlib import suppress
 from typing import Dict, List
 
@@ -24,7 +25,7 @@ log = logging.getLogger(__name__)
 log.setLevel(level=os.environ.get("LOGLEVEL", "INFO"))
 
 
-class ModSynth(nn.Module):
+class ModSynth(ABC, nn.Module):
     def __init__(
         self,
         name: str,
@@ -58,11 +59,8 @@ class ModSynth(nn.Module):
             wt = self.add_synth_module.get_maybe_aa_maybe_bounded_wt(f0_hz.unsqueeze(1))
             self.midi_f0_to_wt[idx] = wt
 
-        # Use env_mod_sig to control the Q of the filter for Experiment 1
+        # Flag for updating the Neutone FX plugin UI for Experiment 1 synths
         self.use_q_mod_sig = False
-        if sub_synth_module.__class__.__name__ == "BiquadWQFilter":
-            self.use_q_mod_sig = True
-            log.info("Using Neutone control parameter D for Q of BiquadWQFilter")
 
     def reset(self) -> None:
         self.phase.zero_()
@@ -90,24 +88,108 @@ class ModSynth(nn.Module):
             phase=self.phase,
             wt=wt,
         )
-
-        # Subtractive synthesis
-        if self.use_q_mod_sig:
-            sub_out = self.sub_synth_module(
-                x=add_out,
-                w_mod_sig=sub_mod_sig,
-                q_mod_sig=env_mod_sig,
-                zi=self.zi,
-            )
-            env_out = sub_out
-        else:
-            env_out = add_out * env_mod_sig
+        env_out = self.do_sub_env_synthesis(add_out, sub_mod_sig, env_mod_sig)
 
         # Advance phase and store filter state
         period_completion = (n_samples / (self.sr / f0_hz.double())) % 1.0
         tr.add(self.phase, 2 * tr.pi * period_completion, out=self.phase)
         self.zi[:, :] = self.sub_synth_module.next_zi
 
+        return env_out
+
+    @abstractmethod
+    def do_sub_env_synthesis(self, add_out: T, sub_mod_sig: T, env_mod_sig: T) -> T:
+       pass
+
+
+class ModSynthWQ(ModSynth):
+    def __init__(
+        self,
+        name: str,
+        add_synth_module: WavetableOsc,
+        sub_synth_module: BiquadWQFilter,
+        sr: int = 48000,
+        min_midi_f0: int = 30,
+        max_midi_f0: int = 60,
+    ):
+        super().__init__(
+            name=name,
+            add_synth_module=add_synth_module,
+            sub_synth_module=sub_synth_module,
+            sr=sr,
+            min_midi_f0=min_midi_f0,
+            max_midi_f0=max_midi_f0,
+        )
+        self.use_q_mod_sig = True
+        log.info("Using Neutone parameter D to control the filter resonance")
+
+    def do_sub_env_synthesis(self, add_out: T, sub_mod_sig: T, env_mod_sig: T) -> T:
+        # Use the env_mod_sig for Q (resonance)
+        env_out = self.sub_synth_module(
+            x=add_out,
+            w_mod_sig=sub_mod_sig,
+            q_mod_sig=env_mod_sig,
+            zi=self.zi,
+        )
+        return env_out
+
+
+class ModSynthCoeff(ModSynth):
+    def __init__(
+        self,
+        name: str,
+        add_synth_module: WavetableOsc,
+        sub_synth_module: BiquadCoeffFilter,
+        sub_adapters: nn.ModuleDict,
+        pos_enc_max_n_samples: int = 144000,
+        sr: int = 48000,
+        min_midi_f0: int = 30,
+        max_midi_f0: int = 60,
+    ):
+        super().__init__(
+            name=name,
+            add_synth_module=add_synth_module,
+            sub_synth_module=sub_synth_module,
+            sr=sr,
+            min_midi_f0=min_midi_f0,
+            max_midi_f0=max_midi_f0,
+        )
+        self.sub_adapters = sub_adapters
+        self.pos_enc_max_n_samples = pos_enc_max_n_samples
+        self.prev_pos_enc = tr.tensor(0.0)
+
+    def reset(self) -> None:
+        self.phase.zero_()
+        self.zi.zero_()
+        self.prev_pos_enc.zero_()
+
+    def do_sub_env_synthesis(self, add_out: T, sub_mod_sig: T, env_mod_sig: T) -> T:
+        # Prepare positional encoding
+        n_samples = sub_mod_sig.size(1)
+        pos_enc_inc = n_samples / self.pos_enc_max_n_samples
+        pos_enc_start_val = self.prev_pos_enc
+        pos_enc_end_val = self.prev_pos_enc + pos_enc_inc
+        pos_enc = tr.linspace(pos_enc_start_val, pos_enc_end_val, n_samples)
+        pos_enc = pos_enc % 1.0
+        self.prev_pos_enc = pos_enc[-1]
+        # print(self.prev_pos_enc)
+        pos_enc = pos_enc.view(1, -1)
+        sub_adapter_in = tr.stack([sub_mod_sig, pos_enc], dim=-1)
+
+        # Compute filter coefficients using adapter
+        coeff_logits = []
+        for adapter in self.sub_adapters.values():
+            coeff_logit = adapter(sub_adapter_in)
+            coeff_logits.append(coeff_logit)
+        coeff_logits = tr.cat(coeff_logits, dim=-1)
+        sub_out = self.sub_synth_module(
+            x=add_out,
+            coeff_logits=coeff_logits,
+            zi=self.zi,
+        )
+
+        # Apply envelope modulation signal
+        env_out = sub_out * env_mod_sig
         return env_out
 
 
@@ -207,34 +289,6 @@ class ModSynthWrapper(WaveformToWaveformBase):
 
 
 if __name__ == "__main__":
-    # ("exp_1__frame", f"synthetic/train__mod_extraction__frame.yml", f"train__mod_ex__frame/acid_ddsp_2/version_{wt_idx_mapping[wt_idx]}/checkpoints/mss__frame_nn__lfo__ase__ableton_13__epoch_29_step_600.ckpt"),
-    # ("exp_1__lpf", f"synthetic/train__mod_extraction__lpf.yml", f"train__mod_ex__lpf/acid_ddsp_2/version_{wt_idx_mapping[wt_idx]}/checkpoints/mss__frame_8_hz_nn__lfo__ase__ableton_13__epoch_29_step_600.ckpt"),
-    # ("exp_1__spline", f"synthetic/train__mod_extraction__spline.yml", f"train__mod_ex__spline/acid_ddsp_2/version_{wt_idx_mapping[wt_idx]}/checkpoints/mss__s24d3D_nn__lfo__ase__ableton_13__epoch_29_step_600.ckpt"),
-    # ("exp_1__rand_spline", f"synthetic/train__mod_extraction__baseline_rand_spline.yml", f"train__mod_ex__spline/acid_ddsp_2/version_{wt_idx_mapping[wt_idx]}/checkpoints/mss__s24d3D_nn__lfo__ase__ableton_13__epoch_29_step_600.ckpt"),
-    # ("exp_1__frame", f"synthetic/test_vital_curves__mod_extraction__frame.yml", f"train__mod_ex__frame/acid_ddsp_2/version_{wt_idx_mapping[wt_idx]}/checkpoints/mss__frame_nn__lfo__ase__ableton_13__epoch_29_step_600.ckpt"),
-    # ("exp_1__lpf", f"synthetic/test_vital_curves__mod_extraction__lpf.yml", f"train__mod_ex__lpf/acid_ddsp_2/version_{wt_idx_mapping[wt_idx]}/checkpoints/mss__frame_8_hz_nn__lfo__ase__ableton_13__epoch_29_step_600.ckpt"),
-    # ("exp_1__spline", f"synthetic/test_vital_curves__mod_extraction__spline.yml", f"train__mod_ex__spline/acid_ddsp_2/version_{wt_idx_mapping[wt_idx]}/checkpoints/mss__s24d3D_nn__lfo__ase__ableton_13__epoch_29_step_600.ckpt"),
-    # ("exp_1__rand_spline", f"synthetic/test_vital_curves__mod_extraction__baseline_rand_spline.yml", f"train__mod_ex__spline/acid_ddsp_2/version_{wt_idx_mapping[wt_idx]}/checkpoints/mss__s24d3D_nn__lfo__ase__ableton_13__epoch_29_step_600.ckpt"),
-
-    # ("exp_2__oracle", f"synthetic/train__mod_discovery__baseline_oracle.yml", f"train__mod_discovery__baseline_oracle/mod_discovery/version_{wt_idx}/checkpoints/mss__oracle__sm_16_1024__ase__ableton_10__epoch_29_step_1200.ckpt"),
-    # ("exp_2__frame", f"synthetic/train__mod_discovery__frame.yml", f"train__mod_discovery__frame/mod_discovery/version_{wt_idx}/checkpoints/mss__frame__sm_16_1024__ase__ableton_10__epoch_29_step_1200.ckpt"),
-    # # ("exp_2__frame", f"synthetic/train__mod_discovery__frame.yml", f"train__mod_discovery__frame/mod_discovery/version_{wt_idx}/checkpoints/mss__frame__sm_16_1024__ase__ableton_10__epoch_28_step_1160.ckpt"),
-    # ("exp_2__lpf", f"synthetic/train__mod_discovery__lpf.yml", f"train__mod_discovery__lpf/mod_discovery/version_{wt_idx}/checkpoints/mss__frame_8_hz__sm_16_1024__ase__ableton_10__epoch_29_step_1200.ckpt"),
-    # # ("exp_2__lpf", f"synthetic/train__mod_discovery__lpf.yml", f"train__mod_discovery__lpf/mod_discovery/version_{wt_idx}/checkpoints/mss__frame_8_hz__sm_16_1024__ase__ableton_10__epoch_28_step_1160.ckpt"),
-    # ("exp_2__spline", f"synthetic/train__mod_discovery__spline.yml", f"train__mod_discovery__spline/mod_discovery/version_{wt_idx}/checkpoints/mss__s24d3__sm_16_1024__ase__ableton_10__epoch_29_step_1200.ckpt"),
-    # # ("exp_2__spline", f"synthetic/train__mod_discovery__spline.yml", f"train__mod_discovery__spline/mod_discovery/version_{wt_idx}/checkpoints/mss__s24d3__sm_16_1024__ase__ableton_10__epoch_27_step_1120.ckpt"),
-    # ("exp_2__rand_spline", f"synthetic/train__mod_discovery__baseline_rand_spline.yml", f"train__mod_discovery__spline/mod_discovery/version_{wt_idx}/checkpoints/mss__s24d3__sm_16_1024__ase__ableton_10__epoch_29_step_1200.ckpt"),
-    # # ("exp_2__rand_spline", f"synthetic/train__mod_discovery__baseline_rand_spline.yml", f"train__mod_discovery__spline/mod_discovery/version_{wt_idx}/checkpoints/mss__s24d3__sm_16_1024__ase__ableton_10__epoch_27_step_1120.ckpt"),
-
-    # ("exp_3__mod_synth__frame", "serum/train__mod_discovery__mod_synth_frame.yml", "mss__frame__sm_16_1024__serum__BA_both_lfo_10__epoch_29_step_1020.ckpt"),
-    # ("exp_3__mod_synth__lpf", "serum/train__mod_discovery__mod_synth_lpf.yml", "mss__frame_8_hz__sm_16_1024__serum__BA_both_lfo_10__epoch_29_step_1020.ckpt"),
-    # ("exp_3__mod_synth__spline", "serum/train__mod_discovery__mod_synth_spline.yml", "mss__s24d3D__sm_16_1024__serum__BA_both_lfo_10__epoch_29_step_1020.ckpt"),
-    # ("exp_3__mod_synth__rand_spline", "serum/train__mod_discovery__mod_synth_baseline_rand_spline.yml", "mss__s24d3D__sm_16_1024__serum__BA_both_lfo_10__epoch_29_step_1020.ckpt"),
-    # ("exp_3__shan_et_al__frame", "serum/train__mod_discovery__shan_et_al_frame.yml", "mss__shan_frame__sm_16_1024__serum__BA_both_lfo_10__epoch_29_step_1020.ckpt"),
-    # ("exp_3__shan_et_al__lpf", "serum/train__mod_discovery__shan_et_al_lpf.yml", "mss__shan_frame_8_hz__sm_16_1024__serum__BA_both_lfo_10__epoch_28_step_986.ckpt"),
-    # ("exp_3__shan_et_al__spline", "serum/train__mod_discovery__shan_et_al_spline.yml", "mss__shan_s24d3D__sm_16_1024__serum__BA_both_lfo_10__epoch_29_step_1020.ckpt"),
-    # ("exp_3__shan_et_al__rand_spline", "serum/train__mod_discovery__shan_et_al_baseline_rand_spline.yml", "mss__shan_s24d3D__sm_16_1024__serum__BA_both_lfo_10__epoch_29_step_1020.ckpt"),
-
     exp_name = "exp_1"
     # exp_name = "exp_2"
     # exp_name = "exp_3"
@@ -244,9 +298,9 @@ if __name__ == "__main__":
     # method_name = "spline"
     # method_name = "oracle"
 
-    # wt_name = "0__basics__fm_fold__78_1024"
+    wt_name = "0__basics__fm_fold__78_1024"
     # wt_name = "1__basics__galactica__4_1024"
-    wt_name = "2__basics__harmonic_series__7_1024"
+    # wt_name = "2__basics__harmonic_series__7_1024"
     # wt_name = "3__basics__sub_3__122_1024"
     # wt_name = "4__collection__aureolin__256_1024"
     # wt_name = "5__collection__squash__32_1024"
@@ -256,9 +310,6 @@ if __name__ == "__main__":
     # wt_name = "9__distortion__phased__178_1024"
 
     arch_name = "mod_synth"
-    # arch_name = "shan_et_al"
-    # arch_name = "engel_et_al"
-
     seed_name = "seed_0"
 
     # ==================================================================================
@@ -270,9 +321,9 @@ if __name__ == "__main__":
         "exp_2__frame": "synthetic/train__mod_discovery__frame.yml",
         "exp_2__lpf": "synthetic/train__mod_discovery__lpf.yml",
         "exp_2__spline": "synthetic/train__mod_discovery__spline.yml",
-        # "exp_3__frame__mod_synth": "synthetic/train__mod_discovery__frame.yml",
-        # "exp_3__lpf__mod_synth": "synthetic/train__mod_discovery__lpf.yml",
-        # "exp_3__spline__mod_synth": "synthetic/train__mod_discovery__spline.yml",
+        "exp_3__frame__mod_synth": "synthetic/train__mod_discovery__frame.yml",
+        "exp_3__lpf__mod_synth": "synthetic/train__mod_discovery__lpf.yml",
+        "exp_3__spline__mod_synth": "synthetic/train__mod_discovery__spline.yml",
     }
 
     # Determine checkpoint path
@@ -332,21 +383,30 @@ if __name__ == "__main__":
     sr = synth_hat.ac.sr
 
     # Wrap synth with Neutone SDK and export
-    model = ModSynth(
-        name=model_name,
-        add_synth_module=add_module,
-        sub_synth_module=sub_module,
-        sr=sr,
-    )
+    if exp_name == "exp_1":
+        model = ModSynthWQ(
+            name=model_name,
+            add_synth_module=add_module,
+            sub_synth_module=sub_module,
+            sr=sr,
+        )
+    else:
+        adapters = cli.model.model.adapters
+        model = ModSynthCoeff(
+            name=model_name,
+            add_synth_module=add_module,
+            sub_synth_module=sub_module,
+            sub_adapters=adapters,
+            sr=sr,
+        )
     wrapper = ModSynthWrapper(model)
     root_dir = pathlib.Path(
-        os.path.join(OUT_DIR, "neutone_models", wrapper.get_model_name())
+        os.path.join(OUT_DIR, "neutone_models", model_name)
     )
     save_neutone_model(
         wrapper,
         root_dir,
         submission=False,
-        # dump_samples=True,
         dump_samples=False,
         test_offline_mode=False,
         speed_benchmark=False,

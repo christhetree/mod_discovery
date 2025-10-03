@@ -608,7 +608,7 @@ class BiquadWQFilter(SynthModule):
         modulate_log_w: bool = True,
         modulate_log_q: bool = True,
         interp_coeff: bool = False,
-        filter_type: Optional[Literal["lp", "hp", "bp", "no"]] = None,
+        filter_type: Literal["lp", "hp", "bp", "no"] = "lp",
     ):
         super().__init__()
         self.sr = sr
@@ -692,7 +692,7 @@ class BiquadCoeffFilter(SynthModule):
         else:
             self.lpc_func = sample_wise_lpc
 
-    def forward(self, x: T, coeff_logits: T = None, zi: Optional[T] = None) -> T:
+    def forward(self, x: T, coeff_logits: T, zi: Optional[T] = None) -> T:
         assert coeff_logits.ndim == 3
         n_samples = x.size(1)
         a_coeff, b_coeff = self._calc_coeff(coeff_logits, n_samples)
