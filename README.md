@@ -49,8 +49,8 @@ Accepted to the IEEE Workshop on Applications of Signal Processing to Audio and 
     <br><code>conda activate md</code>
     <br><code>pip install uv</code>
     <br><code>uv pip install 'torch==2.2.2' lightning numba torchaudio torchvision auraloss black librosa matplotlib numpy nvitop pandas schedulefree 'scipy<=1.11.4' tensorboard wandb pip-chill 'numpy<2.0.0' 'jsonargparse[signatures]' torchlibrosa shapely hypy_utils encodec transformers nnaudio resampy jsonschema</code>
-    <br><code>pip install msclap --no-deps</code>
-    <br><code>pip install 'git+https://github.com/Neutone/neutone_sdk.git' --no-deps</code>
+    <br><code>uv pip install msclap --no-deps</code>
+    <br><code>uv pip install 'git+https://github.com/Neutone/neutone_sdk.git' --no-deps</code>
     <br>For posterity, <code>requirements.txt</code> and <code>requirements_all.txt</code> are also provided.
     </li>
     <li>The source code can be explored in the <code>mod_discovery/</code> directory.</li>
@@ -66,81 +66,9 @@ Accepted to the IEEE Workshop on Applications of Signal Processing to Audio and 
     <br>and <code>export PYTHONPATH=$PYTHONPATH:BASE_DIR/fadtk/</code>.
     </li>
     <li>Exported <a href="https://neutone.ai" target=”_blank”>Neutone</a> models of the learned synths can be found in the <code>neutone/</code> directory. They can be loaded and run in the DAW through the Neutone FX host plugin VST .</li>
-    <li>All eval results from the paper can be found in the <code>eval/</code> directory.</li>
+    <li>All evaluation results from the paper can be found in the <code>eval/</code> directory.</li>
     <li>
     The source code is currently not documented, but don't hesitate to open an issue if you have any questions or 
     comments.
     </li>
 </ol>
-
-
-[//]: # ()
-[//]: # (<ol>)
-
-[//]: # (    <li>Clone this repository and open its directory.</li>)
-
-[//]: # (    <li>Initialize and update the submodules &#40;<code>git submodule update --init --recursive</code>&#41;.</li>)
-
-[//]: # (    <li>)
-
-[//]: # (    Install the requirements using <br><code>conda env create --file=conda_env_cpu.yml</code> or <br>)
-
-[//]: # (    <code>conda env create --file=conda_env.yml</code><br> for GPU acceleration.<br>)
-
-[//]: # (    <code>requirements_pipchill.txt</code> and <code>requirements_all.txt</code> are also provided as references, but are not needed when using the <code>conda_env.yml</code> files.)
-
-[//]: # (    </li>)
-
-[//]: # (    <li>The source code can be explored in the <code>mod_discovery/</code> directory.</li>)
-
-[//]: # (    <li>All models from the paper can be found in the <code>models/</code> directory.</li>)
-
-[//]: # (    <li>All eval results from the paper can be found in the <code>eval/</code> directory.</li>)
-
-[//]: # (    <li>All <a href="https://neutone.ai" target=”_blank”>Neutone</a> files for running the models and the acid synth implementations as a VST in a DAW can be found in the <code>neutone/</code> directory.</li>)
-
-[//]: # (    <li>Create an out directory &#40;<code>mkdir out</code>&#41;.</li>)
-
-[//]: # (    <li>)
-
-[//]: # (    All models can be evaluated by modifying and running <code>scripts/test.py</code>.<br>)
-
-[//]: # (    Make sure your <code>PYTHONPATH</code> has been set correctly by running a command like<br>)
-
-[//]: # (    <code>export PYTHONPATH=$PYTHONPATH:BASE_DIR/mod_discovery/</code>,<br>)
-
-[//]: # (    <code>export PYTHONPATH=$PYTHONPATH:BASE_DIR/torchlpc/</code>, and<br>)
-
-[//]: # (    <code>export PYTHONPATH=$PYTHONPATH:BASE_DIR/fadtk/</code>.)
-
-[//]: # (    </li>)
-
-[//]: # (    <li>)
-
-[//]: # (    CPU benchmark values can be obtained by running <code>scripts/benchmark.py</code>.<br>)
-
-[//]: # (    These will vary depending on your computer.)
-
-[//]: # (    </li>)
-
-[//]: # (    <li>)
-
-[//]: # (    &#40;Optional&#41; All models can be trained by modifying <code>configs/abstract_303/train.yml</code> and running <code>scripts/train.py</code>.<br>)
-
-[//]: # (    Before training, <code>scripts/preprocess_data.py</code> should be run to create the dataset. )
-
-[//]: # (    </li>)
-
-[//]: # (    <li>)
-
-[//]: # (    &#40;Optional&#41; Custom <a href="https://neutone.ai" target=”_blank”>Neutone</a> models can be exported by modifying and running <code>scripts/export_neutone_models.py</code> or <code>scripts/export_neutone_synth.py</code>.)
-
-[//]: # (    </li>)
-
-[//]: # (    <li>)
-
-[//]: # (    The source code is currently not documented, but don't hesitate to open an issue if you have any questions or comments.)
-
-[//]: # (    </li>)
-
-[//]: # (</ol>)

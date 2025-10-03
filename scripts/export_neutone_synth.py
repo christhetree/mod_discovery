@@ -339,18 +339,24 @@ if __name__ == "__main__":
     }
 
     # Determine checkpoint path
-    if exp_name == "exp_3":
+    if exp_name == "exp_1":
         ckpt_dir = os.path.join(
-            exp_name, method_name, arch_name, seed_name, "checkpoints"
+            exp_name, method_name, wt_name, seed_name, "checkpoints"
         )
-        config_path = ckpt_to_config[f"{exp_name}__{method_name}__{arch_name}"]
-        model_name = f"{exp_name}__{method_name}__{arch_name}"
-    else:
+        config_path = ckpt_to_config[f"{exp_name}__{method_name}"]
+        model_name = f"{exp_name}__wt_{wt_name[0]}"
+    elif exp_name == "exp_2":
         ckpt_dir = os.path.join(
             exp_name, method_name, wt_name, seed_name, "checkpoints"
         )
         config_path = ckpt_to_config[f"{exp_name}__{method_name}"]
         model_name = f"{exp_name}__{method_name}__wt_{wt_name[0]}"
+    else:
+        ckpt_dir = os.path.join(
+            exp_name, method_name, arch_name, seed_name, "checkpoints"
+        )
+        config_path = ckpt_to_config[f"{exp_name}__{method_name}__{arch_name}"]
+        model_name = f"{exp_name}__{method_name}__{arch_name}"
 
     ckpt_dir = os.path.join(MODELS_DIR, ckpt_dir)
     config_path = os.path.join(CONFIGS_DIR, config_path)
