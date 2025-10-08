@@ -766,10 +766,220 @@
     <div class="section" id="plugins">
         <h2 class="">DDSP Synth VST Plugins</h2>
         <hr>
-        <div class="section mb-5">
-            <p>
-                Coming soon.
-            </p>
+        <div class="row mb-4">
+            <div class="col-md-6 text-center">
+                <img class="img-fluid" src="img/neutone.png">
+                <br>
+                <br>
+                <p>Figure 4: <em>The free Neutone FX host plugin user interface.</em></p>
+            </div>
+            <div class="col-md-6">
+                <p>
+                We make the trained DDSP synths accessible using the open source <a href="https://github.com/Neutone/neutone_sdk" target=”_blank”>Neutone SDK</a> and free <a href="https://neutone.ai" target=”_blank”>Neutone</a> host plugins.
+                This enables readers to experiment with the synths and evaluate how they sound themselves via a real-time VST plugin in their preferred digital audio workstation (DAW) on arbitrary input audio.
+                Older CPUs may struggle to run the synths in real time.
+                </p>
+                <h4>Instructions</h4>
+                <ol>
+                    <li><a href="https://neutone.ai/fx" target=”_blank”>Download</a> and install the free Neutone FX plugin.</li>
+                    <li>Download a Neutone SDK wrapped and exported synth file from the tables below.</li>
+                    <li>Open the Neutone FX plugin in your preferred digital audio workstation.</li>
+                    <li>Click on "load your own" at the top of the Neutone FX plugin interface and select one of the synth files you just downloaded.</li>
+                    <li>Use the four custom knobs to control the synth.</li>
+                    <li>We recommend setting your DAW sampling rate to 48 kHz, buffer size to greater than 256 samples, and using an M1 Pro MacBook or better for best results.</li>
+                </ol>
+                <h4>Control Knobs</h4>
+                Experiment 1: Modulation Extraction Synths
+                <ul>
+                    <li>Knob A: Oscillator pitch (F#1 to C4)</li>
+                    <li>Knob B: Wavetable position</li>
+                    <li>Knob C: Filter cutoff frequency (100 Hz to 8000 Hz)</li>
+                    <li>Knob D: Filter resonance Q-factor (0.7071 to 4.0)</li>
+                </ul>
+
+                Experiments 2 and 3: Modulation Discovery Synths
+                <ul>
+                    <li>Knob A: Oscillator pitch (F#1 to C4)</li>
+                    <li>Knob B: Additive modulation signal (wavetable position)</li>
+                    <li>Knob C: Subtractive modulation signal (filter coefficients)</li>
+                    <li>Knob D: Envelope modulation signal</li>
+                </ul>
+            </div>
+        </div>
+
+        <p style="text-align: center;">
+            Experiment 1: modulation extraction (synthetic and real-world data, white-box synth) model files for Neutone FX.
+        </p>
+        <div style="overflow-x: auto; text-align: center;">
+            <table class="table table-sm text-center" style="display: inline-block; width: auto;">
+                <colgroup>
+                    <col style="width: 50%;">
+                    <col style="width: 50%;">
+                </colgroup>
+                <tr>
+                    <th>Wavetable Name</th>
+                    <th>Synth</th>
+                </tr>
+                <tr>
+                    <td>Basics: FM Fold</td>
+                    <td><a href="neutone/exp_1__wt_0/model.nm">download</a></td>
+                </tr>
+                <tr class="row-grey">
+                    <td>Basics: Galactica</td>
+                    <td><a href="neutone/exp_1__wt_1/model.nm">download</a></td>
+                </tr>
+                <tr>
+                    <td>Basics: Harmonic Series</td>
+                    <td><a href="neutone/exp_1__wt_2/model.nm">download</a></td>
+                </tr>
+                <tr class="row-grey">
+                    <td>Basics: Sub 3</td>
+                    <td><a href="neutone/exp_1__wt_3/model.nm">download</a></td>
+                </tr>
+                <tr>
+                    <td>Collection: Aureolin</td>
+                    <td><a href="neutone/exp_1__wt_4/model.nm">download</a></td>
+                </tr>
+                <tr class="row-grey">
+                    <td>Collection: Squash</td>
+                    <td><a href="neutone/exp_1__wt_5/model.nm">download</a></td>
+                </tr>
+                <tr>
+                    <td>Complex: Bit Ring</td>
+                    <td><a href="neutone/exp_1__wt_6/model.nm">download</a></td>
+                </tr>
+                <tr class="row-grey">
+                    <td>Complex: Kicked</td>
+                    <td><a href="neutone/exp_1__wt_7/model.nm">download</a></td>
+                </tr>
+                <tr>
+                    <td>Distortion: DP Fold</td>
+                    <td><a href="neutone/exp_1__wt_8/model.nm">download</a></td>
+                </tr>
+                <tr class="row-grey">
+                    <td>Distortion: Phased</td>
+                    <td><a href="neutone/exp_1__wt_9/model.nm">download</a></td>
+                </tr>
+            </table>
+        </div>
+
+        <p style="text-align: center;">
+            <br>Experiment 2: modulation discovery (synthetic data, gray-box synth) model files for Neutone FX.
+        </p>
+        <div style="overflow-x: auto; text-align: center;">
+            <table class="table table-sm text-center" style="display: inline-block; width: auto;">
+                <colgroup>
+                    <col style="width: 20%;">
+                    <col style="width: 20%;">
+                    <col style="width: 20%;">
+                    <col style="width: 20%;">
+                    <col style="width: 20%;">
+                </colgroup>
+                <tr>
+                    <th>Wavetable Name</th>
+                    <th>Frame</th>
+                    <th>LPF</th>
+                    <th>Spline</th>
+                    <th>Oracle</th>
+                </tr>
+                <tr>
+                    <td>Basics: FM Fold</td>
+                    <td><a href="neutone/exp_2__frame__wt_0/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__lpf__wt_0/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__spline__wt_0/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__oracle__wt_0/model.nm">download</a></td>
+                </tr>
+                <tr class="row-grey">
+                    <td>Basics: Galactica</td>
+                    <td><a href="neutone/exp_2__frame__wt_1/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__lpf__wt_1/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__spline__wt_1/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__oracle__wt_1/model.nm">download</a></td>
+                </tr>
+                <tr>
+                    <td>Basics: Harmonic Series</td>
+                    <td><a href="neutone/exp_2__frame__wt_2/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__lpf__wt_2/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__spline__wt_2/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__oracle__wt_2/model.nm">download</a></td>
+                </tr>
+                <tr class="row-grey">
+                    <td>Basics: Sub 3</td>
+                    <td><a href="neutone/exp_2__frame__wt_3/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__lpf__wt_3/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__spline__wt_3/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__oracle__wt_3/model.nm">download</a></td>
+                </tr>
+                <tr>
+                    <td>Collection: Aureolin</td>
+                    <td><a href="neutone/exp_2__frame__wt_4/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__lpf__wt_4/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__spline__wt_4/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__oracle__wt_4/model.nm">download</a></td>
+                </tr>
+                <tr class="row-grey">
+                    <td>Collection: Squash</td>
+                    <td><a href="neutone/exp_2__frame__wt_5/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__lpf__wt_5/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__spline__wt_5/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__oracle__wt_5/model.nm">download</a></td>
+                </tr>
+                <tr>
+                    <td>Complex: Bit Ring</td>
+                    <td><a href="neutone/exp_2__frame__wt_6/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__lpf__wt_6/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__spline__wt_6/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__oracle__wt_6/model.nm">download</a></td>
+                </tr>
+                <tr class="row-grey">
+                    <td>Complex: Kicked</td>
+                    <td><a href="neutone/exp_2__frame__wt_7/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__lpf__wt_7/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__spline__wt_7/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__oracle__wt_7/model.nm">download</a></td>
+                </tr>
+                <tr>
+                    <td>Distortion: DP Fold</td>
+                    <td><a href="neutone/exp_2__frame__wt_8/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__lpf__wt_8/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__spline__wt_8/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__oracle__wt_8/model.nm">download</a></td>
+                </tr>
+                <tr class="row-grey">
+                    <td>Distortion: Phased</td>
+                    <td><a href="neutone/exp_2__frame__wt_9/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__lpf__wt_9/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__spline__wt_9/model.nm">download</a></td>
+                    <td><a href="neutone/exp_2__oracle__wt_9/model.nm">download</a></td>
+                </tr>
+            </table>
+        </div>
+
+        <p style="text-align: center;">
+            <br>Experiment 3: modulation discovery (real-world data, black-box synth) model files for Neutone FX.
+        </p>
+        <div style="overflow-x: auto; text-align: center;">
+            <table class="table table-sm text-center" style="display: inline-block; width: auto;">
+
+                <colgroup>
+                    <col style="width: 25%;">
+                    <col style="width: 25%;">
+                    <col style="width: 25%;">
+                    <col style="width: 25%;">
+                </colgroup>
+                <tr>
+                    <th>Synth Architecture</th>
+                    <th>Frame</th>
+                    <th>LPF</th>
+                    <th>Spline</th>
+                </tr>
+                <tr>
+                    <td>Mod. Synth</td>
+                    <td><a href="neutone/exp_3__frame__mod_synth/model.nm">download</a></td>
+                    <td><a href="neutone/exp_3__lpf__mod_synth/model.nm">download</a></td>
+                    <td><a href="neutone/exp_3__spline__mod_synth/model.nm">download</a></td>
+                </tr>
+            </table>
         </div>
     </div>
 

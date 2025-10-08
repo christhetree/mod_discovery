@@ -233,7 +233,7 @@ class ModSynthWrapper(WaveformToWaveformBase):
             ),
             ContinuousNeutoneParameter(
                 "add_mod_sig",
-                f"Wavetable position modulation signal",
+                f"Additive modulation signal (wavetable position)",
                 default_value=0.5,
             ),
             ContinuousNeutoneParameter(
@@ -241,7 +241,7 @@ class ModSynthWrapper(WaveformToWaveformBase):
                 (
                     f"Low-pass filter cutoff frequency"
                     if self.model.use_q_mod_sig
-                    else "Filter modulation signal"
+                    else "Subtractive modulation signal (filter coefficients)"
                 ),
                 default_value=0.5,
             ),
