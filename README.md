@@ -55,7 +55,6 @@ Accepted to the IEEE Workshop on Applications of Signal Processing to Audio and 
     </li>
     <li>The source code can be explored in the <code>mod_discovery/</code> directory.</li>
     <li>All experiment config files can be found in the <code>configs/</code> directory.</li>
-    <li>The dataset for Experiment 3 (modulation discovery on real-world audio samples from Serum) can be found <a href="tbd" target="_blank">here</a>.</li>
     <li>Create an out directory (<code>mkdir out</code>).</li>
     <li>
     All experiments can be run by modifying <code>scripts/train.py</code> and the corresponding 
@@ -65,8 +64,7 @@ Accepted to the IEEE Workshop on Applications of Signal Processing to Audio and 
     <br><code>export PYTHONPATH=$PYTHONPATH:BASE_DIR/torchlpc/</code>,
     <br>and <code>export PYTHONPATH=$PYTHONPATH:BASE_DIR/fadtk/</code>.
     </li>
-    <li>Exported <a href="https://neutone.ai" target=”_blank”>Neutone</a> models of the learned synths can be found in the <code>docs/neutone/</code> directory. They can be loaded and run in the DAW through the Neutone FX host plugin VST .</li>
-    <!-- <li>All evaluation results from the paper can be found in the <code>eval/</code> directory.</li> -->
+    <li>Exported <a href="https://neutone.ai" target=”_blank”>Neutone</a> models of the learned synths can be found in the <code>docs/neutone/</code> directory. They can be loaded and run in the user's preferred DAW through the Neutone FX host plugin VST .</li>
     <li>
     The source code is currently not documented, but don't hesitate to open an issue if you have any questions or 
     comments.
