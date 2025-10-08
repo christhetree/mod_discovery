@@ -6,7 +6,7 @@
     <a href="https://www.eecs.qmul.ac.uk/~josh/" target=”_blank”>Joshua D. Reiss</a>
 </p>
 
-[//]: # ([![arXiv]&#40;https://img.shields.io/badge/arXiv-2404.07970-b31b1b.svg&#41;]&#40;https://arxiv.org/abs/2404.07970&#41;)
+[![arXiv](https://img.shields.io/badge/arXiv-2510.06204-b31b1b.svg)](https://arxiv.org/abs/2510.06204)
 [![Listening Samples](https://img.shields.io/badge/%F0%9F%94%8A%F0%9F%8E%B6-Listening_Samples-blue)](https://christhetree.github.io/mod_discovery/)
 [![Plugins](https://img.shields.io/badge/neutone-Plugins-blue)](https://christhetree.github.io/mod_discovery/index.html#plugins)
 [![Video](https://img.shields.io/badge/Video-blue?logo=youtube&labelColor=555)](https://www.youtube.com/watch?v=6BS8-_Glbdo)
@@ -65,8 +65,8 @@ Accepted to the IEEE Workshop on Applications of Signal Processing to Audio and 
     <br><code>export PYTHONPATH=$PYTHONPATH:BASE_DIR/torchlpc/</code>,
     <br>and <code>export PYTHONPATH=$PYTHONPATH:BASE_DIR/fadtk/</code>.
     </li>
-    <li>Exported <a href="https://neutone.ai" target=”_blank”>Neutone</a> models of the learned synths can be found in the <code>neutone/</code> directory. They can be loaded and run in the DAW through the Neutone FX host plugin VST .</li>
-    <li>All evaluation results from the paper can be found in the <code>eval/</code> directory.</li>
+    <li>Exported <a href="https://neutone.ai" target=”_blank”>Neutone</a> models of the learned synths can be found in the <code>docs/neutone/</code> directory. They can be loaded and run in the DAW through the Neutone FX host plugin VST .</li>
+    <!-- <li>All evaluation results from the paper can be found in the <code>eval/</code> directory.</li> -->
     <li>
     The source code is currently not documented, but don't hesitate to open an issue if you have any questions or 
     comments.
