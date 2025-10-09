@@ -1,0 +1,75 @@
+{
+    "model_name": "exp_2__oracle__wt_8",
+    "model_authors": [
+        "Christopher Mitcheltree"
+    ],
+    "model_short_description": "Learned synth for 'Modulation Discovery with DDSP'",
+    "model_long_description": "Learned synth for 'Modulation Discovery with DDSP'",
+    "neutone_parameters": {
+        "p1": {
+            "name": "midi_f0",
+            "description": "Oscillator pitch quantized to the nearest midi pitch [f30, f60]",
+            "default_value": 0.5,
+            "used": true,
+            "type": "continuous",
+            "min_value": 0.0,
+            "max_value": 1.0
+        },
+        "p2": {
+            "name": "add_mod_sig",
+            "description": "Additive modulation signal (wavetable position)",
+            "default_value": 0.5,
+            "used": true,
+            "type": "continuous",
+            "min_value": 0.0,
+            "max_value": 1.0
+        },
+        "p3": {
+            "name": "sub_mod_sig",
+            "description": "Subtractive modulation signal (filter coefficients)",
+            "default_value": 0.5,
+            "used": true,
+            "type": "continuous",
+            "min_value": 0.0,
+            "max_value": 1.0
+        },
+        "p4": {
+            "name": "env_mod_sig",
+            "description": "Envelope modulation signal",
+            "default_value": 1.0,
+            "used": true,
+            "type": "continuous",
+            "min_value": 0.0,
+            "max_value": 1.0
+        }
+    },
+    "wet_default_value": 1.0,
+    "dry_default_value": 0.0,
+    "input_gain_default_value": 0.5,
+    "output_gain_default_value": 0.5,
+    "technical_description": "Learned synth for 'Modulation Discovery with DDSP'",
+    "technical_links": {
+        "Paper": "https://christhetr.ee/mod_discovery/",
+        "Code": "https://github.com/christhetree/mod_discovery/"
+    },
+    "tags": [
+        "DDSP",
+        "modulations",
+        "wavetable",
+        "filter"
+    ],
+    "model_version": "1.0.0",
+    "sdk_version": "1.4.3",
+    "pytorch_version": "2.2.2",
+    "date_created": 1760035434.8749492,
+    "citation": "",
+    "is_experimental": true,
+    "is_input_mono": true,
+    "is_output_mono": true,
+    "model_type": "mono-mono",
+    "native_buffer_sizes": [],
+    "native_sample_rates": [
+        48000
+    ],
+    "look_behind_samples": 0
+}

@@ -141,7 +141,6 @@ class ModSynthCoeff(ModSynth):
         add_synth_module: WavetableOsc,
         sub_synth_module: BiquadCoeffFilter,
         sub_adapters: nn.ModuleDict,
-        pos_enc_max_n_samples: int = 144000,
         sr: int = 48000,
         min_midi_f0: int = 30,
         max_midi_f0: int = 60,
@@ -155,25 +154,12 @@ class ModSynthCoeff(ModSynth):
             max_midi_f0=max_midi_f0,
         )
         self.sub_adapters = sub_adapters
-        self.pos_enc_max_n_samples = pos_enc_max_n_samples
-        self.prev_pos_enc = tr.tensor(0.0)
-
-    def reset(self) -> None:
-        self.phase.zero_()
-        self.zi.zero_()
-        self.prev_pos_enc.zero_()
 
     def do_sub_env_synthesis(self, add_out: T, sub_mod_sig: T, env_mod_sig: T) -> T:
-        # Prepare positional encoding
-        n_samples = sub_mod_sig.size(1)
-        pos_enc_inc = n_samples / self.pos_enc_max_n_samples
-        pos_enc_start_val = self.prev_pos_enc
-        pos_enc_end_val = self.prev_pos_enc + pos_enc_inc
-        pos_enc = tr.linspace(pos_enc_start_val, pos_enc_end_val, n_samples)
-        pos_enc = pos_enc % 1.0
-        self.prev_pos_enc = pos_enc[-1]
-        # print(self.prev_pos_enc)
-        pos_enc = pos_enc.view(1, -1)
+        # For convenience, set the positional encoding to the same value
+        pos_enc = sub_mod_sig.clone()
+        # Scale the subtractive mod signal based on measured range during testing
+        sub_mod_sig = (10.0 * sub_mod_sig) - 5.0
         sub_adapter_in = tr.stack([sub_mod_sig, pos_enc], dim=-1)
 
         # Compute filter coefficients using adapter
@@ -228,7 +214,8 @@ class ModSynthWrapper(WaveformToWaveformBase):
         return [
             ContinuousNeutoneParameter(
                 "midi_f0",
-                f"Oscillator pitch quantized to the nearest midi pitch [f{self.model.min_midi_f0}, f{self.model.max_midi_f0}]",
+                f"Oscillator pitch quantized to the nearest midi pitch "
+                f"[f{self.model.min_midi_f0}, f{self.model.max_midi_f0}]",
                 default_value=0.5,
             ),
             ContinuousNeutoneParameter(
