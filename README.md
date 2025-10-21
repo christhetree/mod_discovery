@@ -26,7 +26,7 @@ We make our code and audio samples available and provide the trained DDSP synths
 
 <h2>Citation</h2>
 <hr>
-Accepted to the IEEE Workshop on Applications of Signal Processing to Audio and Acoustics (WASPAA), Lake Tahoe, CA, USA, 12 - 15 October 2025.
+Accepted to the IEEE Workshop on Applications of Signal Processing to Audio and Acoustics (WASPAA), Lake Tahoe, CA, USA, 12 - 15 October 2025 (best paper candidate).
 
 <pre><code>@inproceedings{mitcheltree2025modulation,
     title={Modulation Discovery with Differentiable Digital Signal Processing},
