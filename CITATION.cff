@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you find this project helpful for your own work, please consider citing it:"
+authors:
+  - family-names: "Mitcheltree"
+    given-names: "Christopher"
+    orcid: "https://orcid.org/0000-0002-2844-3650"
+  - family-names: "Tan"
+    given-names: "Hao Hao"
+  - family-names: "Reiss"
+    given-names: "Joshua D."
+    orcid: "https://orcid.org/0009-0009-1441-3205"
+title: "Modulation Discovery with Differentiable Digital Signal Processing"
+url: "https://github.com/christhetree/mod_discovery"
+preferred-citation:
+  type: conference-paper
+  authors:
+    - family-names: "Mitcheltree"
+      given-names: "Christopher"
+      orcid: "https://orcid.org/0000-0002-2844-3650"
+    - family-names: "Tan"
+      given-names: "Hao Hao"
+    - family-names: "Reiss"
+      given-names: "Joshua D."
+      orcid: "https://orcid.org/0009-0009-1441-3205"
+  title: "Modulation Discovery with Differentiable Digital Signal Processing"
+  collection-title: "IEEE Workshop on Applications of Signal Processing to Audio and Acoustics (WASPAA)"
+  year: 2025
+  url: "https://arxiv.org/abs/2510.06204"
